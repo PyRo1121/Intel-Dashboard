@@ -1,0 +1,65 @@
+{
+  "timestamp": "2026-02-19 20:00 UTC",
+  "source": "OpenSky Network",
+  "regions": [
+    "middle_east",
+    "ukraine_blacksea",
+    "europe",
+    "pacific"
+  ],
+  "fallback_used": true,
+  "live_total_notable": 0,
+  "total_notable": 2,
+  "emergencies": 0,
+  "military": 2,
+  "aircraft": [
+    {
+      "icao24": "ae04f2",
+      "callsign": "DUKE34",
+      "country": "United States",
+      "region": "middle_east",
+      "squawk": "4413",
+      "latitude": 34.9915,
+      "longitude": 29.3789,
+      "altitude_ft": 28625,
+      "speed_kts": 225.2,
+      "heading": 273,
+      "vertical_rate_fpm": 0,
+      "on_ground": false,
+      "tags": [
+        "MILITARY",
+        "MIL_DUKE"
+      ],
+      "severity": "high",
+      "description": "Military: DUKE34 (US Army) \u2014 United States, FL286, 225.2kts, hdg 273\u00b0 in middle_east",
+      "links": {
+        "adsbexchange": "https://globe.adsbexchange.com/?icao=ae04f2",
+        "flightradar24": "https://www.flightradar24.com/DUKE34"
+      }
+    },
+    {
+      "icao24": "ae49c7",
+      "callsign": "RCH891",
+      "country": "United States",
+      "region": "middle_east",
+      "squawk": "3360",
+      "latitude": 32.6983,
+      "longitude": 32.0216,
+      "altitude_ft": 33000,
+      "speed_kts": 507.9,
+      "heading": 141,
+      "vertical_rate_fpm": -65,
+      "on_ground": false,
+      "tags": [
+        "MILITARY",
+        "MIL_RCH"
+      ],
+      "severity": "high",
+      "description": "Military: RCH891 (US Military Airlift) \u2014 United States, FL330, 507.9kts, hdg 141\u00b0 in middle_east",
+      "links": {
+        "adsbexchange": "https://globe.adsbexchange.com/?icao=ae49c7",
+        "flightradar24": "https://www.flightradar24.com/RCH891"
+      }
+    }
+  ]
+}

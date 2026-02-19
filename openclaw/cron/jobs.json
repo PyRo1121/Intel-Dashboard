@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "04617db9-9722-4245-8d79-4168bd721e45",
+      "name": "intel-briefing-4h",
+      "enabled": true,
+      "createdAtMs": 1770888851757,
+      "updatedAtMs": 1771509787341,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 2,8,14,20 * * *"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Intelligence briefing focused on geopolitical and milblogger OSINT only.\n\nStep 1: Run `cd ~/.openclaw/workspace/skills/osint-intel && bun run refresh`.\nStep 2: Read `~/.openclaw/workspace/skills/osint-intel/state/latest-events.json` and extract HIGH+ events with source diversity (RSS + Telegram milblog channels).\nStep 3: Produce BLUF (2 lines), then sections: MIDDLE EAST / UKRAINE / AIRSPACE-CYBER / WATCHLIST.\nUpdate ~/.openclaw/workspace/memory/insights.json with only OSINT fields. Max 350 words.",
+        "thinking": "high",
+        "timeoutSeconds": 420,
+        "model": "anthropic/claude-opus-4-6"
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "6035342772"
+      },
+      "state": {
+        "nextRunAtMs": 1771531200000,
+        "lastRunAtMs": 1771509600013,
+        "lastStatus": "error",
+        "lastDurationMs": 187328,
+        "consecutiveErrors": 2,
+        "runningAtMs": 1771531200002
+      }
+    },
+    {
+      "id": "699ea0d0-1f66-40e4-9090-bb6376593378",
+      "name": "alert-sweep-2h",
+      "enabled": true,
+      "createdAtMs": 1770888859837,
+      "updatedAtMs": 1771524160164,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 */2 * * *",
+        "staggerMs": 300000
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Quick OSINT alert sweep (intel-only).\n\nQUIET HOURS CHECK: Run `TZ=America/Chicago date +%H`. If hour is 23 or 00-07, respond exactly QUIET_HOURS and stop.\n\nStep 1: Run `cd ~/.openclaw/workspace/skills/osint-intel && bun run refresh`.\nStep 2: Compare latest events to ~/.openclaw/workspace/memory/osint-seen.json and report only NEW HIGH+ events.\nIf nothing critical: respond HEARTBEAT_OK. Else BLUF format max 180 words.\nUpdate ~/.openclaw/workspace/memory/heartbeat-state.json with osint-only heartbeat status.",
+        "thinking": "high",
+        "timeoutSeconds": 300,
+        "model": "anthropic/claude-opus-4-6"
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "6035342772"
+      },
+      "state": {
+        "nextRunAtMs": 1771531279480,
+        "lastRunAtMs": 1771524079487,
+        "lastStatus": "error",
+        "lastDurationMs": 80677,
+        "consecutiveErrors": 2,
+        "lastError": "cron announce delivery failed"
+      }
+    },
+    {
+      "id": "e8c6d7a7-bec9-46d7-b6f2-66aa8e53d9c6",
+      "name": "source-health-daily",
+      "enabled": true,
+      "createdAtMs": 1770914197355,
+      "updatedAtMs": 1771491654120,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 3 * * *",
+        "tz": "America/Chicago"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Daily OSINT source health check (no market endpoints).\n\nRun `cd ~/.openclaw/workspace/skills/osint-intel && bun run scripts/fetch-rss.ts >/tmp/rss.json` and count items.\nRun `cd ~/.openclaw/workspace/skills/osint-intel && bun run scripts/fetch-telegram.ts >/tmp/tg.json` and count items.\nRun endpoint checks:\n1. GDELT: curl status for api.gdeltproject.org\n2. OpenSky: curl status for opensky-network.org\n3. SIGMET: curl status for aviationweather.gov/api/data/airsigmet\n4. Telegram state file presence and size\n\nOutput: RSS count, Telegram count, endpoint statuses, DEGRADED/OK. Update feedHealth in ~/.openclaw/workspace/memory/heartbeat-state.json.",
+        "thinking": "high",
+        "timeoutSeconds": 180,
+        "model": "anthropic/claude-opus-4-6"
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "6035342772"
+      },
+      "state": {
+        "nextRunAtMs": 1771578000000,
+        "lastRunAtMs": 1771491600006,
+        "lastStatus": "ok",
+        "lastDurationMs": 54114,
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "id": "9e0fc6b8-c560-4766-ae9e-0a384c8e209c",
+      "name": "weekly-security-reliability-audit",
+      "enabled": true,
+      "createdAtMs": 1771380256902,
+      "updatedAtMs": 1771459613995,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 5 * * 0",
+        "tz": "America/Chicago",
+        "staggerMs": 300000
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run weekly reliability and security audit for OSINT-only stack. Execute `python3 ~/.openclaw/scripts/assert-osint-scope.py`, `openclaw security audit --deep`, `openclaw doctor --fix --non-interactive --yes`, `openclaw models status --plain`, and `openclaw cron status`. Summarize with: status, scope-guard result, risks, fixes applied, and remaining actions. Keep report under 250 words with concise bullets.",
+        "model": "anthropic/claude-opus-4-6",
+        "thinking": "high",
+        "timeoutSeconds": 900
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "telegram",
+        "to": "6035342772"
+      },
+      "state": {
+        "consecutiveErrors": 0,
+        "nextRunAtMs": 1771758069604
+      }
+    }
+  ]
+}

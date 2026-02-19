@@ -1,0 +1,558 @@
+{
+  "scan_time": "2026-02-12T17:12:04.725252+00:00",
+  "top_trending": [
+    {
+      "symbol": "BTC",
+      "mentions": 7,
+      "sources": [
+        "CoinGecko Trending",
+        "Google News Crypto"
+      ],
+      "signals": [
+        "\ud83d\udcc9 bearish (-0.4%)"
+      ]
+    },
+    {
+      "symbol": "UNI",
+      "mentions": 3,
+      "sources": [
+        "CoinGecko Trending",
+        "CoinGecko Movers"
+      ],
+      "signals": [
+        "\ud83d\udcc9 bearish (-12.6%)",
+        "\ud83d\udcc9 dumping (-11.5%)"
+      ]
+    },
+    {
+      "symbol": "APP",
+      "mentions": 3,
+      "sources": [
+        "Yahoo Most Active",
+        "Yahoo Gainers",
+        "Yahoo Losers"
+      ],
+      "signals": []
+    },
+    {
+      "symbol": "CSCO",
+      "mentions": 3,
+      "sources": [
+        "Yahoo Most Active",
+        "Yahoo Gainers",
+        "Yahoo Losers"
+      ],
+      "signals": []
+    },
+    {
+      "symbol": "IPGP",
+      "mentions": 3,
+      "sources": [
+        "Yahoo Most Active",
+        "Yahoo Gainers",
+        "Yahoo Losers"
+      ],
+      "signals": []
+    },
+    {
+      "symbol": "CROX",
+      "mentions": 3,
+      "sources": [
+        "Yahoo Most Active",
+        "Yahoo Gainers",
+        "Yahoo Losers"
+      ],
+      "signals": []
+    },
+    {
+      "symbol": "CGNX",
+      "mentions": 3,
+      "sources": [
+        "Yahoo Most Active",
+        "Yahoo Gainers",
+        "Yahoo Losers"
+      ],
+      "signals": []
+    },
+    {
+      "symbol": "FSLY",
+      "mentions": 3,
+      "sources": [
+        "Yahoo Most Active",
+        "Yahoo Gainers",
+        "Yahoo Losers"
+      ],
+      "signals": []
+    },
+    {
+      "symbol": "NBIS",
+      "mentions": 3,
+      "sources": [
+        "Yahoo Most Active",
+        "Yahoo Gainers",
+        "Yahoo Losers"
+      ],
+      "signals": []
+    },
+    {
+      "symbol": "MH",
+      "mentions": 3,
+      "sources": [
+        "Yahoo Most Active",
+        "Yahoo Gainers",
+        "Yahoo Losers"
+      ],
+      "signals": []
+    },
+    {
+      "symbol": "ETH",
+      "mentions": 3,
+      "sources": [
+        "Google News Crypto"
+      ],
+      "signals": []
+    },
+    {
+      "symbol": "ESP",
+      "mentions": 2,
+      "sources": [
+        "CoinGecko Trending"
+      ],
+      "signals": [
+        "\ud83d\udcc9 bearish (-0.6%)"
+      ]
+    },
+    {
+      "symbol": "AZTEC",
+      "mentions": 2,
+      "sources": [
+        "CoinGecko Trending"
+      ],
+      "signals": [
+        "\ud83d\udcc9 bearish (-23.5%)"
+      ]
+    },
+    {
+      "symbol": "PENGU",
+      "mentions": 2,
+      "sources": [
+        "CoinGecko Trending"
+      ],
+      "signals": [
+        "\ud83d\ude80 bullish (+4.0%)"
+      ]
+    },
+    {
+      "symbol": "ZRO",
+      "mentions": 2,
+      "sources": [
+        "CoinGecko Trending"
+      ],
+      "signals": [
+        "\ud83d\udcc9 bearish (-16.9%)"
+      ]
+    },
+    {
+      "symbol": "BERA",
+      "mentions": 2,
+      "sources": [
+        "CoinGecko Trending"
+      ],
+      "signals": [
+        "\ud83d\ude80 bullish (+20.2%)"
+      ]
+    },
+    {
+      "symbol": "HYPE",
+      "mentions": 2,
+      "sources": [
+        "CoinGecko Trending"
+      ],
+      "signals": [
+        "\ud83d\ude80 bullish (+3.1%)"
+      ]
+    },
+    {
+      "symbol": "SOL",
+      "mentions": 2,
+      "sources": [
+        "CoinGecko Trending"
+      ],
+      "signals": [
+        "\ud83d\ude80 bullish (+0.0%)"
+      ]
+    },
+    {
+      "symbol": "ZAMA",
+      "mentions": 2,
+      "sources": [
+        "CoinGecko Trending"
+      ],
+      "signals": [
+        "\ud83d\udcc9 bearish (-9.8%)"
+      ]
+    },
+    {
+      "symbol": "PUMP",
+      "mentions": 2,
+      "sources": [
+        "Google News Crypto",
+        "CoinGecko Movers"
+      ],
+      "signals": [
+        "\ud83d\ude80 pumping (+3.2%)"
+      ]
+    }
+  ],
+  "crypto_highlights": [
+    {
+      "symbol": "ESP",
+      "name": "Espresso",
+      "rank": 502,
+      "price_change_24h": -0.63,
+      "source": "coingecko_trending"
+    },
+    {
+      "symbol": "AZTEC",
+      "name": "Aztec",
+      "rank": 395,
+      "price_change_24h": -23.55,
+      "source": "coingecko_trending"
+    },
+    {
+      "symbol": "PENGU",
+      "name": "Pudgy Penguins",
+      "rank": 112,
+      "price_change_24h": 4.01,
+      "source": "coingecko_trending"
+    },
+    {
+      "symbol": "ZRO",
+      "name": "LayerZero",
+      "rank": 107,
+      "price_change_24h": -16.9,
+      "source": "coingecko_trending"
+    },
+    {
+      "symbol": "BERA",
+      "name": "Berachain",
+      "rank": 208,
+      "price_change_24h": 20.22,
+      "source": "coingecko_trending"
+    },
+    {
+      "symbol": "UNI",
+      "name": "Uniswap",
+      "rank": 39,
+      "price_change_24h": -12.55,
+      "source": "coingecko_trending"
+    },
+    {
+      "symbol": "BTC",
+      "name": "Bitcoin",
+      "rank": 1,
+      "price_change_24h": -0.41,
+      "source": "coingecko_trending"
+    },
+    {
+      "symbol": "HYPE",
+      "name": "Hyperliquid",
+      "rank": 16,
+      "price_change_24h": 3.07,
+      "source": "coingecko_trending"
+    },
+    {
+      "symbol": "SOL",
+      "name": "Solana",
+      "rank": 7,
+      "price_change_24h": 0.05,
+      "source": "coingecko_trending"
+    },
+    {
+      "symbol": "ZAMA",
+      "name": "Zama",
+      "rank": 531,
+      "price_change_24h": -9.81,
+      "source": "coingecko_trending"
+    },
+    {
+      "symbol": "MYX",
+      "name": "MYX Finance",
+      "price": 2.87,
+      "change_24h": -26.27,
+      "volume": 50163967,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "ENA",
+      "name": "Ethena",
+      "price": 0.114733,
+      "change_24h": 5.27,
+      "volume": 102827809,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "POL",
+      "name": "POL (ex-MATIC)",
+      "price": 0.09262,
+      "change_24h": 5.17,
+      "volume": 83446719,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "WLFI",
+      "name": "World Liberty Financial",
+      "price": 0.105796,
+      "change_24h": 4.73,
+      "volume": 93100837,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "TON",
+      "name": "Toncoin",
+      "price": 1.36,
+      "change_24h": 4.24,
+      "volume": 105004957,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "VET",
+      "name": "VeChain",
+      "price": 0.00777342,
+      "change_24h": 4.17,
+      "volume": 18444361,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "NIGHT",
+      "name": "Midnight",
+      "price": 0.04985066,
+      "change_24h": 4.03,
+      "volume": 13394674,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "TAO",
+      "name": "Bittensor",
+      "price": 150.33,
+      "change_24h": 3.92,
+      "volume": 110350092,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "SEI",
+      "name": "Sei",
+      "price": 0.07269,
+      "change_24h": 3.82,
+      "volume": 42776657,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "XLM",
+      "name": "Stellar",
+      "price": 0.156744,
+      "change_24h": 3.81,
+      "volume": 92821581,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "PIPPIN",
+      "name": "pippin",
+      "price": 0.457073,
+      "change_24h": -3.7,
+      "volume": 64444348,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "PEPE",
+      "name": "Pepe",
+      "price": 3.63e-06,
+      "change_24h": 3.58,
+      "volume": 317597677,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "HBAR",
+      "name": "Hedera",
+      "price": 0.090926,
+      "change_24h": 3.56,
+      "volume": 120617990,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "BONK",
+      "name": "Bonk",
+      "price": 5.98e-06,
+      "change_24h": 3.34,
+      "volume": 64224169,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "XMR",
+      "name": "Monero",
+      "price": 327.98,
+      "change_24h": -3.32,
+      "volume": 75610765,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "PUMP",
+      "name": "Pump.fun",
+      "price": 0.00190662,
+      "change_24h": 3.25,
+      "volume": 90948953,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "SHIB",
+      "name": "Shiba Inu",
+      "price": 5.98e-06,
+      "change_24h": 3.22,
+      "volume": 142452377,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "WLD",
+      "name": "Worldcoin",
+      "price": 0.376908,
+      "change_24h": 3.2,
+      "volume": 71306085,
+      "source": "coingecko_movers"
+    },
+    {
+      "symbol": "ONDO",
+      "name": "Ondo",
+      "price": 0.245058,
+      "change_24h": 3.03,
+      "volume": 54962826,
+      "source": "coingecko_movers"
+    }
+  ],
+  "stock_highlights": [
+    {
+      "symbol": "APP",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "EQIX",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "CSCO",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "VKTX",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "IPGP",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "EXC",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "CROX",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "CGNX",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "BBIO",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "IRDM",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "FSLY",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "MU",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "HWM",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "NBIS",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "MH",
+      "category": "gainers",
+      "source": "yahoo_gainers"
+    },
+    {
+      "symbol": "ICLR",
+      "category": "losers",
+      "source": "yahoo_losers"
+    },
+    {
+      "symbol": "NP",
+      "category": "losers",
+      "source": "yahoo_losers"
+    },
+    {
+      "symbol": "CHRW",
+      "category": "losers",
+      "source": "yahoo_losers"
+    },
+    {
+      "symbol": "MICC",
+      "category": "losers",
+      "source": "yahoo_losers"
+    },
+    {
+      "symbol": "NVDA",
+      "category": "losers",
+      "source": "yahoo_losers"
+    },
+    {
+      "symbol": "F",
+      "category": "losers",
+      "source": "yahoo_losers"
+    },
+    {
+      "symbol": "RIG",
+      "category": "losers",
+      "source": "yahoo_losers"
+    }
+  ],
+  "social_buzz": [],
+  "breaking_news": [
+    {
+      "title": "January homes sales tank more than 8%, as Realtors say potential buyers are 'struggling' - CNBC",
+      "tickers": [
+        "CNBC"
+      ]
+    },
+    {
+      "title": "Kraft Heinz pauses plans to split into 2 companies, says its problems are \u2018fixable\u2019 - AP News",
+      "tickers": [
+        "AP"
+      ]
+    }
+  ]
+}

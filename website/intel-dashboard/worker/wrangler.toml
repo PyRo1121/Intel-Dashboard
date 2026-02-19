@@ -1,0 +1,32 @@
+name = "pyrobot-worker"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+BACKEND_URL = "https://api-intel.pyro1121.com"
+GITHUB_CLIENT_ID = "Iv23lijCNmrOWw1Cu9sf"
+X_CLIENT_ID = "QjRBelhzc3FZNXNna3I0cjlhSjM6MTpjaQ"
+
+# Route ALL requests on intel.pyro1121.com through this Worker
+# Worker handles /api/* and /auth/* directly, proxies everything else to Pages
+[[routes]]
+pattern = "intel.pyro1121.com/*"
+zone_name = "pyro1121.com"
+
+# Cron trigger: poke DOs every 5 min to ensure they stay alive
+[triggers]
+crons = ["*/5 * * * *"]
+
+[durable_objects]
+bindings = [
+  { name = "INTEL_CACHE", class_name = "IntelCacheDO" },
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["IntelCacheDO", "FlashCrashDO"]
+
+[[migrations]]
+tag = "v2"
+deleted_classes = ["FlashCrashDO"]

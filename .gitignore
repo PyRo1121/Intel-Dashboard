@@ -1,0 +1,23 @@
+# Build/runtime artifacts
+**/node_modules/
+**/.output/
+**/.vinxi/
+**/.wrangler/
+**/.cache/
+**/dist/
+**/coverage/
+
+# Env/secrets
+**/.env
+**/.env.*
+**/*token*
+**/*session*
+**/*secret*
+**/*.key
+
+# Python artifacts
+**/__pycache__/
+**/*.pyc
+
+# Logs
+**/*.log

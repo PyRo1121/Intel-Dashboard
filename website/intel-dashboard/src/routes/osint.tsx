@@ -1,5 +1,13 @@
-import { For, Show, createSignal, createResource } from "solid-js";
+import { For, Show, createMemo, createSignal, createResource } from "solid-js";
 import SeverityBadge from "~/components/ui/SeverityBadge";
+import {
+  buildFreshnessStatus,
+  freshnessBannerTone,
+  freshnessPillTone,
+  freshnessTooltip,
+  maxIsoTimestamp,
+  useFreshnessTransitionNotice,
+} from "~/lib/freshness";
 import { useLiveRefresh } from "~/lib/live-refresh";
 import type { IntelItem, Severity } from "~/lib/types";
 import { formatRelativeTime } from "~/lib/utils";
@@ -24,6 +32,7 @@ async function loadOsint(): Promise<IntelItem[]> {
 export default function OsintFeed() {
   const [filter, setFilter] = createSignal<Severity | "all">("all");
   const [osint, { refetch }] = createResource(loadOsint, { initialValue: [] as IntelItem[] });
+  const feedThresholds = { liveMaxMinutes: 20, delayedMaxMinutes: 90 } as const;
 
   useLiveRefresh(() => {
     void refetch();
@@ -31,6 +40,9 @@ export default function OsintFeed() {
 
   const items = () => osint.latest ?? osint() ?? [];
   const loadingInitial = () => osint.state === "refreshing" && items().length === 0;
+  const latestIntelTs = createMemo(() => maxIsoTimestamp(items().map((item) => item.timestamp)));
+  const feedFreshness = createMemo(() => buildFreshnessStatus(latestIntelTs(), feedThresholds));
+  const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "OSINT feed");
   const filtered = () => {
     const f = filter();
     if (f === "all") return items();
@@ -63,25 +75,43 @@ export default function OsintFeed() {
             Open-source intelligence from GDELT, RSS, NOTAMs, and military aircraft tracking
           </p>
         </div>
-        <Show when={items().length > 0}>
-          <div class="flex items-center gap-1 p-1 surface-card rounded-2xl">
-            <div class="px-3.5 py-2 text-center">
-              <p class="text-lg font-bold font-mono-data text-white">{items().length}</p>
-              <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Events</p>
+        <div class="flex items-center gap-2">
+          <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+            Feed: {feedFreshness().label}
+            <Show when={feedFreshness().minutes !== null}> ({feedFreshness().minutes}m)</Show>
+          </span>
+          <Show when={items().length > 0}>
+            <div class="flex items-center gap-1 p-1 surface-card rounded-2xl">
+              <div class="px-3.5 py-2 text-center">
+                <p class="text-lg font-bold font-mono-data text-white">{items().length}</p>
+                <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Events</p>
+              </div>
+              <div class="w-px h-8 bg-white/[0.06]" />
+              <div class="px-3.5 py-2 text-center">
+                <p class="text-lg font-bold font-mono-data text-red-400">{severityCounts().critical}</p>
+                <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Critical</p>
+              </div>
+              <div class="w-px h-8 bg-white/[0.06]" />
+              <div class="px-3.5 py-2 text-center">
+                <p class="text-lg font-bold font-mono-data text-amber-400">{severityCounts().high}</p>
+                <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">High</p>
+              </div>
             </div>
-            <div class="w-px h-8 bg-white/[0.06]" />
-            <div class="px-3.5 py-2 text-center">
-              <p class="text-lg font-bold font-mono-data text-red-400">{severityCounts().critical}</p>
-              <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Critical</p>
-            </div>
-            <div class="w-px h-8 bg-white/[0.06]" />
-            <div class="px-3.5 py-2 text-center">
-              <p class="text-lg font-bold font-mono-data text-amber-400">{severityCounts().high}</p>
-              <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">High</p>
-            </div>
-          </div>
-        </Show>
+          </Show>
+        </div>
       </div>
+
+      <Show when={freshnessNotice()}>
+        {(notice) => (
+          <section
+            class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
+            role="status"
+            aria-live="polite"
+          >
+            {notice().message}
+          </section>
+        )}
+      </Show>
 
       {/* Filter Pills */}
       <div class="flex items-center gap-1 p-1 rounded-2xl bg-white/[0.02] border border-white/[0.04] w-fit">

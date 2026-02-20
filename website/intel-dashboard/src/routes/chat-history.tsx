@@ -1,4 +1,12 @@
 import { createMemo, createResource, createSignal, For, Show } from "solid-js";
+import {
+  buildFreshnessStatus,
+  freshnessBannerTone,
+  freshnessPillTone,
+  freshnessTooltip,
+  maxIsoTimestamp,
+  useFreshnessTransitionNotice,
+} from "~/lib/freshness";
 import { useLiveRefresh } from "~/lib/live-refresh";
 
 interface ChatHistoryMessage {
@@ -55,6 +63,7 @@ async function loadChatHistory(
 export default function ChatHistoryPage() {
   const [sessionLimit, setSessionLimit] = createSignal(6);
   const [messageLimit, setMessageLimit] = createSignal(25);
+  const feedThresholds = { liveMaxMinutes: 10, delayedMaxMinutes: 60 } as const;
 
   const [data, { refetch }] = createResource(
     () => [sessionLimit(), messageLimit()] as const,
@@ -64,6 +73,12 @@ export default function ChatHistoryPage() {
   const response = createMemo(() => data.latest ?? data() ?? null);
   const sessions = createMemo(() => response()?.sessions ?? []);
   const loadingInitial = createMemo(() => data.state === "pending" && !response());
+  const latestSessionTs = createMemo(() => maxIsoTimestamp(sessions().map((session) => session.updatedAt)));
+  const feedFreshness = createMemo(() => {
+    const latest = Math.max(Date.parse(response()?.generatedAt || "") || 0, latestSessionTs() || 0);
+    return buildFreshnessStatus(latest, feedThresholds);
+  });
+  const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "Chat-history feed");
 
   useLiveRefresh(() => {
     void refetch();
@@ -80,6 +95,10 @@ export default function ChatHistoryPage() {
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
+          <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+            Feed: {feedFreshness().label}
+            <Show when={feedFreshness().minutes !== null}> ({feedFreshness().minutes}m)</Show>
+          </span>
           <label class="text-xs text-zinc-500">
             Sessions
             <select
@@ -116,6 +135,18 @@ export default function ChatHistoryPage() {
           </button>
         </div>
       </div>
+
+      <Show when={freshnessNotice()}>
+        {(notice) => (
+          <section
+            class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
+            role="status"
+            aria-live="polite"
+          >
+            {notice().message}
+          </section>
+        )}
+      </Show>
 
       <Show when={loadingInitial()}>
         <div class="surface-card p-6 text-sm text-zinc-500">Loading chat history...</div>

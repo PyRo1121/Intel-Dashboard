@@ -1,5 +1,12 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
-import { Activity, Anchor, Crosshair, ExternalLink, Pause, Plane, Play, ShieldAlert, Ship, Signal } from "lucide-solid";
+import { Activity, Anchor, Crosshair, ExternalLink, Info, Pause, Plane, Play, ShieldAlert, Ship, Signal } from "lucide-solid";
+import {
+  buildFreshnessStatus,
+  freshnessBannerTone,
+  freshnessPillTone,
+  freshnessTooltip,
+  useFreshnessTransitionNotice,
+} from "~/lib/freshness";
 import { useLiveRefresh } from "~/lib/live-refresh";
 import { formatRelativeTime } from "~/lib/utils";
 import type { IntelItem } from "~/lib/types";
@@ -250,6 +257,7 @@ function payloadSignature(payload: AirSeaPayload): string {
 
 export default function AirSeaOps() {
   const [payload, { refetch }] = createResource(loadAirSea, { initialValue: EMPTY_AIR_SEA });
+  const feedThresholds = { liveMaxMinutes: 15, delayedMaxMinutes: 60 } as const;
   const [mode, setMode] = createSignal<"all" | "air" | "sea">("all");
   const [severityFilter, setSeverityFilter] = createSignal<"all" | Severity>("all");
   const [majorOnly, setMajorOnly] = createSignal(false);
@@ -556,6 +564,7 @@ export default function AirSeaOps() {
       const selectedNow = selectedId() === track.id;
       const isCritical = track.severity === "critical";
       const isHigh = track.severity === "high";
+      const estimated = track.placement?.mode === "region-estimate";
       const baseRadius = isCritical ? 7 : isHigh ? 6 : track.severity === "medium" ? 5 : 4;
       const radius = selectedNow ? baseRadius + 3 : baseRadius;
 
@@ -574,10 +583,11 @@ export default function AirSeaOps() {
         color: selectedNow ? "#ffffff" : severityColor(track.severity),
         weight: selectedNow ? 2.5 : isCritical ? 2 : 1.4,
         fillColor: severityColor(track.severity),
-        fillOpacity: selectedNow ? 0.95 : isCritical ? 0.9 : 0.78,
+        fillOpacity: estimated ? 0.42 : selectedNow ? 0.95 : isCritical ? 0.9 : 0.78,
+        dashArray: estimated ? "4 3" : undefined,
       });
 
-      const tooltipContent = `<div style="font-weight:600">${track.label}</div><div style="opacity:0.7;font-size:10px">${track.class} &bull; ${track.severity.toUpperCase()}</div>`;
+      const tooltipContent = `<div style="font-weight:600">${track.label}</div><div style="opacity:0.7;font-size:10px">${track.class} &bull; ${track.severity.toUpperCase()}</div><div style="opacity:0.65;font-size:10px">${estimated ? "Estimated region position" : "Reported coordinates"}</div>`;
       marker
         .on("click", () => {
           setSelectedId(track.id);
@@ -603,6 +613,30 @@ export default function AirSeaOps() {
     };
   });
 
+  const dataTier = createMemo<"live" | "osint-fallback" | "seeded-fallback" | "empty">(() => {
+    const list = renderPayload().tracks;
+    if (list.length === 0) return "empty";
+    const seeded = list.every((track) => track.tags.includes("fallback-seed"));
+    if (seeded) return "seeded-fallback";
+    const osint = list.every((track) => track.tags.includes("osint-fallback"));
+    if (osint) return "osint-fallback";
+    return "live";
+  });
+
+  const estimatedVisibleCount = createMemo(() => visibleTracks().filter((track) => track.placement?.mode === "region-estimate").length);
+
+  const dataTierLabel = () => {
+    if (dataTier() === "live") return "Live fused feeds";
+    if (dataTier() === "osint-fallback") return "OSINT fallback";
+    if (dataTier() === "seeded-fallback") return "Seeded placeholder markers";
+    return "No active tracks";
+  };
+
+  const opsFreshness = createMemo(() =>
+    buildFreshnessStatus(Date.parse(renderPayload().timestamp || ""), feedThresholds, { noData: "Unknown" }),
+  );
+  const freshnessNotice = useFreshnessTransitionNotice(opsFreshness, "Air/Sea feed");
+
   return (
     <div class="space-y-6 animate-fade-in">
       <section class="relative overflow-hidden rounded-3xl border border-cyan-500/15 bg-gradient-to-br from-[#030a12] via-[#061420] to-[#0a101c] p-6 sm:p-8">
@@ -619,7 +653,7 @@ export default function AirSeaOps() {
             <p class="mt-2 text-sm text-zinc-400/80 max-w-lg">Real-time air and maritime surveillance. Threat-weighted tracks with timeline playback, source fusion, and region heatmaps.</p>
           </div>
 
-          <div class="grid grid-cols-5 gap-2">
+          <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
             <div class="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 text-center min-w-[72px]">
               <p class="font-mono-data text-xl font-bold text-white">{visibleStats().total}</p>
               <p class="text-[9px] uppercase tracking-widest text-zinc-500 mt-0.5">Tracks</p>
@@ -644,6 +678,40 @@ export default function AirSeaOps() {
         </div>
       </section>
 
+      <section class="surface-card p-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="space-y-1.5">
+            <p class="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-300">
+              <Info size={13} class="text-cyan-300" /> How to read this board
+            </p>
+            <p class="max-w-3xl text-xs text-zinc-400">
+              Solid markers are reported coordinates. Dashed markers are region-estimated positions from text reports. Confidence scores reflect source reliability and corroboration, not exact geo precision.
+            </p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(opsFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+              Feed: {opsFreshness().label}
+              <Show when={opsFreshness().minutes !== null}> ({opsFreshness().minutes}m)</Show>
+            </span>
+            <span class="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] text-cyan-200 font-medium">
+              Data mode: {dataTierLabel()}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <Show when={freshnessNotice()}>
+        {(notice) => (
+          <section
+            class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
+            role="status"
+            aria-live="polite"
+          >
+            {notice().message}
+          </section>
+        )}
+      </Show>
+
       <section class="surface-card p-4 space-y-3">
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => setMode("all")} class={`min-h-11 px-3.5 py-1.5 text-xs rounded-xl border transition ${mode() === "all" ? "border-white/20 bg-white/10 text-white" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>All Tracks</button>
@@ -656,7 +724,7 @@ export default function AirSeaOps() {
           <button type="button" onClick={() => setSeverityFilter("critical")} class={`min-h-11 px-3.5 py-1.5 text-xs rounded-xl border transition ${severityFilter() === "critical" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>Critical</button>
           <button type="button" onClick={() => setSeverityFilter("high")} class={`min-h-11 px-3.5 py-1.5 text-xs rounded-xl border transition ${severityFilter() === "high" ? "border-amber-400/30 bg-amber-500/10 text-amber-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>High</button>
 
-          <label class="ml-auto inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-1.5 text-xs text-zinc-300">
+          <label class="ml-auto inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-1.5 text-xs text-zinc-300" title="Keeps critical/high tracks and strategic classes like Carrier, Bomber, Air Defense.">
             <input type="checkbox" checked={majorOnly()} onInput={(e) => setMajorOnly(e.currentTarget.checked)} />
             Major assets only
           </label>
@@ -695,6 +763,7 @@ export default function AirSeaOps() {
               <span>Temporal window: {Math.round(windowMinutes() / 60)}h</span>
               <span>{timelinePoints()[playbackIndex()] ? new Date(timelinePoints()[playbackIndex()]).toLocaleString() : "n/a"}</span>
             </div>
+            <p class="text-[11px] text-zinc-500">Showing tracks reported between pivot time and {Math.round(windowMinutes() / 60)} hours earlier.</p>
             <input
               type="range"
               min="0"
@@ -718,7 +787,7 @@ export default function AirSeaOps() {
 
       <div class="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_390px]">
         <section class="surface-card map-container relative overflow-hidden p-0">
-          <div ref={mapEl} class="relative z-10 h-[640px] w-full rounded-xl" />
+          <div ref={mapEl} class="relative z-10 h-[500px] w-full rounded-xl sm:h-[640px]" />
           <div class="map-scanline rounded-xl" />
 
           <div class="absolute right-4 top-4 z-[500] inline-flex rounded-lg border border-white/15 bg-black/70 backdrop-blur-sm p-0.5">
@@ -749,15 +818,16 @@ export default function AirSeaOps() {
             </div>
           </div>
 
-          <div class="pointer-events-none absolute bottom-4 left-4 z-[500] inline-flex items-center gap-3 rounded-lg border border-white/10 bg-black/70 backdrop-blur-sm px-3 py-1.5 text-[10px] text-zinc-300 font-medium">
+          <div class="pointer-events-none absolute bottom-4 left-4 z-[500] inline-flex flex-wrap items-center gap-3 rounded-lg border border-white/10 bg-black/70 backdrop-blur-sm px-3 py-1.5 text-[10px] text-zinc-300 font-medium">
             <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-red-400 shadow-[0_0_6px_rgba(239,68,68,0.5)]" /> Critical</span>
             <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.4)]" /> High</span>
             <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-blue-400" /> Medium</span>
             <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-zinc-500" /> Low</span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full border border-zinc-300/80 bg-transparent" /> Estimated geo</span>
           </div>
 
           <div class="pointer-events-none absolute bottom-4 right-4 z-[500] rounded-lg border border-white/10 bg-black/70 backdrop-blur-sm px-3 py-1.5 text-[10px] text-zinc-400 font-mono-data">
-            {visibleStats().total} tracks &bull; {renderPayload().sourceSummary?.telegramChannels || 0} sources
+            {visibleStats().total} tracks &bull; {estimatedVisibleCount()} estimated &bull; {renderPayload().sourceSummary?.telegramChannels || 0} sources
           </div>
         </section>
 
@@ -789,7 +859,7 @@ export default function AirSeaOps() {
                   </div>
                   <div class="text-right">
                     <p class="text-[11px] uppercase tracking-wider font-bold" style={{ color: severityColor(item.severity) }}>{item.severity}</p>
-                    <p class="text-sm font-mono-data text-zinc-300">{item.confidence}%</p>
+                    <p class="text-sm font-mono-data text-zinc-300" title="Confidence reflects source credibility and corroboration, not exact map precision.">{item.confidence}%</p>
                   </div>
                 </div>
 
@@ -804,7 +874,7 @@ export default function AirSeaOps() {
                   </div>
                   <div class="rounded-xl bg-white/[0.03] border border-white/[0.06] p-2.5">
                     <p class="text-zinc-600">Coordinates</p>
-                    <p class="text-zinc-300 font-mono-data">{item.latitude.toFixed(2)}, {item.longitude.toFixed(2)}</p>
+                    <p class="text-zinc-300 font-mono-data">{item.placement?.mode === "region-estimate" ? "~" : ""}{item.latitude.toFixed(2)}, {item.longitude.toFixed(2)}</p>
                   </div>
                   <div class="rounded-xl bg-white/[0.03] border border-white/[0.06] p-2.5">
                     <p class="text-zinc-600">Kinetics</p>
@@ -913,13 +983,17 @@ export default function AirSeaOps() {
           </div>
 
           <div class="surface-card p-4">
-            <p class="text-xs uppercase tracking-widest text-zinc-500 mb-3 font-semibold">Source Health</p>
+            <div class="mb-3 flex items-center justify-between gap-2">
+              <p class="text-xs uppercase tracking-widest text-zinc-500 font-semibold">Source Health</p>
+              <span class="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-zinc-300">{dataTierLabel()}</span>
+            </div>
             <div class="space-y-0 text-xs text-zinc-400">
               <div class="source-health-row"><span class="inline-flex items-center gap-2"><Activity size={12} class="text-cyan-400" /> Aviation</span><span class="font-mono-data text-zinc-300">{renderPayload().sourceSummary?.aviationTimestamp ? formatRelativeTime(renderPayload().sourceSummary.aviationTimestamp!) : "n/a"}</span></div>
               <div class="source-health-row"><span class="inline-flex items-center gap-2"><Anchor size={12} class="text-emerald-400" /> Telegram</span><span class="font-mono-data text-zinc-300">{renderPayload().sourceSummary?.telegramTimestamp ? formatRelativeTime(renderPayload().sourceSummary.telegramTimestamp!) : "n/a"}</span></div>
               <div class="source-health-row"><span class="inline-flex items-center gap-2"><Crosshair size={12} class="text-zinc-500" /> Channels</span><span class="font-mono-data text-zinc-300">{renderPayload().sourceSummary?.telegramChannels || 0}</span></div>
               <div class="source-health-row"><span class="inline-flex items-center gap-2"><ShieldAlert size={12} class="text-zinc-500" /> Messages</span><span class="font-mono-data text-zinc-300">{renderPayload().sourceSummary?.telegramMessages || 0}</span></div>
-              <div class="source-health-row"><span class="inline-flex items-center gap-2"><Signal size={12} class="text-zinc-500" /> Feed</span><span class="font-mono-data text-zinc-300">{stats().totalTracks} tracks</span></div>
+              <div class="source-health-row"><span class="inline-flex items-center gap-2"><Signal size={12} class="text-zinc-500" /> Payload age</span><span class="font-mono-data text-zinc-300">{opsFreshness().minutes === null ? "n/a" : `${opsFreshness().minutes}m`}</span></div>
+              <div class="source-health-row"><span class="inline-flex items-center gap-2"><Signal size={12} class="text-zinc-500" /> Feed</span><span class="font-mono-data text-zinc-300">{stats().totalTracks} tracks ({estimatedVisibleCount()} estimated)</span></div>
             </div>
           </div>
         </div>

@@ -1,5 +1,13 @@
-import { For, Show, createResource, createSignal } from "solid-js";
+import { For, Show, createMemo, createResource, createSignal } from "solid-js";
 import { REGION_LABELS, type IntelRegion, type IntelItem } from "~/lib/types";
+import {
+  buildFreshnessStatus,
+  freshnessBannerTone,
+  freshnessPillTone,
+  freshnessTooltip,
+  maxIsoTimestamp,
+  useFreshnessTransitionNotice,
+} from "~/lib/freshness";
 import { useLiveRefresh } from "~/lib/live-refresh";
 import SeverityBadge from "~/components/ui/SeverityBadge";
 import { formatRelativeTime } from "~/lib/utils";
@@ -69,6 +77,7 @@ function buildRegions(items: IntelItem[]): RegionSummary[] {
 export default function ThreatMap() {
   const [intel, { refetch }] = createResource(loadIntel, { initialValue: [] as IntelItem[] });
   const [selectedRegion, setSelectedRegion] = createSignal<IntelRegion | null>(null);
+  const feedThresholds = { liveMaxMinutes: 20, delayedMaxMinutes: 90 } as const;
 
   useLiveRefresh(() => {
     void refetch();
@@ -80,6 +89,9 @@ export default function ThreatMap() {
   const totalEvents = () => intelItems().length;
   const totalCritical = () => regions().reduce((s, r) => s + r.critical, 0);
   const totalHigh = () => regions().reduce((s, r) => s + r.high, 0);
+  const latestIntelTs = createMemo(() => maxIsoTimestamp(intelItems().map((item) => item.timestamp)));
+  const feedFreshness = createMemo(() => buildFreshnessStatus(latestIntelTs(), feedThresholds));
+  const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "Threat map feed");
 
   const selectedSummary = () => {
     const sel = selectedRegion();
@@ -101,25 +113,43 @@ export default function ThreatMap() {
           <h1 class="text-3xl font-bold text-white tracking-tight">Threat Map</h1>
           <p class="text-sm text-zinc-500 mt-1.5">Regional threat assessment from live OSINT data</p>
         </div>
-        <Show when={totalEvents() > 0}>
-          <div class="flex items-center gap-1 p-1 surface-card rounded-2xl">
-            <div class="px-3.5 py-2 text-center">
-              <p class="text-lg font-bold font-mono-data text-white">{totalEvents()}</p>
-              <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Events</p>
+        <div class="flex items-center gap-2">
+          <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+            Feed: {feedFreshness().label}
+            <Show when={feedFreshness().minutes !== null}> ({feedFreshness().minutes}m)</Show>
+          </span>
+          <Show when={totalEvents() > 0}>
+            <div class="flex items-center gap-1 p-1 surface-card rounded-2xl">
+              <div class="px-3.5 py-2 text-center">
+                <p class="text-lg font-bold font-mono-data text-white">{totalEvents()}</p>
+                <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Events</p>
+              </div>
+              <div class="w-px h-8 bg-white/[0.06]" />
+              <div class="px-3.5 py-2 text-center">
+                <p class="text-lg font-bold font-mono-data text-red-400">{totalCritical()}</p>
+                <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Critical</p>
+              </div>
+              <div class="w-px h-8 bg-white/[0.06]" />
+              <div class="px-3.5 py-2 text-center">
+                <p class="text-lg font-bold font-mono-data text-amber-400">{totalHigh()}</p>
+                <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">High</p>
+              </div>
             </div>
-            <div class="w-px h-8 bg-white/[0.06]" />
-            <div class="px-3.5 py-2 text-center">
-              <p class="text-lg font-bold font-mono-data text-red-400">{totalCritical()}</p>
-              <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Critical</p>
-            </div>
-            <div class="w-px h-8 bg-white/[0.06]" />
-            <div class="px-3.5 py-2 text-center">
-              <p class="text-lg font-bold font-mono-data text-amber-400">{totalHigh()}</p>
-              <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">High</p>
-            </div>
-          </div>
-        </Show>
+          </Show>
+        </div>
       </div>
+
+      <Show when={freshnessNotice()}>
+        {(notice) => (
+          <section
+            class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
+            role="status"
+            aria-live="polite"
+          >
+            {notice().message}
+          </section>
+        )}
+      </Show>
 
       <Show
         when={!loadingInitial()}

@@ -1,7 +1,15 @@
-import { For, Show, createResource } from "solid-js";
+import { For, Show, createMemo, createResource } from "solid-js";
 import { TriangleAlert, Radio, Shield, ExternalLink, ArrowUpRight, Activity } from "lucide-solid";
 import StatCard from "~/components/ui/StatCard";
 import SeverityBadge from "~/components/ui/SeverityBadge";
+import {
+  buildFreshnessStatus,
+  freshnessBannerTone,
+  freshnessPillTone,
+  freshnessTooltip,
+  maxIsoTimestamp,
+  useFreshnessTransitionNotice,
+} from "~/lib/freshness";
 import { useLiveRefresh } from "~/lib/live-refresh";
 import type { IntelItem } from "~/lib/types";
 import { formatRelativeTime } from "~/lib/utils";
@@ -22,6 +30,7 @@ async function loadIntel(): Promise<IntelItem[]> {
 
 export default function Overview() {
   const [intel, { refetch }] = createResource(loadIntel, { initialValue: [] as IntelItem[] });
+  const feedThresholds = { liveMaxMinutes: 20, delayedMaxMinutes: 90 } as const;
 
   useLiveRefresh(() => {
     void refetch();
@@ -31,6 +40,9 @@ export default function Overview() {
   const loadingInitial = () => intel.state === "refreshing" && intelItems().length === 0;
   const criticalCount = () => intelItems().filter((i) => i.severity === "critical").length;
   const highCount = () => intelItems().filter((i) => i.severity === "high").length;
+  const latestIntelTs = createMemo(() => maxIsoTimestamp(intelItems().map((item) => item.timestamp)));
+  const feedFreshness = createMemo(() => buildFreshnessStatus(latestIntelTs(), feedThresholds));
+  const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "Intel feed");
 
   return (
     <div class="space-y-8 animate-fade-in">
@@ -46,11 +58,29 @@ export default function Overview() {
             <h1 class="text-3xl font-bold text-white tracking-tight">War Intel Overview</h1>
             <p class="text-sm text-zinc-500 mt-1.5">Real-time geopolitical and OSINT monitoring</p>
           </div>
-          <a href="/osint" class="flex items-center gap-1 text-[12px] text-zinc-500 hover:text-emerald-400 transition-colors font-medium">
-            Full feed <ArrowUpRight size={14} />
-          </a>
+          <div class="flex items-center gap-2">
+            <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+              Feed: {feedFreshness().label}
+              <Show when={feedFreshness().minutes !== null}> ({feedFreshness().minutes}m)</Show>
+            </span>
+            <a href="/osint" class="flex items-center gap-1 text-[12px] text-zinc-500 hover:text-emerald-400 transition-colors font-medium">
+              Full feed <ArrowUpRight size={14} />
+            </a>
+          </div>
         </div>
       </div>
+
+      <Show when={freshnessNotice()}>
+        {(notice) => (
+          <section
+            class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
+            role="status"
+            aria-live="polite"
+          >
+            {notice().message}
+          </section>
+        )}
+      </Show>
 
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <StatCard icon={<TriangleAlert size={20} />} label="OSINT Events" value={intelItems().length || "-"} accentColor="blue" delay={0} />

@@ -1,5 +1,13 @@
-import { For, Show, createResource, createSignal } from "solid-js";
+import { For, Show, createMemo, createResource, createSignal } from "solid-js";
 import type { Briefing } from "~/lib/types";
+import {
+  buildFreshnessStatus,
+  freshnessBannerTone,
+  freshnessPillTone,
+  freshnessTooltip,
+  maxIsoTimestamp,
+  useFreshnessTransitionNotice,
+} from "~/lib/freshness";
 import { useLiveRefresh } from "~/lib/live-refresh";
 import { FileText, ChevronDown, Clock, Send } from "lucide-solid";
 
@@ -20,6 +28,7 @@ async function loadBriefings(): Promise<Briefing[]> {
 export default function Briefings() {
   const [briefings, { refetch }] = createResource(loadBriefings, { initialValue: [] as Briefing[] });
   const [expanded, setExpanded] = createSignal<string | null>(null);
+  const feedThresholds = { liveMaxMinutes: 240, delayedMaxMinutes: 480 } as const;
 
   useLiveRefresh(() => {
     void refetch();
@@ -27,6 +36,16 @@ export default function Briefings() {
 
   const items = () => briefings.latest ?? briefings() ?? [];
   const loadingInitial = () => briefings.state === "refreshing" && items().length === 0;
+  const latestBriefingTs = createMemo(() => maxIsoTimestamp(items().map((briefing) => briefing.timestamp)));
+  const feedFreshness = createMemo(() =>
+    buildFreshnessStatus(latestBriefingTs(), feedThresholds, {
+      noData: "No briefings",
+      live: "On schedule",
+      delayed: "Late",
+      stale: "Stale",
+    }),
+  );
+  const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "Briefing feed");
 
   const formatBriefingTime = (ts: string) => {
     const d = new Date(ts);
@@ -74,15 +93,33 @@ export default function Briefings() {
             AI-generated intelligence briefings delivered every 4 hours via Telegram
           </p>
         </div>
-        <Show when={items().length > 0}>
-          <div class="flex items-center gap-1 p-1 surface-card rounded-2xl">
-            <div class="px-3.5 py-2 text-center">
-              <p class="text-lg font-bold font-mono-data text-white">{items().length}</p>
-              <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Briefings</p>
+        <div class="flex items-center gap-2">
+          <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+            Briefings: {feedFreshness().label}
+            <Show when={feedFreshness().minutes !== null}> ({feedFreshness().minutes}m)</Show>
+          </span>
+          <Show when={items().length > 0}>
+            <div class="flex items-center gap-1 p-1 surface-card rounded-2xl">
+              <div class="px-3.5 py-2 text-center">
+                <p class="text-lg font-bold font-mono-data text-white">{items().length}</p>
+                <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Briefings</p>
+              </div>
             </div>
-          </div>
-        </Show>
+          </Show>
+        </div>
       </div>
+
+      <Show when={freshnessNotice()}>
+        {(notice) => (
+          <section
+            class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
+            role="status"
+            aria-live="polite"
+          >
+            {notice().message}
+          </section>
+        )}
+      </Show>
 
       <Show
         when={!loadingInitial()}

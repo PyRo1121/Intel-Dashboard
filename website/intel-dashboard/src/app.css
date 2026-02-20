@@ -1,5 +1,5 @@
-@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
 
 @theme {
   --color-surface-body: #09090b;
@@ -165,6 +165,39 @@ body {
 .animate-scale-in { animation: scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 .animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
 .animate-float { animation: float 3s ease-in-out infinite; }
+
+@keyframes freshness-banner-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes freshness-banner-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.995);
+  }
+}
+
+.freshness-transition-banner {
+  animation: freshness-banner-enter 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  line-height: 1.45;
+  letter-spacing: 0.005em;
+  will-change: transform, opacity;
+}
+
+.freshness-transition-banner--exit {
+  animation: freshness-banner-exit 220ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
 
 .animate-shimmer {
   background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
@@ -366,11 +399,119 @@ body {
   border-bottom: none !important;
 }
 
+.telegram-tweet {
+  position: relative;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-left: 2px solid rgba(96, 165, 250, 0.45);
+  border-radius: 0.9rem;
+  background: linear-gradient(180deg, rgba(11, 14, 20, 0.7), rgba(11, 14, 20, 0.45));
+  padding: 0.8rem 0.95rem;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.telegram-tweet:hover {
+  background: linear-gradient(180deg, rgba(17, 21, 30, 0.8), rgba(11, 14, 20, 0.55));
+  border-left-color: rgba(147, 197, 253, 0.85);
+}
+
+.telegram-tweet--focused {
+  border-left-color: rgba(34, 211, 238, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.25), 0 0 0 1px rgba(34, 211, 238, 0.2);
+}
+
+.telegram-tweet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  margin-bottom: 0.45rem;
+}
+
+.telegram-tweet-author {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.telegram-tweet-author-name {
+  margin: 0;
+  color: rgba(244, 244, 245, 0.96);
+  font-size: 0.79rem;
+  font-weight: 600;
+  line-height: 1.1;
+  max-width: 22rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.telegram-tweet-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  color: rgba(161, 161, 170, 0.95);
+  font-size: 0.68rem;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  white-space: nowrap;
+}
+
+.telegram-tweet-text {
+  white-space: pre-wrap;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: rgba(228, 228, 231, 0.95);
+}
+
+.telegram-tweet-actions {
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.telegram-tweet-action-pill,
+.telegram-tweet-action-btn,
+.telegram-tweet-action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(161, 161, 170, 0.95);
+  font-size: 0.66rem;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  text-decoration: none;
+  padding: 0.28rem 0.5rem;
+}
+
+.telegram-tweet-action-btn {
+  cursor: pointer;
+}
+
+.telegram-tweet-action-btn:hover,
+.telegram-tweet-action-link:hover {
+  color: rgba(191, 219, 254, 0.98);
+  border-color: rgba(96, 165, 250, 0.35);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.telegram-tweet-action-link {
+  margin-left: auto;
+}
+
 .telegram-photo-collage {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.25rem;
   width: 100%;
   margin-top: 0.68rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
 }
 
 .telegram-photo-collage--single {
@@ -395,8 +536,8 @@ body {
 .telegram-photo-cell {
   position: relative;
   overflow: hidden;
-  border-radius: 0.65rem;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0;
+  border: 0;
   background: linear-gradient(165deg, rgba(255, 255, 255, 0.045), rgba(0, 0, 0, 0.38));
   min-height: 9rem;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 30px -20px rgba(0, 0, 0, 0.72);
@@ -418,7 +559,9 @@ body {
 .telegram-photo-cell--side-bottom { grid-area: bottom; min-height: 10.25rem; }
 
 .telegram-photo-button {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   height: 100%;
   border: none;
@@ -434,8 +577,10 @@ body {
 
 .telegram-photo-img {
   display: block;
-  width: 100%;
-  height: 100%;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.44));
   transition: transform 190ms cubic-bezier(0.2, 0, 0, 1);
@@ -561,6 +706,14 @@ body {
 }
 
 @media (max-width: 640px) {
+  .telegram-tweet-actions {
+    gap: 0.3rem;
+  }
+
+  .telegram-tweet-action-link {
+    margin-left: 0;
+  }
+
   .telegram-photo-collage--triple {
     grid-template-columns: 1fr;
     grid-template-areas:

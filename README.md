@@ -2,6 +2,14 @@
 
 Bun-workspace monorepo for the Cloudflare-hosted Intel Dashboard platform on `intel.pyro1121.com`.
 
+## Documentation
+
+- [Documentation Index](docs/README.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
+- [Production Architecture](docs/architecture/production-architecture.md)
+- [Workspace Overview](docs/reference/workspace-overview.md)
+
 ## Workspace Layout
 
 - `apps/web` - SolidStart frontend

@@ -2935,6 +2935,119 @@ describe("intel-dashboard backend worker", () => {
     });
   });
 
+  it("writes AI telemetry datapoints for AI gateway calls when configured", async () => {
+    const analyticsWrite = vi.fn();
+    const aiFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 6,
+            total_tokens: 18,
+          },
+          choices: [{ message: { content: JSON.stringify({ dedupe_key: "same-story" }) } }],
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "cf-aig-cache-status": "HIT",
+          },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", aiFetch);
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/ai/jobs", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer admin-token",
+        },
+        body: JSON.stringify({
+          jobs: [
+            {
+              type: "dedupe",
+              channel: "telegram",
+              payload: { title: "Breaking", url: "https://example.com/a" },
+            },
+          ],
+        }),
+      }),
+      {
+        BILLING_ADMIN_TOKEN: "admin-token",
+        AI_GATEWAY_URL: "https://gateway.example.com/v1/chat/completions",
+        AI_GATEWAY_MODEL: "cerebras/gpt-oss-120b",
+        AI_BATCH_PROVIDER: "internal",
+        AI_TELEMETRY_SAMPLE_RATE: "1",
+        AI_TELEMETRY: {
+          writeDataPoint: analyticsWrite,
+        },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(analyticsWrite).toHaveBeenCalledTimes(1);
+    expect(analyticsWrite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        indexes: ["backend:dedupe"],
+        blobs: expect.arrayContaining(["backend", "dedupe", "text", "cerebras/gpt-oss-120b", "cerebras", "ok", "hit"]),
+        doubles: expect.arrayContaining([200, 12, 6, 18, 0.5, 1]),
+      }),
+    );
+  });
+
+  it("distinguishes invalid JSON responses from transport failures in AI telemetry", async () => {
+    const analyticsWrite = vi.fn();
+    const aiFetch = vi.fn(async () =>
+      new Response("not-json", {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "cf-aig-cache-status": "MISS",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", aiFetch);
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/ai/jobs", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer admin-token",
+        },
+        body: JSON.stringify({
+          jobs: [
+            {
+              type: "dedupe",
+              channel: "telegram",
+              payload: { title: "Breaking", url: "https://example.com/a" },
+            },
+          ],
+        }),
+      }),
+      {
+        BILLING_ADMIN_TOKEN: "admin-token",
+        AI_GATEWAY_URL: "https://gateway.example.com/v1/chat/completions",
+        AI_GATEWAY_MODEL: "cerebras/gpt-oss-120b",
+        AI_BATCH_PROVIDER: "internal",
+        AI_TELEMETRY_SAMPLE_RATE: "1",
+        AI_TELEMETRY: {
+          writeDataPoint: analyticsWrite,
+        },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(analyticsWrite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blobs: expect.arrayContaining(["backend", "dedupe", "text", "cerebras/gpt-oss-120b", "cerebras", "invalid_json", "miss"]),
+      }),
+    );
+  });
+
   it("submits async ai jobs and returns queued batch status", async () => {
     const kv = createKvMapBinding();
     const send = vi.fn(async () => undefined);

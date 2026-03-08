@@ -537,6 +537,8 @@ export type WorkerEnv = {
   USAGE_ANALYTICS_SAMPLE_RATE?: string;
   USAGE_SEED_QUEUE?: SeedQueueProducerLike;
   USAGE_ANALYTICS?: AnalyticsEngineLike;
+  AI_TELEMETRY_SAMPLE_RATE?: string;
+  AI_TELEMETRY?: AnalyticsEngineLike;
   USAGE_CACHE_WARM_ENABLED?: string;
   USAGE_CACHE_WARM_WINDOWS_DAYS?: string;
   NEWS_ENDPOINT_PATH?: string;
@@ -3070,6 +3072,10 @@ type AiGatewayInvocationResult = {
   status?: number;
   errorCode?: string;
   errorMessage?: string;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
+  cacheStatus?: string;
+  durationMs?: number;
 };
 
 type AiGatewayJsonSchema = {
@@ -3156,6 +3162,7 @@ async function invokeAiGatewayDetailed(args: {
   const collectLog = normalizeBoolean(args.env.AI_GATEWAY_COLLECT_LOG, DEFAULT_AI_GATEWAY_COLLECT_LOG);
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
 
   const normalizedMessagesForCache = args.messages.map((message) => ({
     ...message,
@@ -3250,6 +3257,7 @@ async function invokeAiGatewayDetailed(args: {
       body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
+    const cacheStatus = normalizeAiCacheStatus(response.headers.get("cf-aig-cache-status"));
     if (!response.ok) {
       let errorCode: string | undefined;
       let errorMessage: string | undefined;
@@ -3273,44 +3281,180 @@ async function invokeAiGatewayDetailed(args: {
       } catch {
         // ignore provider payload parse failures and fall back to HTTP status
       }
+      writeAiTelemetry({
+        env: args.env,
+        source: "backend",
+        pipeline: trimString(args.metadata?.pipeline) ?? "unknown",
+        lane: trimString(args.metadata?.lane) ?? (args.routeKind ?? "default"),
+        model: route.model,
+        provider: resolveAiProvider(route.model),
+        outcome: "error",
+        cacheStatus,
+        status: response.status,
+        durationMs: Date.now() - startedAt,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        outputInputRatio: 0,
+        mediaCount: normalizeAiMediaCount(args.metadata?.media),
+      });
       return {
         content: null,
         route,
         status: response.status,
+        cacheStatus,
+        durationMs: Date.now() - startedAt,
         ...(errorCode ? { errorCode } : {}),
         ...(errorMessage ? { errorMessage } : {}),
       };
     }
 
-    const decoded = (await response.json()) as unknown;
-    if (!isRecord(decoded) || !Array.isArray(decoded.choices) || decoded.choices.length < 1) {
+    let decoded: unknown;
+    try {
+      decoded = (await response.json()) as unknown;
+    } catch {
+      writeAiTelemetry({
+        env: args.env,
+        source: "backend",
+        pipeline: trimString(args.metadata?.pipeline) ?? "unknown",
+        lane: trimString(args.metadata?.lane) ?? (args.routeKind ?? "default"),
+        model: route.model,
+        provider: resolveAiProvider(route.model),
+        outcome: "invalid_json",
+        cacheStatus,
+        status: response.status,
+        durationMs: Date.now() - startedAt,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        outputInputRatio: 0,
+        mediaCount: normalizeAiMediaCount(args.metadata?.media),
+      });
       return {
         content: null,
         route,
+        cacheStatus,
+        durationMs: Date.now() - startedAt,
+        errorCode: "invalid_json",
+        errorMessage: "AI gateway returned invalid JSON.",
+      };
+    }
+    if (!isRecord(decoded) || !Array.isArray(decoded.choices) || decoded.choices.length < 1) {
+      writeAiTelemetry({
+        env: args.env,
+        source: "backend",
+        pipeline: trimString(args.metadata?.pipeline) ?? "unknown",
+        lane: trimString(args.metadata?.lane) ?? (args.routeKind ?? "default"),
+        model: route.model,
+        provider: resolveAiProvider(route.model),
+        outcome: "empty_choices",
+        cacheStatus,
+        status: 200,
+        durationMs: Date.now() - startedAt,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        outputInputRatio: 0,
+        mediaCount: normalizeAiMediaCount(args.metadata?.media),
+      });
+      return {
+        content: null,
+        route,
+        cacheStatus,
+        durationMs: Date.now() - startedAt,
         errorCode: "empty_choices",
         errorMessage: "AI gateway response did not include choices.",
       };
     }
     const firstChoice = decoded.choices[0];
     if (!isRecord(firstChoice) || !isRecord(firstChoice.message)) {
+      writeAiTelemetry({
+        env: args.env,
+        source: "backend",
+        pipeline: trimString(args.metadata?.pipeline) ?? "unknown",
+        lane: trimString(args.metadata?.lane) ?? (args.routeKind ?? "default"),
+        model: route.model,
+        provider: resolveAiProvider(route.model),
+        outcome: "invalid_choice",
+        cacheStatus,
+        status: 200,
+        durationMs: Date.now() - startedAt,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        outputInputRatio: 0,
+        mediaCount: normalizeAiMediaCount(args.metadata?.media),
+      });
       return {
         content: null,
         route,
+        cacheStatus,
+        durationMs: Date.now() - startedAt,
         errorCode: "invalid_choice",
         errorMessage: "AI gateway response was missing the message payload.",
       };
     }
+    const usage = isRecord(decoded.usage) ? decoded.usage : null;
+    const promptTokens = usage ? readOptionalAiTokenCount(usage.prompt_tokens) : null;
+    const completionTokens = usage ? readOptionalAiTokenCount(usage.completion_tokens) : null;
+    const totalTokens =
+      usage === null
+        ? 0
+        : readOptionalAiTokenCount(usage.total_tokens) ?? ((promptTokens ?? 0) + (completionTokens ?? 0));
+    const outputInputRatio =
+      promptTokens && completionTokens !== null && promptTokens > 0
+        ? Number((completionTokens / promptTokens).toFixed(4))
+        : 0;
+    writeAiTelemetry({
+      env: args.env,
+      source: "backend",
+      pipeline: trimString(args.metadata?.pipeline) ?? "unknown",
+      lane: trimString(args.metadata?.lane) ?? (args.routeKind ?? "default"),
+      model: route.model,
+      provider: resolveAiProvider(route.model),
+      outcome: "ok",
+      cacheStatus,
+      status: 200,
+      durationMs: Date.now() - startedAt,
+      promptTokens: promptTokens ?? 0,
+      completionTokens: completionTokens ?? 0,
+      totalTokens,
+      outputInputRatio,
+      mediaCount: normalizeAiMediaCount(args.metadata?.media),
+    });
     return {
       content: trimString(firstChoice.message.content) ?? null,
       route,
+      promptTokens,
+      completionTokens,
+      cacheStatus,
+      durationMs: Date.now() - startedAt,
     };
   } catch (error) {
     const aborted =
       error instanceof Error &&
       (error.name === "AbortError" || /aborted|timed out/i.test(error.message));
+    writeAiTelemetry({
+      env: args.env,
+      source: "backend",
+      pipeline: trimString(args.metadata?.pipeline) ?? "unknown",
+      lane: trimString(args.metadata?.lane) ?? (args.routeKind ?? "default"),
+      model: route.model,
+      provider: resolveAiProvider(route.model),
+      outcome: aborted ? "timeout" : "fetch_failed",
+      cacheStatus: "unknown",
+      status: 0,
+      durationMs: Date.now() - startedAt,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      outputInputRatio: 0,
+      mediaCount: normalizeAiMediaCount(args.metadata?.media),
+    });
     return {
       content: null,
       route,
+      durationMs: Date.now() - startedAt,
       errorCode: aborted ? "gateway_timeout" : "gateway_fetch_failed",
       errorMessage: aborted ? "AI gateway request timed out." : "AI gateway request failed.",
     };
@@ -5327,6 +5471,102 @@ function writeUsageAnalytics(args: {
     });
   } catch {
     // best-effort analytics; never break request path
+  }
+}
+
+function normalizeAiCacheStatus(value: string | null): string {
+  const normalized = trimString(value)?.toLowerCase();
+  if (!normalized) return "unknown";
+  if (normalized.includes("hit")) return "hit";
+  if (normalized.includes("miss")) return "miss";
+  if (normalized.includes("bypass")) return "bypass";
+  return normalized;
+}
+
+function normalizeAiTokenCount(value: unknown): number {
+  const parsed = parseFiniteNumber(value);
+  return parsed === undefined ? 0 : Math.max(0, Math.floor(parsed));
+}
+
+function readOptionalAiTokenCount(value: unknown): number | null {
+  const parsed = parseFiniteNumber(value);
+  return parsed === undefined ? null : Math.max(0, Math.floor(parsed));
+}
+
+function resolveAiProvider(model: string): string {
+  return trimString(model.split("/")[0]) ?? "unknown";
+}
+
+function normalizeAiMediaCount(value: unknown): number {
+  const normalized = trimString(value);
+  if (!normalized) return 0;
+  if (normalized.toLowerCase() === "true") return 1;
+  if (normalized.toLowerCase() === "false") return 0;
+  const parsed = parseFiniteNumber(normalized);
+  return parsed === undefined ? 0 : Math.max(0, Math.floor(parsed));
+}
+
+function writeAiTelemetry(args: {
+  env: WorkerEnv;
+  source: "backend" | "edge";
+  pipeline: string;
+  lane: string;
+  model: string;
+  provider: string;
+  outcome: string;
+  cacheStatus: string;
+  status: number;
+  durationMs: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  outputInputRatio: number;
+  callCount?: number;
+  translatedCount?: number;
+  failedCount?: number;
+  mediaCount?: number;
+  cacheHitCount?: number;
+  cacheMissCount?: number;
+}): void {
+  const analytics = args.env.AI_TELEMETRY;
+  if (!analytics || typeof analytics.writeDataPoint !== "function") {
+    return;
+  }
+
+  const sampleRate = normalizeSampleRate(args.env.AI_TELEMETRY_SAMPLE_RATE);
+  if (!shouldSample(sampleRate)) {
+    return;
+  }
+
+  try {
+    analytics.writeDataPoint({
+      indexes: [`${args.source}:${args.pipeline}`],
+      blobs: [
+        args.source,
+        args.pipeline,
+        args.lane,
+        args.model,
+        args.provider,
+        args.outcome,
+        args.cacheStatus,
+      ],
+      doubles: [
+        args.status,
+        args.durationMs,
+        args.promptTokens,
+        args.completionTokens,
+        args.totalTokens,
+        args.outputInputRatio,
+        args.callCount ?? 1,
+        args.translatedCount ?? 0,
+        args.failedCount ?? (args.outcome === "ok" ? 0 : 1),
+        args.mediaCount ?? 0,
+        args.cacheHitCount ?? (args.cacheStatus === "hit" ? 1 : 0),
+        args.cacheMissCount ?? (args.cacheStatus === "miss" ? 1 : 0),
+      ],
+    });
+  } catch {
+    // best-effort only
   }
 }
 

@@ -11,6 +11,7 @@ Bun-workspace monorepo for the Cloudflare-hosted Intel Dashboard platform on `in
 - [Production Architecture](docs/architecture/production-architecture.md)
 - [Workspace Overview](docs/reference/workspace-overview.md)
 - [Repository Standards](docs/reference/repository-standards.md)
+- [AI Observability](docs/operations/ai-observability.md)
 
 ## Workspace Layout
 

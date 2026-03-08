@@ -9,6 +9,7 @@
 
 ## Operations
 
+- [AI Observability](operations/ai-observability.md)
 - [Free-Tier Performance Plan](operations/free-tier-performance-plan.md)
 - [Security Latency Checklist](operations/security-latency-checklist.md)
 - [Security Best Practices Report](operations/security-best-practices-report.md)

@@ -25,6 +25,12 @@
       "preview_id": "af26039f86ac408e931197b74aaecb54"
     }
   ],
+  "analytics_engine_datasets": [
+    {
+      "binding": "AI_TELEMETRY",
+      "dataset": "intel_dashboard_ai"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       {

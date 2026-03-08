@@ -98,6 +98,11 @@ When enabled, outbound dedupe uses AI Gateway to derive a normalized dedupe key 
 - `AI_GATEWAY_ESCALATION_URL` / `AI_GATEWAY_ESCALATION_MODEL` (optional, default model `cerebras/zai-glm-4.7`): route rare hard-case dedupe escalations to a heavier reasoning model.
 - `AI_GATEWAY_TIMEOUT_MS` (default `3000`): AI request timeout for high-throughput batch and sync AI jobs.
 - `AI_GATEWAY_CACHE_TTL_SECONDS` (default `600`): gateway cache TTL applied to deterministic AI requests.
+- `AI_GATEWAY_CACHE_TTL_DEDUPE_SECONDS` (default `604800`): cache TTL override for dedupe-key generation.
+- `AI_GATEWAY_CACHE_TTL_TRANSLATE_SECONDS` (default `2592000`): cache TTL override for deterministic text translation.
+- `AI_GATEWAY_CACHE_TTL_CLASSIFY_SECONDS` (default `604800`): cache TTL override for classification jobs.
+- `AI_GATEWAY_CACHE_TTL_NEWS_ENRICH_SECONDS` (default `86400`): cache TTL override for news enrichment.
+- `AI_GATEWAY_CACHE_TTL_BRIEFING_SECONDS` (default `21600`): cache TTL override for briefing generation.
 - `AI_GATEWAY_MAX_ATTEMPTS` (default `1`): gateway retry attempts (`1` minimizes duplicate token usage).
 - `AI_GATEWAY_RETRY_DELAY_MS` (default `250`): retry delay when attempts > 1.
 - `AI_GATEWAY_BACKOFF` (default `exponential`): retry backoff strategy (`exponential` or `linear`).

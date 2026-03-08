@@ -3016,6 +3016,48 @@ type AiGatewayInvocationResult = {
   errorMessage?: string;
 };
 
+function isCerebrasRouteModel(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+  return normalized.startsWith("cerebras/");
+}
+
+function shouldUseLowReasoningEffort(args: {
+  routeKind: AiGatewayRouteKind;
+  model: string;
+  expectJson: boolean;
+}): boolean {
+  if (!isCerebrasRouteModel(args.model)) {
+    return false;
+  }
+  if (args.routeKind === "media" || args.routeKind === "escalation") {
+    return false;
+  }
+  return args.expectJson;
+}
+
+function estimateCompletionTokensFromText(text: string, args: {
+  min: number;
+  max: number;
+  multiplier: number;
+  padding: number;
+}): number {
+  const approxInputTokens = Math.ceil(text.trim().length / 4);
+  return clamp(
+    Math.ceil(approxInputTokens * args.multiplier) + args.padding,
+    args.min,
+    args.max,
+  );
+}
+
+function estimateTranslateMaxTokens(text: string): number {
+  return estimateCompletionTokensFromText(text, {
+    min: 48,
+    max: 640,
+    multiplier: 1.15,
+    padding: 24,
+  });
+}
+
 async function invokeAiGatewayDetailed(args: {
   env: WorkerEnv;
   messages: AiGatewayMessage[];
@@ -3073,6 +3115,23 @@ async function invokeAiGatewayDetailed(args: {
   }
 
   try {
+    const requestBody: Record<string, unknown> = {
+      model: route.model,
+      temperature: 0,
+      ...(isCerebrasRouteModel(route.model)
+        ? { max_completion_tokens: Math.max(32, Math.floor(args.maxTokens)) }
+        : { max_tokens: Math.max(32, Math.floor(args.maxTokens)) }),
+      ...(args.expectJson ? { response_format: { type: "json_object" } } : {}),
+      messages: args.messages,
+    };
+    if (shouldUseLowReasoningEffort({
+      routeKind: args.routeKind ?? "default",
+      model: route.model,
+      expectJson: args.expectJson,
+    })) {
+      requestBody.reasoning_effort = "low";
+    }
+
     const response = await fetch(route.url, {
       method: "POST",
       headers: {
@@ -3089,13 +3148,7 @@ async function invokeAiGatewayDetailed(args: {
         "cf-aig-collect-log": collectLog ? "true" : "false",
         ...(metadataHeader ? { "cf-aig-metadata": metadataHeader } : {}),
       },
-      body: JSON.stringify({
-        model: route.model,
-        temperature: 0,
-        max_tokens: Math.max(32, Math.floor(args.maxTokens)),
-        ...(args.expectJson ? { response_format: { type: "json_object" } } : {}),
-        messages: args.messages,
-      }),
+      body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
     if (!response.ok) {
@@ -3289,7 +3342,7 @@ async function deriveDedupeKeyWithAi(args: {
     const result = await invokeAiGatewayDetailed({
       env: args.env,
       routeKind: lane,
-      maxTokens: 96,
+      maxTokens: 48,
       expectJson: true,
       cacheHint: "dedupe-key-v2",
       metadata: {
@@ -6607,7 +6660,7 @@ async function executeAiJob(args: {
     const translated = await invokeAiGateway({
       env: args.env,
       routeKind: "text",
-      maxTokens: 384,
+      maxTokens: estimateTranslateMaxTokens(args.job.text),
       expectJson: false,
       cacheHint: `translate-${args.job.targetLanguage.toLowerCase()}`,
       metadata: {
@@ -6642,7 +6695,7 @@ async function executeAiJob(args: {
   const classified = await invokeAiGateway({
     env: args.env,
     routeKind: "text",
-    maxTokens: 128,
+    maxTokens: 48,
     expectJson: true,
     cacheHint: "classify-v1",
     metadata: {
@@ -6892,7 +6945,7 @@ function buildAiGatewayRequestForJob(job: AiJobRequest): {
 } {
   if (job.type === "dedupe") {
     return {
-      maxTokens: 96,
+      maxTokens: 48,
       expectJson: true,
       messages: [
         {
@@ -6913,7 +6966,7 @@ function buildAiGatewayRequestForJob(job: AiJobRequest): {
 
   if (job.type === "translate") {
     return {
-      maxTokens: 384,
+      maxTokens: estimateTranslateMaxTokens(job.text),
       expectJson: false,
       messages: [
         {
@@ -6930,7 +6983,7 @@ function buildAiGatewayRequestForJob(job: AiJobRequest): {
   }
 
   return {
-    maxTokens: 128,
+    maxTokens: 48,
     expectJson: true,
     messages: [
       {
@@ -6959,8 +7012,13 @@ async function submitGroqBatch(args: {
       body: {
         model,
         temperature: 0,
-        max_tokens: request.maxTokens,
+        ...(isCerebrasRouteModel(model)
+          ? { max_completion_tokens: request.maxTokens }
+          : { max_tokens: request.maxTokens }),
         ...(request.expectJson ? { response_format: { type: "json_object" } } : {}),
+        ...(request.expectJson && shouldUseLowReasoningEffort({ routeKind: "text", model, expectJson: true })
+          ? { reasoning_effort: "low" }
+          : {}),
         messages: request.messages,
       },
     });

@@ -48,6 +48,43 @@ const ENGLISH_HINT_WORDS = new Set([
   "intel",
 ]);
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function estimateTextTokenBudget(text: string, args: {
+  min: number;
+  max: number;
+  multiplier: number;
+  padding: number;
+}): number {
+  const normalized = text.trim();
+  const approxInputTokens = Math.ceil(normalized.length / 4);
+  return clamp(
+    Math.ceil(approxInputTokens * args.multiplier) + args.padding,
+    args.min,
+    args.max,
+  );
+}
+
+export function estimateTranslationMaxTokens(text: string): number {
+  return estimateTextTokenBudget(text, {
+    min: 48,
+    max: 800,
+    multiplier: 1.15,
+    padding: 24,
+  });
+}
+
+export function estimateImageTranslationMaxTokens(contextText = ""): number {
+  return estimateTextTokenBudget(contextText, {
+    min: 96,
+    max: 480,
+    multiplier: 1.25,
+    padding: 96,
+  });
+}
+
 function buildGatewayUrl(
   accountId: string,
   gatewayName: string,
@@ -219,7 +256,7 @@ async function callGroq(
     headers,
     body: JSON.stringify({
       model: GROQ_MODEL,
-      max_tokens: 1400,
+      max_tokens: estimateTranslationMaxTokens(truncated),
       temperature: 0,
       messages: [
         {
@@ -409,7 +446,7 @@ async function callGroqVision(
     headers,
     body: JSON.stringify({
       model: GROQ_MODEL,
-      max_tokens: 1200,
+      max_tokens: estimateImageTranslationMaxTokens(contextText),
       temperature: 0,
       messages: [
         {

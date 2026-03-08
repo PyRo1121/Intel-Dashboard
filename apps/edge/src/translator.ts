@@ -70,7 +70,7 @@ function estimateTextTokenBudget(text: string, args: {
 export function estimateTranslationMaxTokens(text: string): number {
   return estimateTextTokenBudget(text, {
     min: 48,
-    max: 800,
+    max: 640,
     multiplier: 1.15,
     padding: 24,
   });

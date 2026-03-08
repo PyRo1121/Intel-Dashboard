@@ -2638,6 +2638,10 @@ describe("intel-dashboard backend worker", () => {
       const init = call[1] as RequestInit | undefined;
       const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
       expect(body.model).toBe("cerebras/gpt-oss-120b");
+      expect(body.max_completion_tokens ?? body.max_tokens).toBeDefined();
+      if (body.response_format?.type === "json_object") {
+        expect(body.reasoning_effort).toBe("low");
+      }
     }
   });
 
@@ -2703,6 +2707,7 @@ describe("intel-dashboard backend worker", () => {
     const init = aiFetch.mock.calls[0]?.[1] as RequestInit | undefined;
     const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
     expect(body.model).toBe("groq/meta-llama/llama-4-scout-17b-16e-instruct");
+    expect(body.max_tokens).toBe(48);
     expect(Array.isArray(body.messages?.[1]?.content)).toBe(true);
     expect(body.messages?.[1]?.content?.some((part: { type?: string }) => part?.type === "image_url")).toBe(true);
   });

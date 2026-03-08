@@ -3072,8 +3072,8 @@ type AiGatewayInvocationResult = {
   status?: number;
   errorCode?: string;
   errorMessage?: string;
-  promptTokens?: number;
-  completionTokens?: number;
+  promptTokens?: number | null;
+  completionTokens?: number | null;
   cacheStatus?: string;
   durationMs?: number;
 };
@@ -3309,7 +3309,36 @@ async function invokeAiGatewayDetailed(args: {
       };
     }
 
-    const decoded = (await response.json()) as unknown;
+    let decoded: unknown;
+    try {
+      decoded = (await response.json()) as unknown;
+    } catch {
+      writeAiTelemetry({
+        env: args.env,
+        source: "backend",
+        pipeline: trimString(args.metadata?.pipeline) ?? "unknown",
+        lane: trimString(args.metadata?.lane) ?? (args.routeKind ?? "default"),
+        model: route.model,
+        provider: resolveAiProvider(route.model),
+        outcome: "invalid_json",
+        cacheStatus,
+        status: 200,
+        durationMs: Date.now() - startedAt,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        outputInputRatio: 0,
+        mediaCount: normalizeAiMediaCount(args.metadata?.media),
+      });
+      return {
+        content: null,
+        route,
+        cacheStatus,
+        durationMs: Date.now() - startedAt,
+        errorCode: "invalid_json",
+        errorMessage: "AI gateway returned invalid JSON.",
+      };
+    }
     if (!isRecord(decoded) || !Array.isArray(decoded.choices) || decoded.choices.length < 1) {
       writeAiTelemetry({
         env: args.env,
@@ -3365,12 +3394,17 @@ async function invokeAiGatewayDetailed(args: {
         errorMessage: "AI gateway response was missing the message payload.",
       };
     }
-    const usage = isRecord(decoded.usage) ? decoded.usage : {};
-    const promptTokens = normalizeAiTokenCount(usage.prompt_tokens);
-    const completionTokens = normalizeAiTokenCount(usage.completion_tokens);
-    const totalTokens = normalizeAiTokenCount(usage.total_tokens) || promptTokens + completionTokens;
+    const usage = isRecord(decoded.usage) ? decoded.usage : null;
+    const promptTokens = usage ? readOptionalAiTokenCount(usage.prompt_tokens) : null;
+    const completionTokens = usage ? readOptionalAiTokenCount(usage.completion_tokens) : null;
+    const totalTokens =
+      usage === null
+        ? 0
+        : readOptionalAiTokenCount(usage.total_tokens) ?? ((promptTokens ?? 0) + (completionTokens ?? 0));
     const outputInputRatio =
-      promptTokens > 0 ? Number((completionTokens / promptTokens).toFixed(4)) : 0;
+      promptTokens && completionTokens !== null && promptTokens > 0
+        ? Number((completionTokens / promptTokens).toFixed(4))
+        : 0;
     writeAiTelemetry({
       env: args.env,
       source: "backend",
@@ -3382,8 +3416,8 @@ async function invokeAiGatewayDetailed(args: {
       cacheStatus,
       status: 200,
       durationMs: Date.now() - startedAt,
-      promptTokens,
-      completionTokens,
+      promptTokens: promptTokens ?? 0,
+      completionTokens: completionTokens ?? 0,
       totalTokens,
       outputInputRatio,
       mediaCount: normalizeAiMediaCount(args.metadata?.media),
@@ -5452,6 +5486,11 @@ function normalizeAiCacheStatus(value: string | null): string {
 function normalizeAiTokenCount(value: unknown): number {
   const parsed = parseFiniteNumber(value);
   return parsed === undefined ? 0 : Math.max(0, Math.floor(parsed));
+}
+
+function readOptionalAiTokenCount(value: unknown): number | null {
+  const parsed = parseFiniteNumber(value);
+  return parsed === undefined ? null : Math.max(0, Math.floor(parsed));
 }
 
 function resolveAiProvider(model: string): string {

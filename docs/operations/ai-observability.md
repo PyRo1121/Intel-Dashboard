@@ -42,6 +42,8 @@ Current write schema:
 - `double8`: translated count
 - `double9`: failed count
 - `double10`: media count
+- `double11`: cache hit count
+- `double12`: cache miss count
 
 ## Grafana Query Starters
 
@@ -51,7 +53,7 @@ Current write schema:
 SELECT
   blob2 AS pipeline,
   blob3 AS lane,
-  COUNT(*) AS calls
+  SUM(_sample_interval) AS calls
 FROM intel_dashboard_ai
 WHERE timestamp > NOW() - INTERVAL '24' HOUR
 GROUP BY pipeline, lane
@@ -64,9 +66,9 @@ ORDER BY calls DESC
 SELECT
   blob2 AS pipeline,
   blob3 AS lane,
-  SUM(double3) AS prompt_tokens,
-  SUM(double4) AS completion_tokens,
-  SUM(double5) AS total_tokens
+  SUM(double3 * _sample_interval) AS prompt_tokens,
+  SUM(double4 * _sample_interval) AS completion_tokens,
+  SUM(double5 * _sample_interval) AS total_tokens
 FROM intel_dashboard_ai
 WHERE timestamp > NOW() - INTERVAL '24' HOUR
 GROUP BY pipeline, lane
@@ -79,7 +81,7 @@ ORDER BY total_tokens DESC
 SELECT
   blob2 AS pipeline,
   blob3 AS lane,
-  AVG(double6) AS avg_output_input_ratio
+  SUM(double6 * _sample_interval) / SUM(_sample_interval) AS avg_output_input_ratio
 FROM intel_dashboard_ai
 WHERE timestamp > NOW() - INTERVAL '24' HOUR
 GROUP BY pipeline, lane
@@ -92,35 +94,35 @@ ORDER BY avg_output_input_ratio DESC
 SELECT
   blob2 AS pipeline,
   blob3 AS lane,
-  AVG(double2) AS avg_duration_ms,
-  MAX(double2) AS max_duration_ms
+  SUM(double2 * _sample_interval) / SUM(_sample_interval) AS avg_duration_ms,
+  quantileExactWeighted(0.95)(double2, _sample_interval) AS p95_duration_ms
 FROM intel_dashboard_ai
 WHERE timestamp > NOW() - INTERVAL '24' HOUR
 GROUP BY pipeline, lane
 ORDER BY avg_duration_ms DESC
 ```
 
-### Cache hit rate by lane
+### Cache status distribution by lane
 
 ```sql
 SELECT
   blob2 AS pipeline,
   blob3 AS lane,
   blob7 AS cache_status,
-  COUNT(*) AS calls
+  SUM(_sample_interval) AS calls
 FROM intel_dashboard_ai
 WHERE timestamp > NOW() - INTERVAL '24' HOUR
 GROUP BY pipeline, lane, cache_status
 ORDER BY pipeline, lane, cache_status
 ```
 
-### Failure rate by pipeline
+### Failures by pipeline and outcome
 
 ```sql
 SELECT
   blob2 AS pipeline,
   blob6 AS outcome,
-  COUNT(*) AS calls
+  SUM(_sample_interval) AS calls
 FROM intel_dashboard_ai
 WHERE timestamp > NOW() - INTERVAL '24' HOUR
 GROUP BY pipeline, outcome

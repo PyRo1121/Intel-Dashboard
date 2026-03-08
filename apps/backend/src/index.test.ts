@@ -2993,7 +2993,7 @@ describe("intel-dashboard backend worker", () => {
       expect.objectContaining({
         indexes: ["backend:dedupe"],
         blobs: expect.arrayContaining(["backend", "dedupe", "text", "cerebras/gpt-oss-120b", "cerebras", "ok", "hit"]),
-        doubles: expect.arrayContaining([200, 12, 6, 18, 0.5]),
+        doubles: expect.arrayContaining([200, 12, 6, 18, 0.5, 1]),
       }),
     );
   });

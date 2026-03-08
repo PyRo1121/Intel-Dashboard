@@ -3296,7 +3296,7 @@ async function invokeAiGatewayDetailed(args: {
         completionTokens: 0,
         totalTokens: 0,
         outputInputRatio: 0,
-        mediaCount: Number.parseInt(String(args.metadata?.media ?? "0"), 10) || 0,
+        mediaCount: normalizeAiMediaCount(args.metadata?.media),
       });
       return {
         content: null,
@@ -3326,7 +3326,7 @@ async function invokeAiGatewayDetailed(args: {
         completionTokens: 0,
         totalTokens: 0,
         outputInputRatio: 0,
-        mediaCount: Number.parseInt(String(args.metadata?.media ?? "0"), 10) || 0,
+        mediaCount: normalizeAiMediaCount(args.metadata?.media),
       });
       return {
         content: null,
@@ -3354,7 +3354,7 @@ async function invokeAiGatewayDetailed(args: {
         completionTokens: 0,
         totalTokens: 0,
         outputInputRatio: 0,
-        mediaCount: Number.parseInt(String(args.metadata?.media ?? "0"), 10) || 0,
+        mediaCount: normalizeAiMediaCount(args.metadata?.media),
       });
       return {
         content: null,
@@ -3386,7 +3386,7 @@ async function invokeAiGatewayDetailed(args: {
       completionTokens,
       totalTokens,
       outputInputRatio,
-      mediaCount: Number.parseInt(String(args.metadata?.media ?? "0"), 10) || 0,
+      mediaCount: normalizeAiMediaCount(args.metadata?.media),
     });
     return {
       content: trimString(firstChoice.message.content) ?? null,
@@ -3415,7 +3415,7 @@ async function invokeAiGatewayDetailed(args: {
       completionTokens: 0,
       totalTokens: 0,
       outputInputRatio: 0,
-      mediaCount: Number.parseInt(String(args.metadata?.media ?? "0"), 10) || 0,
+      mediaCount: normalizeAiMediaCount(args.metadata?.media),
     });
     return {
       content: null,
@@ -5456,6 +5456,15 @@ function normalizeAiTokenCount(value: unknown): number {
 
 function resolveAiProvider(model: string): string {
   return trimString(model.split("/")[0]) ?? "unknown";
+}
+
+function normalizeAiMediaCount(value: unknown): number {
+  const normalized = trimString(value);
+  if (!normalized) return 0;
+  if (normalized.toLowerCase() === "true") return 1;
+  if (normalized.toLowerCase() === "false") return 0;
+  const parsed = parseFiniteNumber(normalized);
+  return parsed === undefined ? 0 : Math.max(0, Math.floor(parsed));
 }
 
 function writeAiTelemetry(args: {

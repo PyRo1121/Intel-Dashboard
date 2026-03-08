@@ -101,6 +101,11 @@ const DEFAULT_AI_GATEWAY_MEDIA_MODEL = "groq/meta-llama/llama-4-scout-17b-16e-in
 const DEFAULT_AI_GATEWAY_ESCALATION_MODEL = "cerebras/zai-glm-4.7";
 const DEFAULT_AI_GATEWAY_CACHE_TTL_SECONDS = 600;
 const MAX_AI_GATEWAY_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60;
+const DEFAULT_AI_GATEWAY_CACHE_TTL_DEDUPE_SECONDS = 7 * 24 * 60 * 60;
+const DEFAULT_AI_GATEWAY_CACHE_TTL_TRANSLATE_SECONDS = 30 * 24 * 60 * 60;
+const DEFAULT_AI_GATEWAY_CACHE_TTL_CLASSIFY_SECONDS = 7 * 24 * 60 * 60;
+const DEFAULT_AI_GATEWAY_CACHE_TTL_NEWS_ENRICH_SECONDS = 24 * 60 * 60;
+const DEFAULT_AI_GATEWAY_CACHE_TTL_BRIEFING_SECONDS = 6 * 60 * 60;
 const DEFAULT_AI_GATEWAY_MAX_ATTEMPTS = 1;
 const MAX_AI_GATEWAY_MAX_ATTEMPTS = 5;
 const DEFAULT_AI_GATEWAY_RETRY_DELAY_MS = 250;
@@ -588,6 +593,11 @@ export type WorkerEnv = {
   AI_GATEWAY_ESCALATION_MODEL?: string;
   AI_GATEWAY_TIMEOUT_MS?: string;
   AI_GATEWAY_CACHE_TTL_SECONDS?: string;
+  AI_GATEWAY_CACHE_TTL_DEDUPE_SECONDS?: string;
+  AI_GATEWAY_CACHE_TTL_TRANSLATE_SECONDS?: string;
+  AI_GATEWAY_CACHE_TTL_CLASSIFY_SECONDS?: string;
+  AI_GATEWAY_CACHE_TTL_NEWS_ENRICH_SECONDS?: string;
+  AI_GATEWAY_CACHE_TTL_BRIEFING_SECONDS?: string;
   AI_GATEWAY_MAX_ATTEMPTS?: string;
   AI_GATEWAY_RETRY_DELAY_MS?: string;
   AI_GATEWAY_BACKOFF?: string;
@@ -1076,6 +1086,14 @@ function normalizeAiGatewayCacheTtlSeconds(rawValue: string | undefined): number
   const parsed = parseFiniteNumber(rawValue);
   if (parsed === undefined) {
     return DEFAULT_AI_GATEWAY_CACHE_TTL_SECONDS;
+  }
+  return clamp(Math.floor(parsed), 0, MAX_AI_GATEWAY_CACHE_TTL_SECONDS);
+}
+
+function resolveAiGatewayCacheTtlSeconds(rawValue: string | undefined, fallback: number): number {
+  const parsed = parseFiniteNumber(rawValue);
+  if (parsed === undefined) {
+    return fallback;
   }
   return clamp(Math.floor(parsed), 0, MAX_AI_GATEWAY_CACHE_TTL_SECONDS);
 }
@@ -2186,6 +2204,10 @@ async function enrichNewsItemWithAi(args: {
       },
     },
     cacheHint: "news-enrich-v1",
+    cacheTtlSecondsOverride: resolveAiGatewayCacheTtlSeconds(
+      args.env.AI_GATEWAY_CACHE_TTL_NEWS_ENRICH_SECONDS,
+      DEFAULT_AI_GATEWAY_CACHE_TTL_NEWS_ENRICH_SECONDS,
+    ),
     metadata: {
       pipeline: "news_enrichment",
       mode: "json",
@@ -2423,8 +2445,12 @@ async function buildAiBriefingContent(args: {
     env: args.env,
     routeKind: "text",
     expectJson: false,
-    maxTokens: 640,
+    maxTokens: 480,
     cacheHint: "briefing-v1",
+    cacheTtlSecondsOverride: resolveAiGatewayCacheTtlSeconds(
+      args.env.AI_GATEWAY_CACHE_TTL_BRIEFING_SECONDS,
+      DEFAULT_AI_GATEWAY_CACHE_TTL_BRIEFING_SECONDS,
+    ),
     metadata: {
       pipeline: "briefing",
       mode: "text",
@@ -2434,7 +2460,7 @@ async function buildAiBriefingContent(args: {
         role: "system",
         content:
           "Write a concise operational OSINT briefing in English with sections: Executive Summary, Critical Developments, Regional Snapshot, Watchlist. " +
-          "Be factual, avoid speculation, and keep the total length under 450 words.",
+          "Be factual, avoid speculation, and keep the total length under 320 words.",
       },
       {
         role: "user",
@@ -3103,6 +3129,7 @@ async function invokeAiGatewayDetailed(args: {
   modelOverride?: string;
   urlOverride?: string;
   cacheHint?: string;
+  cacheTtlSecondsOverride?: number;
   metadata?: Record<string, string>;
 }): Promise<AiGatewayInvocationResult> {
   const route = resolveAiGatewayRouteConfig({
@@ -3122,7 +3149,7 @@ async function invokeAiGatewayDetailed(args: {
 
   const timeoutMs = normalizeAiGatewayTimeoutMs(args.env.AI_GATEWAY_TIMEOUT_MS);
   const gatewayTimeoutMs = Math.max(250, timeoutMs - 100);
-  const cacheTtlSeconds = normalizeAiGatewayCacheTtlSeconds(args.env.AI_GATEWAY_CACHE_TTL_SECONDS);
+  const cacheTtlSeconds = args.cacheTtlSecondsOverride ?? normalizeAiGatewayCacheTtlSeconds(args.env.AI_GATEWAY_CACHE_TTL_SECONDS);
   const maxAttempts = normalizeAiGatewayMaxAttempts(args.env.AI_GATEWAY_MAX_ATTEMPTS);
   const retryDelayMs = normalizeAiGatewayRetryDelayMs(args.env.AI_GATEWAY_RETRY_DELAY_MS);
   const backoff = normalizeAiGatewayBackoff(args.env.AI_GATEWAY_BACKOFF);
@@ -3295,6 +3322,7 @@ async function invokeAiGateway(args: {
   modelOverride?: string;
   urlOverride?: string;
   cacheHint?: string;
+  cacheTtlSecondsOverride?: number;
   metadata?: Record<string, string>;
 }): Promise<string | null> {
   const result = await invokeAiGatewayDetailed(args);
@@ -3422,6 +3450,10 @@ async function deriveDedupeKeyWithAi(args: {
         },
       },
       cacheHint: "dedupe-key-v2",
+      cacheTtlSecondsOverride: resolveAiGatewayCacheTtlSeconds(
+        args.env.AI_GATEWAY_CACHE_TTL_DEDUPE_SECONDS,
+        DEFAULT_AI_GATEWAY_CACHE_TTL_DEDUPE_SECONDS,
+      ),
       metadata: {
         pipeline: "dedupe",
         mode: "json",
@@ -6741,6 +6773,10 @@ async function executeAiJob(args: {
       maxTokens: estimateTranslateMaxTokens(normalizedText),
       expectJson: false,
       cacheHint: `translate-${args.job.targetLanguage.toLowerCase()}`,
+      cacheTtlSecondsOverride: resolveAiGatewayCacheTtlSeconds(
+        args.env.AI_GATEWAY_CACHE_TTL_TRANSLATE_SECONDS,
+        DEFAULT_AI_GATEWAY_CACHE_TTL_TRANSLATE_SECONDS,
+      ),
       metadata: {
         pipeline: "ai_jobs_translate",
         mode: "text",
@@ -6789,6 +6825,10 @@ async function executeAiJob(args: {
       },
     },
     cacheHint: "classify-v1",
+    cacheTtlSecondsOverride: resolveAiGatewayCacheTtlSeconds(
+      args.env.AI_GATEWAY_CACHE_TTL_CLASSIFY_SECONDS,
+      DEFAULT_AI_GATEWAY_CACHE_TTL_CLASSIFY_SECONDS,
+    ),
     metadata: {
       pipeline: "ai_jobs_classify",
       mode: "json",

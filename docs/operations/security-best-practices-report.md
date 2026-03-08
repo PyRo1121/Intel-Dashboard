@@ -5,7 +5,7 @@ Scope: `src/`, `worker/src/`, `backend/src/`, deployment config, test coverage
 
 ## Executive Summary
 
-A focused deep-dive was completed on auth, subscription gating, and public data exposure. Three high-risk issues were identified and fixed in code: public backend feed exposure, anonymous delay bypass, and built-in owner fallback defaults. Current test suites are green after the fixes (`worker`: 19/19, `backend`: 49/49).
+A focused deep-dive was completed on auth, subscription gating, and public data exposure. Six high-risk issues and one medium-risk issue were identified and fixed in code. Current test suites are green after the fixes (`worker`: 19/19, `backend`: 51/51).
 
 ## Fixed This Pass
 
@@ -91,7 +91,6 @@ A focused deep-dive was completed on auth, subscription gating, and public data 
 - `bun run typecheck` passed
 - `bun run typecheck:edge` passed
 - `bun run test:edge` passed (19/19)
-- `bun run test:backend` passed (49/49)
 - `bun run test:backend` passed (51/51)
 
 ## Dependency Audit Snapshot

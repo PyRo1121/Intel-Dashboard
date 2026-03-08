@@ -19,15 +19,24 @@ jobs:
           script: |
             const baseRef = context.payload.pull_request.base.ref;
             const headRef = context.payload.pull_request.head.ref;
-            const allowed = /^(codex|feature|fix|chore|docs|refactor|hotfix)\//;
+            const headOwner = context.payload.pull_request.head.repo.owner.login;
+            const repoOwner = context.repo.owner;
+            const headRepoFork = context.payload.pull_request.head.repo.fork;
+            const authorType = context.payload.pull_request.user.type;
+            const allowed = /^(codex|feature|fix|chore|docs|refactor|hotfix|dependabot|renovate)\//;
 
             if (baseRef !== 'main') {
               core.setFailed(`Pull requests must target main. Received base branch: ${baseRef}`);
               return;
             }
 
+            if (authorType === 'Bot' || headRepoFork || headOwner !== repoOwner) {
+              core.info(`Skipping branch-prefix enforcement for ${authorType.toLowerCase()} or fork-based PR source: ${headRef}`);
+              return;
+            }
+
             if (!allowed.test(headRef)) {
               core.setFailed(
-                `Branch names must start with codex/, feature/, fix/, chore/, docs/, refactor/, or hotfix/. Received: ${headRef}`,
+                `Branch names must start with codex/, feature/, fix/, chore/, docs/, refactor/, hotfix/, dependabot/, or renovate/. Received: ${headRef}`,
               );
             }

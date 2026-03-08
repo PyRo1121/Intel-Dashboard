@@ -5,7 +5,7 @@
 The repository root should stay limited to:
 
 - primary maintainer files: `README.md`, `CONTRIBUTING.md`, `SECURITY.md`
-- code and package roots: `apps/`, `packages/`, `scripts/`, `e2e/`
+- code and package roots: `apps/`, `packages/`, `scripts/`, `e2e/`, `docs/`
 - repo metadata: `.github/`, `.gitignore`, `.gitattributes`, `.editorconfig`
 - dependency/runtime manifests
 

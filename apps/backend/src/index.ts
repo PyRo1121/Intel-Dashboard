@@ -3322,7 +3322,7 @@ async function invokeAiGatewayDetailed(args: {
         provider: resolveAiProvider(route.model),
         outcome: "invalid_json",
         cacheStatus,
-        status: 200,
+        status: response.status,
         durationMs: Date.now() - startedAt,
         promptTokens: 0,
         completionTokens: 0,

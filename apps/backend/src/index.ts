@@ -5559,10 +5559,10 @@ function writeAiTelemetry(args: {
         args.outputInputRatio,
         args.callCount ?? 1,
         args.translatedCount ?? 0,
-        args.failedCount ?? 0,
+        args.failedCount ?? (args.outcome === "ok" ? 0 : 1),
         args.mediaCount ?? 0,
-        args.cacheHitCount ?? 0,
-        args.cacheMissCount ?? 0,
+        args.cacheHitCount ?? (args.cacheStatus === "hit" ? 1 : 0),
+        args.cacheMissCount ?? (args.cacheStatus === "miss" ? 1 : 0),
       ],
     });
   } catch {

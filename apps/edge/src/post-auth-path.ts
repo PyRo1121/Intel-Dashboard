@@ -1,5 +1,5 @@
-import { AUTH_NEXT_ROUTE_PREFIXES } from "../../../packages/shared/auth-next-routes.ts";
-import { SITE_ORIGIN } from "../../../packages/shared/site-config.ts";
+import { AUTH_NEXT_ROUTE_PREFIXES } from "@intel-dashboard/shared/auth-next-routes.ts";
+import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 
 export function getDashboardAppRoutePrefixes(): readonly string[] {
   return AUTH_NEXT_ROUTE_PREFIXES;

@@ -658,7 +658,7 @@ export class IntelCacheDO extends DurableObject<Env> {
   private buildBackendRequest(endpoint: string): Request | null {
     const backendToken = (this.env.USAGE_DATA_SOURCE_TOKEN || this.env.INTEL_API_TOKEN || "").trim();
     const headers: Record<string, string> = {
-      "User-Agent": "SentinelStream-DO/1.0",
+      "User-Agent": "Intel Dashboard-DO/1.0",
       "X-Intel-Internal-Feed": "1",
     };
     if (backendToken) {

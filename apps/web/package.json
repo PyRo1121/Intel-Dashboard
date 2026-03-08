@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@intel-dashboard/shared": "workspace:*",
     "@kobalte/core": "^0.13.11",
     "@solid-primitives/intersection-observer": "^2.2.2",
     "@solid-primitives/media": "^2.3.3",

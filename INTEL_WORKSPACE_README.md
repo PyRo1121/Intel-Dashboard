@@ -1,6 +1,6 @@
-# SentinelStream Intel Dashboard Workspace
+# Intel Dashboard Workspace
 
-This folder is the consolidated Cloudflare workspace for SentinelStream (Intel Dashboard).
+This repository is the consolidated Cloudflare workspace for Intel Dashboard.
 
 - `apps/edge/` - production edge gateway (`intel.pyro1121.com/*`), auth, asset serving, API orchestration, cache/scraper Durable Objects
 - `apps/backend/` - backend API worker (billing, source catalog, AI jobs, feed aggregation)

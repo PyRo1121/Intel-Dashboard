@@ -1,6 +1,6 @@
 # Intel Dashboard Backend (Cloudflare Worker)
 
-This backend runs as a standalone Cloudflare Worker located entirely in `intel-dashboard/backend`.
+This backend runs as a standalone Cloudflare Worker from `apps/backend`.
 
 ## Endpoints
 
@@ -246,7 +246,7 @@ If a binding is missing in a given environment, the worker safely falls back to 
    - `wrangler secret put USAGE_DATA_SOURCE_TOKEN`
    - `wrangler secret put USAGE_ADMIN_TOKEN`
 4. Deploy:
-   - `pnpm deploy`
+  - `bun run deploy:backend`
 
 Durable Object migrations are declared in `wrangler.jsonc` and applied by Wrangler during deploy.
 
@@ -277,7 +277,7 @@ Durable Object migrations are declared in `wrangler.jsonc` and applied by Wrangl
 
 ### Free-tier lowest-latency profile (default)
 
-Default deploy (`pnpm deploy`) is optimized for free-tier efficiency:
+Default deploy (`bun run deploy:backend`) is optimized for free-tier efficiency:
 
 - KV mode enabled
 - cache TTL set high (`USAGE_CACHE_TTL_SECONDS=900`)
@@ -289,7 +289,7 @@ Use this profile when minimizing platform feature dependencies and keeping laten
 
 ### Paid profile (optional)
 
-Deploy uses the single production profile only (`pnpm deploy`).
+Deploy uses the single production profile only (`bun run deploy:backend`).
 
 ## Seed Existing Data
 
@@ -304,29 +304,29 @@ Prepare a JSON file with an array of seed entries:
 Seed with:
 
 ```bash
-pnpm seed -- --worker-base-url "https://intel.pyro1121.com/api/intel-dashboard" --admin-token "<USAGE_ADMIN_TOKEN>" --entries-file ./entries.json
+bun run --cwd apps/backend seed -- --worker-base-url "https://intel.pyro1121.com/api/intel-dashboard" --admin-token "<USAGE_ADMIN_TOKEN>" --entries-file ./entries.json
 ```
 
 With `USAGE_SEED_ASYNC=true`, this endpoint returns accepted/queued counts and queue consumers perform KV writes.
 
 ## Verify
 
-- `pnpm test`
-- `pnpm typecheck`
-- `pnpm build` (dry-run deploy)
+- `bun run --cwd apps/backend test`
+- `bun run --cwd apps/backend typecheck`
+- `bun run --cwd apps/backend build` (dry-run deploy)
 
 ## Benchmark (Target vs Baseline)
 
 Run a single target benchmark:
 
 ```bash
-pnpm bench:usage -- --base-url "https://intel.pyro1121.com/api/intel-dashboard" --token "<USAGE_DATA_SOURCE_TOKEN>" --requests 300 --concurrency 20
+bun run --cwd apps/backend bench:usage -- --base-url "https://intel.pyro1121.com/api/intel-dashboard" --token "<USAGE_DATA_SOURCE_TOKEN>" --requests 300 --concurrency 20
 ```
 
 Compare against your legacy endpoint:
 
 ```bash
-pnpm bench:usage -- --base-url "https://intel.pyro1121.com/api/intel-dashboard" --token "<NEW_TOKEN>" --compare-base-url "https://<legacy-endpoint>" --compare-token "<OLD_TOKEN>" --requests 300 --concurrency 20
+bun run --cwd apps/backend bench:usage -- --base-url "https://intel.pyro1121.com/api/intel-dashboard" --token "<NEW_TOKEN>" --compare-base-url "https://<legacy-endpoint>" --compare-token "<OLD_TOKEN>" --requests 300 --concurrency 20
 ```
 
 Use this to gate cutover on p95/p99 latency and failure deltas.
@@ -334,16 +334,16 @@ Use this to gate cutover on p95/p99 latency and failure deltas.
 ## Cloudflare Runtime Types
 
 - Runtime binding types are generated into:
-  - `worker/worker-configuration.d.ts`
-  - `backend/worker-configuration.d.ts`
+  - `apps/edge/worker-configuration.d.ts`
+  - `apps/backend/worker-configuration.d.ts`
 - Regenerate after changing Wrangler config:
 
 ```bash
-npm run typegen:cf
+bun run typegen:cf
 ```
 
 - Verify the committed generated files are still in sync:
 
 ```bash
-npm run check:typegen
+bun run check:typegen
 ```

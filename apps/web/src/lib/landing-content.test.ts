@@ -20,7 +20,7 @@ import {
   LANDING_TESTIMONIALS,
   LANDING_TESTIMONIALS_SECTION,
   LANDING_WORKFLOW_STEPS,
-} from "../../../../packages/shared/landing-content.ts";
+} from "@intel-dashboard/shared/landing-content.ts";
 
 test("shared landing content remains populated and internally consistent", () => {
   assert.equal(LANDING_CAPABILITIES.length, 3);

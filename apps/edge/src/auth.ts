@@ -9,7 +9,7 @@ import {
   selectStableTwitterFallbackIdentity,
   type StableTwitterFallbackRow,
 } from "./auth-fallback-utils";
-import { SITE_ORIGIN } from "../../../packages/shared/site-config.ts";
+import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 
 const ORIGIN = SITE_ORIGIN;
 const AUTH_BASE_PATH = "/auth";

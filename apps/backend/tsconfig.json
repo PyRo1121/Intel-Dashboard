@@ -6,7 +6,10 @@
     "moduleResolution": "NodeNext",
     "types": ["vitest/globals", "node"],
     "lib": ["ES2022", "DOM"],
-    "baseUrl": "."
+    "baseUrl": ".",
+    "paths": {
+      "@intel-dashboard/shared/*": ["../../packages/shared/*"]
+    }
   },
   "include": ["worker-configuration.d.ts", "src/**/*.ts", "scripts/**/*.ts", "../../packages/shared/**/*.ts", "wrangler.jsonc", "vitest.config.ts"]
 }

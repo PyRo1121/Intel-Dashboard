@@ -1,4 +1,4 @@
-import { SITE_ORIGIN } from "../../../packages/shared/site-config.ts";
+import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 
 const BASE_URL = normalizeBaseUrl(process.env.OAUTH_HEALTH_BASE_URL ?? SITE_ORIGIN);
 
@@ -57,7 +57,7 @@ async function checkRedirect(config: RedirectCheck): Promise<string> {
     method: "GET",
     redirect: "manual",
     headers: {
-      "user-agent": "SentinelStream-OAuth-Health/1.0",
+      "user-agent": "Intel Dashboard-OAuth-Health/1.0",
     },
   });
 
@@ -90,7 +90,7 @@ async function checkRedirect(config: RedirectCheck): Promise<string> {
       method: "GET",
       redirect: "manual",
       headers: {
-        "user-agent": "SentinelStream-OAuth-Health/1.0",
+        "user-agent": "Intel Dashboard-OAuth-Health/1.0",
       },
     });
     if (response.status === 403) {
@@ -132,7 +132,7 @@ async function checkCallback(path: string): Promise<string> {
     method: "GET",
     redirect: "manual",
     headers: {
-      "user-agent": "SentinelStream-OAuth-Health/1.0",
+      "user-agent": "Intel Dashboard-OAuth-Health/1.0",
     },
   });
 
@@ -151,7 +151,7 @@ async function checkHtmlPage(config: HtmlPageCheck): Promise<string> {
     method: "GET",
     redirect: "manual",
     headers: {
-      "user-agent": "SentinelStream-OAuth-Health/1.0",
+      "user-agent": "Intel Dashboard-OAuth-Health/1.0",
     },
   });
   if (response.status === 403) {
@@ -226,8 +226,8 @@ async function main(): Promise<void> {
   results.push(await checkCallback("/auth/callback/github"));
   results.push(await checkCallback("/auth/callback/twitter"));
   results.push(await checkCallback("/auth/x/callback"));
-  results.push(await checkHtmlPage({ path: "/login", requiredText: ["Sign in to SentinelStream"] }));
-  results.push(await checkHtmlPage({ path: "/signup", requiredText: ["Create your SentinelStream access"] }));
+  results.push(await checkHtmlPage({ path: "/login", requiredText: ["Sign in to Intel Dashboard"] }));
+  results.push(await checkHtmlPage({ path: "/signup", requiredText: ["Create your Intel Dashboard account"] }));
 
   process.stdout.write(`OAuth health check passed for ${BASE_URL}\n`);
   for (const line of results) {

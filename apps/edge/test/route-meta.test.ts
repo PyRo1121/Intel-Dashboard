@@ -6,12 +6,12 @@ import {
   OVERVIEW_TITLE,
   PRODUCTION_HOME_TITLE,
   resolveDashboardShellTitle,
-} from "../../../packages/shared/route-meta.ts";
+} from "@intel-dashboard/shared/route-meta.ts";
 
 test("dashboard shell route title resolution is shared with worker", () => {
-  assert.equal(PRODUCTION_HOME_TITLE, "SentinelStream OSINT Dashboard | Real-Time Geopolitical Intelligence Platform");
+  assert.equal(PRODUCTION_HOME_TITLE, "Intel Dashboard OSINT Dashboard | Real-Time Geopolitical Intelligence Platform");
   assert.equal(resolveDashboardShellTitle("/overview"), OVERVIEW_TITLE);
   assert.equal(resolveDashboardShellTitle("/billing/settings"), BILLING_TITLE);
   assert.equal(resolveDashboardShellTitle("/crm/customer"), CRM_TITLE);
-  assert.equal(resolveDashboardShellTitle("/something-else"), "SentinelStream");
+  assert.equal(resolveDashboardShellTitle("/something-else"), "Intel Dashboard");
 });

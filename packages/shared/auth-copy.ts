@@ -11,7 +11,7 @@ export type AuthCopy = {
 export function getAuthCopy(mode: AuthFlowMode): AuthCopy {
   if (mode === "signup") {
     return {
-      title: "Create your SentinelStream access",
+      title: "Create your Intel Dashboard account",
       description: "OAuth-only onboarding. Start in seconds with X or GitHub.",
       xLabel: "Create Account with X",
       githubLabel: "Create Account with GitHub",
@@ -20,7 +20,7 @@ export function getAuthCopy(mode: AuthFlowMode): AuthCopy {
   }
 
   return {
-    title: "Sign in to SentinelStream",
+    title: "Sign in to Intel Dashboard",
     description: "Continue your intelligence workflow with secure OAuth authentication.",
     xLabel: "Continue with X",
     githubLabel: "Continue with GitHub",

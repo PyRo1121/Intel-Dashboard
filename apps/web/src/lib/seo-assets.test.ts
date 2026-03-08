@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildRobotsTxt, buildSitemapXml, PUBLIC_ROBOTS_DISALLOWS, PUBLIC_SITEMAP_ENTRIES } from "../../../../packages/shared/seo-assets.ts";
+import { buildRobotsTxt, buildSitemapXml, PUBLIC_ROBOTS_DISALLOWS, PUBLIC_SITEMAP_ENTRIES } from "@intel-dashboard/shared/seo-assets.ts";
 
 test("robots.txt is generated from shared disallow rules and sitemap origin", () => {
   const robots = buildRobotsTxt();

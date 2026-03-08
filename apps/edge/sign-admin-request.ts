@@ -1,5 +1,5 @@
 import { signAdminRequest } from "./src/security-guards.ts";
-import { SITE_ORIGIN } from "../../packages/shared/site-config.ts";
+import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 
 type OutputFormat = "headers" | "json" | "curl";
 
@@ -48,8 +48,8 @@ function printUsage(): void {
       "  --help                  Show this help",
       "",
       "Examples:",
-      "  npm run admin:sign -- --path /api/cache-bust --secret \"$CACHE_BUST_SECRET\"",
-      `  npm run admin:sign -- --path /api/scraper/trigger --url ${SITE_ORIGIN}/api/scraper/trigger --format curl`,
+      "  bun run admin:sign -- --path /api/cache-bust --secret \"$CACHE_BUST_SECRET\"",
+      `  bun run admin:sign -- --path /api/scraper/trigger --url ${SITE_ORIGIN}/api/scraper/trigger --format curl`,
       "",
     ].join("\n"),
   );

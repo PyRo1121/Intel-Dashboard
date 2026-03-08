@@ -5,7 +5,7 @@ import {
   buildAuthModeSwitchHref,
   buildAuthPageHref,
   buildAuthProviderHref,
-} from "../../../../packages/shared/auth-flow.ts";
+} from "@intel-dashboard/shared/auth-flow.ts";
 
 test("buildAuthPageHref preserves next and error state", () => {
   assert.equal(buildAuthPageHref("login", null), "/login");

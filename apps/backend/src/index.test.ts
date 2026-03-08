@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "./index.js";
 import { OSINT_SOURCE_CATALOG } from "./osint-sources.js";
-import { FREE_FEED_DELAY_MINUTES } from "../../../packages/shared/access-offers.ts";
-import { BACKEND_LANDING_HERO, BACKEND_OPERATOR_CARDS, BACKEND_OPERATOR_PANEL, BACKEND_OPERATOR_PRICING } from "../../../packages/shared/landing-content.ts";
+import { FREE_FEED_DELAY_MINUTES } from "@intel-dashboard/shared/access-offers.ts";
+import { BACKEND_LANDING_HERO, BACKEND_OPERATOR_CARDS, BACKEND_OPERATOR_PANEL, BACKEND_OPERATOR_PRICING } from "@intel-dashboard/shared/landing-content.ts";
 
 describe("intel-dashboard backend worker", () => {
   function expectSecurityHeaders(response: Response) {
@@ -1599,7 +1599,7 @@ describe("intel-dashboard backend worker", () => {
     expect(root.status).toBe(200);
     expect(root.headers.get("content-type")).toContain("text/html");
     const rootHtml = await root.text();
-    expect(rootHtml).toContain("SentinelStream");
+    expect(rootHtml).toContain("Intel Dashboard");
     expect(rootHtml).toContain(BACKEND_LANDING_HERO.signInLabel);
     expect(rootHtml).toContain(BACKEND_OPERATOR_PANEL.heading);
     expect(rootHtml).toContain(BACKEND_OPERATOR_CARDS[0]?.title ?? "Source graph");

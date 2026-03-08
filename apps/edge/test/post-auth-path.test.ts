@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_POST_AUTH_PATH } from "../../../packages/shared/auth-next-routes.ts";
+import { DEFAULT_POST_AUTH_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
 import { getDashboardAppRoutePrefixes, normalizeSafePostAuthPath } from "../src/post-auth-path.ts";
 
 test("default post-auth path points to dashboard overview", () => {

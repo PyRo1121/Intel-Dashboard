@@ -28,16 +28,16 @@ import {
   TELEGRAM_DESCRIPTION,
   TELEGRAM_TITLE,
   resolveDashboardShellTitle,
-} from "../../../../packages/shared/route-meta.ts";
+} from "@intel-dashboard/shared/route-meta.ts";
 
 test("shared route titles stay aligned with dashboard shell resolution", () => {
-  assert.equal(PRODUCTION_HOME_TITLE, "SentinelStream OSINT Dashboard | Real-Time Geopolitical Intelligence Platform");
-  assert.equal(APP_LANDING_TITLE, "SentinelStream | OSINT Intelligence Platform");
+  assert.equal(PRODUCTION_HOME_TITLE, "Intel Dashboard OSINT Dashboard | Real-Time Geopolitical Intelligence Platform");
+  assert.equal(APP_LANDING_TITLE, "Intel Dashboard | OSINT Intelligence Platform");
   assert.match(PRODUCTION_HOME_DESCRIPTION, /real-time osint dashboard/i);
   assert.match(APP_LANDING_DESCRIPTION, /real-time osint intelligence/i);
-  assert.equal(LOGIN_TITLE, "SentinelStream | Login");
-  assert.equal(SIGNUP_TITLE, "SentinelStream | Create Account");
-  assert.equal(NOT_FOUND_TITLE, "Page Not Found | SentinelStream");
+  assert.equal(LOGIN_TITLE, "Intel Dashboard | Login");
+  assert.equal(SIGNUP_TITLE, "Intel Dashboard | Create Account");
+  assert.equal(NOT_FOUND_TITLE, "Page Not Found | Intel Dashboard");
   assert.match(LOGIN_DESCRIPTION, /secure OAuth/i);
   assert.match(SIGNUP_DESCRIPTION, /OAuth authentication/i);
   assert.match(OVERVIEW_DESCRIPTION, /premium instant delivery/i);
@@ -48,7 +48,7 @@ test("shared route titles stay aligned with dashboard shell resolution", () => {
   assert.match(AIR_SEA_DESCRIPTION, /military aircraft tracking/i);
   assert.match(BILLING_DESCRIPTION, /subscription/i);
   assert.match(CRM_DESCRIPTION, /data quality operations/i);
-  assert.match(NOT_FOUND_DESCRIPTION, /continue exploring SentinelStream/i);
+  assert.match(NOT_FOUND_DESCRIPTION, /continue exploring Intel Dashboard/i);
   assert.equal(resolveDashboardShellTitle("/overview"), OVERVIEW_TITLE);
   assert.equal(resolveDashboardShellTitle("/osint"), OSINT_TITLE);
   assert.equal(resolveDashboardShellTitle("/telegram/focus"), TELEGRAM_TITLE);
@@ -57,5 +57,5 @@ test("shared route titles stay aligned with dashboard shell resolution", () => {
   assert.equal(resolveDashboardShellTitle("/air-sea"), AIR_SEA_TITLE);
   assert.equal(resolveDashboardShellTitle("/billing"), BILLING_TITLE);
   assert.equal(resolveDashboardShellTitle("/crm"), CRM_TITLE);
-  assert.equal(resolveDashboardShellTitle("/unknown"), "SentinelStream");
+  assert.equal(resolveDashboardShellTitle("/unknown"), "Intel Dashboard");
 });

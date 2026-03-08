@@ -10,10 +10,12 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
+    "@types/node": "^24.5.2",
     "@cloudflare/workers-types": "^4.20250124.0",
     "wrangler": "^4.70.0"
   },
   "dependencies": {
+    "@intel-dashboard/shared": "workspace:*",
     "@better-auth/drizzle-adapter": "^1.5.3",
     "better-auth": "^1.5.3",
     "better-auth-cloudflare": "^0.2.9",

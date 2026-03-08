@@ -1,4 +1,4 @@
-import { DASHBOARD_HOME_PATH } from "../packages/shared/auth-next-routes.ts";
+import { DASHBOARD_HOME_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
 import {
   AIR_SEA_DESCRIPTION,
   AIR_SEA_TITLE,
@@ -23,11 +23,11 @@ import {
   SIGNUP_TITLE,
   TELEGRAM_DESCRIPTION,
   TELEGRAM_TITLE,
-} from "../packages/shared/route-meta.ts";
-import { siteUrl } from "../packages/shared/site-config.ts";
+} from "@intel-dashboard/shared/route-meta.ts";
+import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 
 export const AUTHENTICATED_BROWSER_ROUTES = Object.freeze([
-  { path: DASHBOARD_HOME_PATH, heading: "SentinelStream Command Overview" },
+  { path: DASHBOARD_HOME_PATH, heading: "Intel Dashboard Overview" },
   { path: "/osint", heading: "OSINT Feed" },
   { path: "/telegram", heading: "Telegram Intel" },
   { path: "/map", heading: "Threat Map" },
@@ -51,12 +51,12 @@ export const AUTHENTICATED_BROWSER_NOERROR_ROUTES = Object.freeze([
 export const PUBLIC_AUTH_BROWSER_ROUTES = Object.freeze([
   {
     path: "/login",
-    heading: "Sign in to SentinelStream",
+    heading: "Sign in to Intel Dashboard",
     labels: ["Continue with X", "Continue with GitHub"],
   },
   {
     path: "/signup",
-    heading: "Create your SentinelStream access",
+    heading: "Create your Intel Dashboard account",
     labels: ["Create Account with X", "Create Account with GitHub"],
   },
 ]);

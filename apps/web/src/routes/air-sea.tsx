@@ -12,8 +12,8 @@ import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import { formatAgeCompactFromMs, formatRelativeTimeAt, formatNumber } from "~/lib/utils";
 import type { Severity } from "~/lib/types";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
-import { AIR_SEA_DESCRIPTION, AIR_SEA_SOCIAL_DESCRIPTION, AIR_SEA_TITLE } from "../../../../packages/shared/route-meta.ts";
-import { siteUrl } from "../../../../packages/shared/site-config.ts";
+import { AIR_SEA_DESCRIPTION, AIR_SEA_SOCIAL_DESCRIPTION, AIR_SEA_TITLE } from "@intel-dashboard/shared/route-meta.ts";
+import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 import "leaflet/dist/leaflet.css";
 
 /* ── Types (matches api/air-sea.ts response) ───────────────────────── */

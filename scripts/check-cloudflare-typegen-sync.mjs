@@ -24,7 +24,7 @@ try {
     const outputPath = join(root, item.output);
     const original = readFileSync(outputPath, "utf8");
 
-    execFileSync("npx", item.args, {
+    execFileSync("bunx", item.args, {
       cwd: root,
       stdio: "pipe",
       encoding: "utf8",
@@ -38,7 +38,7 @@ try {
 
     if (expected !== actual) {
       console.error(`Cloudflare runtime types are out of sync: ${item.output}`);
-      console.error("Run `npm run typegen:cf` and commit the regenerated files.");
+      console.error("Run `bun run typegen:cf` and commit the regenerated files.");
       process.exit(1);
     }
   }

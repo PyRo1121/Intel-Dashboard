@@ -1,5 +1,5 @@
 import type { APIEvent } from "@solidjs/start/server";
-import { SITE_ORIGIN } from "../../../../packages/shared/site-config.ts";
+import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 
 const DEFAULT_EDGE_ORIGIN = SITE_ORIGIN;
 

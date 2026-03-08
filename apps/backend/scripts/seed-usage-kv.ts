@@ -28,7 +28,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 function usage(): void {
   console.log(
     [
-      "Usage: pnpm seed -- --worker-base-url <url> --admin-token <token> --entries-file <path> [options]",
+      "Usage: bun run --cwd apps/backend seed -- --worker-base-url <url> --admin-token <token> --entries-file <path> [options]",
       "",
       "Options:",
       "  --worker-base-url <url>   Required unless INTEL_DASHBOARD_WORKER_BASE_URL is set",

@@ -2,13 +2,13 @@
 
 ## Active Services
 
-- `pyrobot-worker` (`/home/pyro1121/Documents/intel-dashboard/worker`)
+- `apps/edge` package deployed as Cloudflare Worker `pyrobot-worker`
   - Owns `intel.pyro1121.com/*`
   - Handles OAuth entry/callback/logout
-  - Serves built static assets from `.output/public`
+  - Serves built static assets from `apps/web/.output/public`
   - Serves authenticated dashboard shell routes (`/osint`, `/telegram`, `/map`, `/air-sea`, `/briefings`, `/chat-history`)
   - Proxies data APIs to local Durable Objects or backend service binding
-- `intel-dashboard-backend` (`/home/pyro1121/Documents/intel-dashboard/backend`)
+- `apps/backend` package deployed as Cloudflare Worker `intel-dashboard-backend`
   - Billing status/trial/checkout/webhook APIs
   - Source catalog and AI batch orchestration APIs
   - News publish/read APIs and entitlement policy logic
@@ -42,6 +42,7 @@
 
 - Dashboard shell responses are `no-store` to avoid stale HTML/asset manifest mismatch.
 - OAuth callback and profile enrichment are timeout-bounded with transient-failure fallback to reduce callback failures.
-- Worker tests and typechecks should pass before deploy:
-  - `npm run typecheck:worker`
-  - `npm run test:worker`
+- Workspace validation should pass before deploy:
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run test:all` for the full local gate

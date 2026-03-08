@@ -4,8 +4,16 @@ dist
 .vercel
 .netlify
 .vinxi
+apps/web/.output
+apps/web/.vinxi
+apps/edge/.wrangler
+apps/backend/.wrangler
+output/
 output/e2e-browser/
 app.config.timestamp_*.js
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
 
 # Environment
 .env
@@ -15,6 +23,8 @@ app.config.timestamp_*.js
 
 # dependencies
 /node_modules
+node_modules/
+.git.bootstrap-empty/
 
 # IDEs and editors
 /.idea

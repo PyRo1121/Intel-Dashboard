@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { SITE_ORIGIN, siteUrl } from "../packages/shared/site-config.ts";
+import { SITE_ORIGIN, siteUrl } from "@intel-dashboard/shared/site-config.ts";
 
 function parseArgs(argv) {
   const out = {
@@ -11,7 +11,7 @@ function parseArgs(argv) {
     backendConfig: "apps/backend/wrangler.jsonc",
     workerEnv: "",
     backendEnv: "",
-    productName: "SentinelStream Pro",
+    productName: "Intel Dashboard Pro",
     webhookUrl: siteUrl("/api/webhooks/stripe"),
     createWebhook: false,
     startListener: false,
@@ -170,7 +170,7 @@ function createStripePrice({ monthlyUsd, productName }) {
     "--name",
     productName,
     "--description",
-    "SentinelStream premium monthly subscription",
+    "Intel Dashboard premium monthly subscription",
   ]);
   const productId = String(product?.id || "").trim();
   if (!productId) {
@@ -189,7 +189,7 @@ function createStripePrice({ monthlyUsd, productName }) {
     "--product",
     productId,
     "--nickname",
-    "SentinelStream Monthly",
+    "Intel Dashboard Monthly",
   ]);
   const priceId = String(price?.id || "").trim();
   if (!priceId) {
@@ -206,7 +206,7 @@ function createStripeWebhook({ webhookUrl }) {
     "--url",
     webhookUrl,
     "--description",
-    "SentinelStream billing webhook",
+    "Intel Dashboard billing webhook",
     "--enabled-events",
     "checkout.session.completed",
     "--enabled-events",

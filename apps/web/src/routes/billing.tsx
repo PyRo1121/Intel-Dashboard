@@ -1,10 +1,10 @@
 import { Meta, Title } from "@solidjs/meta";
 import { Show, createResource, createSignal } from "solid-js";
-import { PREMIUM_PRICE_USD, formatDelayMinutesShortLabel } from "../../../../packages/shared/access-offers.ts";
-import { formatEntitlementTier, formatSubscriptionStatus } from "../../../../packages/shared/entitlement.ts";
+import { PREMIUM_PRICE_USD, formatDelayMinutesShortLabel } from "@intel-dashboard/shared/access-offers.ts";
+import { formatEntitlementTier, formatSubscriptionStatus } from "@intel-dashboard/shared/entitlement.ts";
 import { useWallClock } from "~/lib/live-refresh";
 import { formatAgeCompactFromMs } from "~/lib/utils";
-import { BILLING_DESCRIPTION, BILLING_TITLE } from "../../../../packages/shared/route-meta.ts";
+import { BILLING_DESCRIPTION, BILLING_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 
 type BillingStatusPayload = {
   ok?: boolean;

@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { buildRobotsTxt, buildSitemapXml } from "../packages/shared/seo-assets.ts";
+import { buildRobotsTxt, buildSitemapXml } from "@intel-dashboard/shared/seo-assets.ts";
 
 const rootDir = path.resolve(import.meta.dirname, "..");
 const publicDir = path.join(rootDir, "apps", "web", "public");

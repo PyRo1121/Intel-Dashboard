@@ -17,9 +17,9 @@ import { normalizeSafeAuthRedirectLocation } from "./auth-redirect";
 import { summarizeCrmDataQuality } from "./crm-quality";
 import { getDashboardAppRoutePrefixes, normalizeSafePostAuthPath } from "./post-auth-path";
 import { createTurnstileGateToken, type TurnstileMode, verifyTurnstileGateToken } from "./turnstile";
-import { DASHBOARD_HOME_PATH, DEFAULT_POST_AUTH_PATH } from "../../../packages/shared/auth-next-routes.ts";
-import { buildAuthModeSwitchHref, buildAuthPageHref, buildAuthProviderHref } from "../../../packages/shared/auth-flow.ts";
-import { getAuthCopy } from "../../../packages/shared/auth-copy.ts";
+import { DASHBOARD_HOME_PATH, DEFAULT_POST_AUTH_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
+import { buildAuthModeSwitchHref, buildAuthPageHref, buildAuthProviderHref } from "@intel-dashboard/shared/auth-flow.ts";
+import { getAuthCopy } from "@intel-dashboard/shared/auth-copy.ts";
 import {
   FREE_FEED_DELAY_MINUTES,
   FREE_PLAN_NAME,
@@ -31,7 +31,7 @@ import {
   formatTrialDaysLabel,
   formatUsdMonthlyCompact,
   formatUsdMonthlySpaced,
-} from "../../../packages/shared/access-offers.ts";
+} from "@intel-dashboard/shared/access-offers.ts";
 import {
   LANDING_CAPABILITIES,
   LANDING_CAPABILITIES_SECTION,
@@ -47,7 +47,7 @@ import {
   LANDING_SUPPORTING_STATS_COPY,
   LANDING_WORKFLOW_STEPS,
   LANDING_TESTIMONIALS_SECTION,
-} from "../../../packages/shared/landing-content.ts";
+} from "@intel-dashboard/shared/landing-content.ts";
 import {
   LOGIN_DESCRIPTION,
   PRODUCTION_HOME_DESCRIPTION,
@@ -56,9 +56,9 @@ import {
   PRODUCTION_HOME_TWITTER_DESCRIPTION,
   SIGNUP_DESCRIPTION,
   resolveDashboardShellTitle,
-} from "../../../packages/shared/route-meta.ts";
-import { buildRobotsTxt, buildSitemapXml } from "../../../packages/shared/seo-assets.ts";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, siteUrl } from "../../../packages/shared/site-config.ts";
+} from "@intel-dashboard/shared/route-meta.ts";
+import { buildRobotsTxt, buildSitemapXml } from "@intel-dashboard/shared/seo-assets.ts";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, siteUrl } from "@intel-dashboard/shared/site-config.ts";
 
 export { IntelCacheDO, TelegramScraperDO };
 
@@ -147,7 +147,7 @@ const DASHBOARD_APP_ROUTE_PREFIXES = getDashboardAppRoutePrefixes();
 const DASHBOARD_SHELL_CACHE_TTL_MS = 10_000;
 const VITE_MANIFEST_ASSET_PATH = "/_build/.vite/manifest.json";
 const MEDIA_PROXY_FETCH_TIMEOUT_MS = 15_000;
-const MEDIA_PROXY_USER_AGENT = `SentinelStream-MediaProxy/1.0 (+${SITE_ORIGIN})`;
+const MEDIA_PROXY_USER_AGENT = `Intel Dashboard-MediaProxy/1.0 (+${SITE_ORIGIN})`;
 const ALLOWED_EXTERNAL_MEDIA_HOST_SUFFIXES = [".telesco.pe", ".telegram.org", ".cdn-telegram.org"] as const;
 const MEDIA_PROXY_URL_TTL_SECONDS = 60 * 60;
 const MEDIA_PROXY_SIGNATURE_SKEW_SECONDS = 60;
@@ -3011,7 +3011,7 @@ function resolveAuthErrorCopy(errorCode: string): { title: string; message: stri
     case "unable_to_get_user_info":
       return {
         title: "Unable to retrieve account details",
-        message: "OAuth completed, but SentinelStream could not finish retrieving your provider profile. Retry the login flow, then inspect provider permissions and callback handling if it repeats.",
+        message: "OAuth completed, but Intel Dashboard could not finish retrieving your provider profile. Retry the login flow, then inspect provider permissions and callback handling if it repeats.",
       };
     case "unable_to_create_user":
       return {
@@ -3567,7 +3567,7 @@ async function tryXProfileEndpoints(
           headers: {
             Authorization: `Bearer ${accessToken}`,
             Accept: "application/json",
-            "User-Agent": `SentinelStream-Auth/1.0 (+${SITE_ORIGIN})`,
+            "User-Agent": `Intel Dashboard-Auth/1.0 (+${SITE_ORIGIN})`,
           },
           signal: AbortSignal.timeout(X_API_TIMEOUT_MS),
         });

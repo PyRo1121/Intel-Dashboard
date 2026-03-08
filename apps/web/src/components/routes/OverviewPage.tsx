@@ -15,8 +15,8 @@ import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import type { IntelItem } from "~/lib/types";
 import { formatAgeCompactFromMs, formatRelativeTimeAt } from "~/lib/utils";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
-import { FREE_FEED_DELAY_MINUTES, PREMIUM_PRICE_USD, TRIAL_DAYS } from "../../../../../packages/shared/access-offers.ts";
-import { OVERVIEW_DESCRIPTION, OVERVIEW_OG_DESCRIPTION, OVERVIEW_TITLE, OVERVIEW_TWITTER_DESCRIPTION } from "../../../../../packages/shared/route-meta.ts";
+import { FREE_FEED_DELAY_MINUTES, PREMIUM_PRICE_USD, TRIAL_DAYS } from "@intel-dashboard/shared/access-offers.ts";
+import { OVERVIEW_DESCRIPTION, OVERVIEW_OG_DESCRIPTION, OVERVIEW_TITLE, OVERVIEW_TWITTER_DESCRIPTION } from "@intel-dashboard/shared/route-meta.ts";
 
 async function loadIntel(): Promise<IntelItem[]> {
   try {
@@ -72,7 +72,7 @@ export default function OverviewPage(props: { canonicalHref: string }) {
               <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
               Live
             </div>
-            <h1 class="intel-heading">SentinelStream Command Overview</h1>
+            <h1 class="intel-heading">Intel Dashboard Overview</h1>
             <p class="intel-subheading">Real-time geopolitical and OSINT monitoring with premium instant delivery.</p>
             <p class="mt-1 text-xs text-zinc-600">{TRIAL_DAYS}-day trial, then ${PREMIUM_PRICE_USD}/month. Free users receive delayed and capped feeds (up to {FREE_FEED_DELAY_MINUTES} minutes).</p>
           </div>

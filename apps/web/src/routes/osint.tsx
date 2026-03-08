@@ -14,8 +14,8 @@ import type { IntelItem, Severity } from "~/lib/types";
 import { formatAgeCompactFromMs, formatRelativeTimeAt } from "~/lib/utils";
 import { Radio, ExternalLink, Clock } from "lucide-solid";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
-import { OSINT_DESCRIPTION, OSINT_TITLE } from "../../../../packages/shared/route-meta.ts";
-import { siteUrl } from "../../../../packages/shared/site-config.ts";
+import { OSINT_DESCRIPTION, OSINT_TITLE } from "@intel-dashboard/shared/route-meta.ts";
+import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 
 const FILTERS: (Severity | "all")[] = ["all", "critical", "high", "medium", "low"];
 

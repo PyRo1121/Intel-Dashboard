@@ -10,12 +10,12 @@ import {
   SITE_PLATFORM_LABEL,
   backendE2eUrl,
   siteUrl,
-} from "../../../../packages/shared/site-config.ts";
+} from "@intel-dashboard/shared/site-config.ts";
 
 test("shared site config exposes canonical origin and metadata", () => {
   assert.equal(SITE_ORIGIN, "https://intel.pyro1121.com");
   assert.equal(BACKEND_E2E_ORIGIN, "https://backend-e2e.pyro1121.com");
-  assert.equal(SITE_NAME, "SentinelStream");
+  assert.equal(SITE_NAME, "Intel Dashboard");
   assert.equal(SITE_PLATFORM_LABEL, "Intelligence Platform");
   assert.equal(SITE_OPERATIONS_LABEL, "Intel Operations");
   assert.equal(INTERNAL_LANDING_TAGLINE, "Real-Time OSINT Intelligence Stream");

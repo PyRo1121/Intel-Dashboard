@@ -1,9 +1,9 @@
 import {
   buildAuthModeSwitchHref,
   buildAuthProviderHref,
-} from "../../../../../packages/shared/auth-flow.ts";
-import { getAuthCopy } from "../../../../../packages/shared/auth-copy.ts";
-import { SITE_NAME } from "../../../../../packages/shared/site-config.ts";
+} from "@intel-dashboard/shared/auth-flow.ts";
+import { getAuthCopy } from "@intel-dashboard/shared/auth-copy.ts";
+import { SITE_NAME } from "@intel-dashboard/shared/site-config.ts";
 
 type AuthAccessCardProps = {
   mode: "login" | "signup";

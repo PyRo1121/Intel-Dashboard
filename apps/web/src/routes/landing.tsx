@@ -1,8 +1,8 @@
 import { For } from "solid-js";
 import { A } from "@solidjs/router";
 import { Meta, Title } from "@solidjs/meta";
-import { DASHBOARD_HOME_PATH } from "../../../../packages/shared/auth-next-routes.ts";
-import { FREE_FEED_DELAY_MINUTES, formatDelayMinutesLong } from "../../../../packages/shared/access-offers.ts";
+import { DASHBOARD_HOME_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
+import { FREE_FEED_DELAY_MINUTES, formatDelayMinutesLong } from "@intel-dashboard/shared/access-offers.ts";
 import {
   LANDING_CAPABILITIES,
   LANDING_CAPABILITIES_SECTION,
@@ -15,8 +15,8 @@ import {
   LANDING_SUPPORTING_STATS_COPY,
   LANDING_TESTIMONIALS,
   LANDING_TESTIMONIALS_SECTION,
-} from "../../../../packages/shared/landing-content.ts";
-import { APP_LANDING_DESCRIPTION, APP_LANDING_TITLE } from "../../../../packages/shared/route-meta.ts";
+} from "@intel-dashboard/shared/landing-content.ts";
+import { APP_LANDING_DESCRIPTION, APP_LANDING_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 
 export default function LandingRoute() {
   return (
@@ -30,7 +30,7 @@ export default function LandingRoute() {
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-zinc-100">
                 <span class="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_0_6px_rgba(16,185,129,0.18)]" />
-                SentinelStream
+                Intel Dashboard
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 <A href="/login" class="intel-btn intel-btn-ghost">{LANDING_HEADER_LINKS.login}</A>

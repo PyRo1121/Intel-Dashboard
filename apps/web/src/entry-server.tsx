@@ -1,6 +1,6 @@
 // @refresh reload
 import { createHandler, StartServer } from "@solidjs/start/server";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN } from "../../../packages/shared/site-config.ts";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 
 export default createHandler(() => (
   <StartServer

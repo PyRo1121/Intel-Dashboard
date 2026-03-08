@@ -6,16 +6,16 @@ Date: 2026-03-04
 
 Improve latency and throughput while staying on Cloudflare Workers Free plan.
 
-## Current Architecture (Recommended to keep)
+## Current Architecture (Historical baseline)
 
-- `pyrobot-worker`: edge route owner, auth, dashboard shell/static assets.
-- `intel-dashboard-backend`: API/data pipeline via Service Binding.
+- `apps/edge` deployed as `pyrobot-worker`: edge route owner, auth, dashboard shell/static assets.
+- `apps/backend` deployed as `intel-dashboard-backend`: API/data pipeline via Service Binding.
 
 This split is preferred over a single Worker because frontend/static delivery stays at edge while backend can be optimized independently.
 
 ## Baseline Benchmark (captured)
 
-- Script: `npm run bench:latency`
+- Script: `bun run bench:latency`
 - Baseline artifact: `benchmarks/free-tier-baseline.json`
 
 Summary snapshot:
@@ -46,7 +46,7 @@ Summary snapshot:
   - region diversity under cap
   - validator header reuse
 - Benchmark regression gate script added:
-  - `npm run bench:assert -- --baseline <file> --candidate <file>`
+  - `bun run bench:assert -- --baseline <file> --candidate <file>`
 
 Post-change benchmark artifacts:
 - Immediate after deploy: `benchmarks/free-tier-post-deploy-immediate.json`
@@ -75,8 +75,8 @@ This is the realistic free-tier window. A 30-second full-rotation over 200+ sour
 
 1. Keep two-worker topology (no merge).
 2. Run benchmark before each change:
-   - `npm run bench:latency -- --requests 50 --concurrency 5 --json-out benchmarks/<tag>.json`
-   - Guard regressions: `npm run bench:assert -- --baseline benchmarks/free-tier-baseline.json --candidate benchmarks/<tag>.json`
+   - `bun run bench:latency -- --requests 50 --concurrency 5 --json-out benchmarks/<tag>.json`
+   - Guard regressions: `bun run bench:assert -- --baseline benchmarks/free-tier-baseline.json --candidate benchmarks/<tag>.json`
 3. Test Smart Placement on backend only (not edge/assets worker), then compare p95/p99.
 4. Tighten ingestion budget:
    - Poll only active/high-value sources per minute.

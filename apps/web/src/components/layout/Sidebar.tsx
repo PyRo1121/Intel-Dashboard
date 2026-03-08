@@ -26,10 +26,10 @@ import {
   Users,
 } from "lucide-solid";
 import { useAuth } from "~/lib/auth";
-import { DASHBOARD_HOME_PATH } from "../../../../../packages/shared/auth-next-routes.ts";
-import { formatDelayMinutesShortLabel, UPGRADE_INSTANT_FEED_LABEL } from "../../../../../packages/shared/access-offers.ts";
-import { entitlementTierTone, formatEntitlementTier, isEntitledRole } from "../../../../../packages/shared/entitlement.ts";
-import { SITE_NAME, SITE_OPERATIONS_LABEL } from "../../../../../packages/shared/site-config.ts";
+import { DASHBOARD_HOME_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
+import { formatDelayMinutesShortLabel, UPGRADE_INSTANT_FEED_LABEL } from "@intel-dashboard/shared/access-offers.ts";
+import { entitlementTierTone, formatEntitlementTier, isEntitledRole } from "@intel-dashboard/shared/entitlement.ts";
+import { SITE_NAME, SITE_OPERATIONS_LABEL } from "@intel-dashboard/shared/site-config.ts";
 
 // ============================================================================
 // Types
@@ -177,7 +177,7 @@ export default function Sidebar() {
           compact() ? "justify-center px-3 py-5" : "justify-between px-5 py-5"
         }`}
       >
-        <A href={DASHBOARD_HOME_PATH} aria-label="SentinelStream dashboard home" class="flex items-center gap-3 group">
+        <A href={DASHBOARD_HOME_PATH} aria-label="Intel Dashboard home" class="flex items-center gap-3 group">
           <div class="relative">
             <div class="w-10 h-10 rounded-2xl gradient-accent flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:shadow-emerald-500/30 transition-all duration-300 group-hover:scale-105">
               <Shield size={18} class="text-white drop-shadow-sm" />

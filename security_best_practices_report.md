@@ -88,9 +88,9 @@ A focused deep-dive was completed on auth, subscription gating, and public data 
 
 ## Validation
 
-- `npm run typecheck` passed
-- `npm run typecheck:worker` passed
-- `npm run test:worker` passed (19/19)
+- `bun run typecheck` passed
+- `bun run typecheck:worker` passed
+- `bun run test:worker` passed (19/19)
 - `npm --prefix backend test` passed (49/49)
 - `npm --prefix backend test` passed (51/51)
 
@@ -102,5 +102,5 @@ A focused deep-dive was completed on auth, subscription gating, and public data 
 
 Recommended actions:
 1. Keep `npm audit --omit=dev` and `npm --prefix worker audit --omit=dev` in release checklist.
-2. Keep backend dependency surface minimal and rerun `pnpm audit --prod` after each dependency change.
+2. Keep backend dependency surface minimal and rerun `bun audit` after each dependency change.
 3. Re-run full regression (`test:all` + authenticated e2e) before each production deploy.

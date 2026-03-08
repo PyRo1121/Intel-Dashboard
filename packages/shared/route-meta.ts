@@ -2,7 +2,7 @@ import { DASHBOARD_HOME_PATH } from "./auth-next-routes.ts";
 import { SITE_NAME } from "./site-config.ts";
 
 export const PRODUCTION_HOME_TITLE = `${SITE_NAME} OSINT Dashboard | Real-Time Geopolitical Intelligence Platform`;
-export const PRODUCTION_HOME_DESCRIPTION = "Real-time OSINT dashboard for SentinelStream with Telegram conflict tracking, military movement signals, and premium low-latency intelligence delivery.";
+export const PRODUCTION_HOME_DESCRIPTION = "Real-time OSINT dashboard with Telegram conflict tracking, military movement signals, and premium low-latency intelligence delivery.";
 export const PRODUCTION_HOME_OG_DESCRIPTION = "Track high-priority geopolitical signals in one OSINT platform with fast analyst workflows and premium instant feed delivery.";
 export const PRODUCTION_HOME_TWITTER_DESCRIPTION = "Real-time OSINT intelligence with analyst-ready prioritization, threat timelines, and premium instant delivery.";
 export const APP_LANDING_TITLE = `${SITE_NAME} | OSINT Intelligence Platform`;

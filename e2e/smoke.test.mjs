@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
-import { FREE_FEED_DELAY_MINUTES } from "../packages/shared/access-offers.ts";
-import { SITE_ORIGIN } from "../packages/shared/site-config.ts";
+import { FREE_FEED_DELAY_MINUTES } from "@intel-dashboard/shared/access-offers.ts";
+import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 import { WORKER_SHADOWED_ROUTE_EXPECTATIONS } from "./coverage-manifest.mjs";
 
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -130,7 +130,7 @@ async function expectOAuthRedirect({
     method: "GET",
     redirect: "manual",
     headers: {
-      "user-agent": "SentinelStream-E2E/1.0",
+      "user-agent": "Intel Dashboard-E2E/1.0",
     },
   });
   if (firstResponse.status === 403) {
@@ -156,7 +156,7 @@ async function expectOAuthRedirect({
       method: "GET",
       redirect: "manual",
       headers: {
-        "user-agent": "SentinelStream-E2E/1.0",
+        "user-agent": "Intel Dashboard-E2E/1.0",
       },
     });
     if (response.status === 403) {
@@ -307,7 +307,7 @@ async function requireValidSessionCookie(t, message) {
 
   const validation = await sessionCookieValidationPromise;
   if (!validation.ok) {
-    const detail = `E2E_SESSION_COOKIE is present but invalid or expired (auth/me returned ${validation.status}). Refresh it with npm run e2e:save-secrets after logging in again.`;
+    const detail = `E2E_SESSION_COOKIE is present but invalid or expired (auth/me returned ${validation.status}). Refresh it with bun run e2e:save-secrets after logging in again.`;
     if (REQUIRE_AUTH || STRICT) {
       assert.fail(detail);
     }
@@ -344,11 +344,11 @@ test("worker-shadowed production routes match declared expectations", async () =
   }
 });
 
-test("edge landing page keeps SentinelStream SEO and structured data surface", async () => {
+test("edge landing page keeps Intel Dashboard SEO and structured data surface", async () => {
   const landing = await fetchWithRetry(`${EDGE_BASE_URL}/`);
   assert.equal(landing.status, 200, "landing should be reachable");
   const landingBody = await landing.text();
-  assert.match(landingBody, /SentinelStream/i, "landing should use SentinelStream branding");
+  assert.match(landingBody, /Intel Dashboard/i, "landing should use Intel Dashboard branding");
   assert.match(landingBody, /Real-Time Geopolitical Intelligence Platform/i, "landing should expose the current positioning");
   assert.match(landingBody, /Start 7-Day Trial/i, "landing should expose the trial CTA");
   assert.match(landingBody, /application\/ld\+json/i, "landing should embed structured data");
@@ -357,7 +357,7 @@ test("edge landing page keeps SentinelStream SEO and structured data surface", a
   assert.doesNotMatch(landingBody, /PyRoBOT|PyRo1121Bot/i, "landing should not expose legacy branding");
 });
 
-test("edge public auth pages render SentinelStream surfaces without legacy branding", async (t) => {
+test("edge public auth pages render Intel Dashboard surfaces without legacy branding", async (t) => {
   const [login, signup] = await Promise.all([
     fetchWithRetry(`${EDGE_BASE_URL}/login`),
     fetchWithRetry(`${EDGE_BASE_URL}/signup`),
@@ -379,12 +379,12 @@ test("edge public auth pages render SentinelStream surfaces without legacy brand
   assert.equal(login.status, 200, "login page should be reachable");
   assert.equal(signup.status, 200, "signup page should be reachable");
 
-  assert.match(loginBody, /Sign in to SentinelStream/i, "login should render current heading");
+  assert.match(loginBody, /Sign in to Intel Dashboard/i, "login should render current heading");
   assert.match(loginBody, /Continue with X/i, "login should render X OAuth CTA");
   assert.match(loginBody, /Continue with GitHub/i, "login should render GitHub OAuth CTA");
   assert.doesNotMatch(loginBody, /PyRoBOT|PyRo1121Bot/i, "login should not expose legacy branding");
 
-  assert.match(signupBody, /Create your SentinelStream access/i, "signup should render current heading");
+  assert.match(signupBody, /Create your Intel Dashboard account/i, "signup should render current heading");
   assert.match(signupBody, /Create Account with X/i, "signup should render X signup CTA");
   assert.match(signupBody, /Create Account with GitHub/i, "signup should render GitHub signup CTA");
   assert.doesNotMatch(signupBody, /PyRoBOT|PyRo1121Bot/i, "signup should not expose legacy branding");
@@ -489,7 +489,7 @@ test("edge auth start routes preserve safe next paths through the turnstile gate
     method: "GET",
     redirect: "manual",
     headers: {
-      "user-agent": "SentinelStream-E2E/1.0",
+      "user-agent": "Intel Dashboard-E2E/1.0",
     },
   });
 
@@ -514,7 +514,7 @@ test("edge OAuth callback variants fail closed into auth error with missing stat
       method: "GET",
       redirect: "manual",
       headers: {
-        "user-agent": "SentinelStream-E2E/1.0",
+        "user-agent": "Intel Dashboard-E2E/1.0",
       },
     });
     assert.equal(response.status, 302, `${path} should redirect without state`);
@@ -1325,7 +1325,7 @@ test("backend public feed routes are not exposed", async (t) => {
   assert.equal(landing.status, 200, "backend root should render landing page");
   assertSecurityHeaders(landing, "backend root landing");
   const landingBody = await landing.text();
-  assert.match(landingBody, /SentinelStream/i, "backend root should render SentinelStream branding");
+  assert.match(landingBody, /Intel Dashboard/i, "backend root should render Intel Dashboard branding");
   assert.match(landingBody, /Real-Time OSINT Intelligence Stream/i, "backend root should render landing tagline");
 });
 

@@ -44,20 +44,20 @@ export E2E_EXPECT_TIER="subscriber"
 Cloudflare-style local secret file flow:
 
 ```bash
-npm run e2e:save-secrets
+bun run e2e:save-secrets
 ```
 
 - `test:e2e`, `test:e2e:strict`, and `test:e2e:auth` now auto-load `.dev.vars.e2e` first, then `.dev.vars`.
 - `e2e:save-secrets` writes `.dev.vars.e2e` from your current shell values or the default `/tmp/e2e_session_cookie.txt` and `/tmp/e2e_backend_token.txt` files.
-- If you only have the raw BetterAuth cookie value, set `E2E_SESSION_TOKEN=<value>` before running `npm run e2e:save-secrets`; the script will normalize it into `__Secure-better-auth.session_token=<value>`.
-- If you want destructive logout coverage in the browser lane, also set `E2E_SIGNOUT_SESSION_TOKEN=<value>` or `E2E_SIGNOUT_SESSION_COOKIE=<name=value>` before running `npm run e2e:save-secrets`. This should be a separate live session so the main authenticated suite is not invalidated mid-run.
+- If you only have the raw BetterAuth cookie value, set `E2E_SESSION_TOKEN=<value>` before running `bun run e2e:save-secrets`; the script will normalize it into `__Secure-better-auth.session_token=<value>`.
+- If you want destructive logout coverage in the browser lane, also set `E2E_SIGNOUT_SESSION_TOKEN=<value>` or `E2E_SIGNOUT_SESSION_COOKIE=<name=value>` before running `bun run e2e:save-secrets`. This should be a separate live session so the main authenticated suite is not invalidated mid-run.
 - `E2E_SIGNOUT_SESSION_COOKIE` should be a separate live session. It is intentionally not defaulted to the main session, because the logout test invalidates whatever session token it uses.
 - The default direct backend base URL is `https://backend-e2e.pyro1121.com`.
 - `.dev.vars.e2e.example` shows the expected keys.
 - `.dev.vars*` is gitignored.
-- `npm run check:e2e-live` verifies that the required live e2e keys are present and that `E2E_SESSION_COOKIE` is still a valid authenticated edge session before running the strict live suite.
+- `bun run check:e2e-live` verifies that the required live e2e keys are present and that `E2E_SESSION_COOKIE` is still a valid authenticated edge session before running the strict live suite.
 - If `E2E_SIGNOUT_SESSION_COOKIE` is set, `check:e2e-live` validates it too and now fails if it matches `E2E_SESSION_COOKIE`.
-- If `E2E_SESSION_COOKIE` is stale, refresh it with `npm run e2e:save-secrets` after logging in again.
+- If `E2E_SESSION_COOKIE` is stale, refresh it with `bun run e2e:save-secrets` after logging in again.
 
 ## Stripe Subscription Bootstrap
 
@@ -91,7 +91,7 @@ Optional worker vars for cap tuning:
 Bootstrap Stripe + Wrangler secrets with:
 
 ```bash
-npm run billing:stripe:setup -- --apply --create-webhook --usage-token "$(openssl rand -hex 32)"
+bun run billing:stripe:setup -- --apply --create-webhook --usage-token "$(openssl rand -hex 32)"
 ```
 
 Optional args:
@@ -104,15 +104,15 @@ Optional args:
 ## Deploy
 
 ```bash
-cd /home/pyro1121/Documents/intel-dashboard/worker
-npm run deploy
+bun run deploy:edge
+bun run deploy:backend
 ```
 
 ## Auth Health Check
 
 ```bash
 cd /home/pyro1121/Documents/intel-dashboard
-npm run health:oauth
+bun run health:oauth
 ```
 
 ## Cloudflare Owner E2E Allowlist
@@ -120,7 +120,7 @@ npm run health:oauth
 To let synthetic auth-route checks bypass Bot Fight Mode from your current public IP:
 
 ```bash
-CLOUDFLARE_API_TOKEN=... npm run security:cf:allow-owner-e2e-ip
+CLOUDFLARE_API_TOKEN=... bun run security:cf:allow-owner-e2e-ip
 ```
 
 - This creates or refreshes a zone-level IP Access allow rule for `pyro1121.com`
@@ -130,7 +130,7 @@ CLOUDFLARE_API_TOKEN=... npm run security:cf:allow-owner-e2e-ip
 To remove the managed allowlist rule for the current IP:
 
 ```bash
-CLOUDFLARE_API_TOKEN=... npm run security:cf:clear-owner-e2e-ip
+CLOUDFLARE_API_TOKEN=... bun run security:cf:clear-owner-e2e-ip
 ```
 
 ## Continuous Production E2E
@@ -156,7 +156,7 @@ The workflow:
 2. writes `.dev.vars.e2e`
 3. verifies live e2e config is present
 4. allowlists the runner IP for auth-route checks
-5. runs `npm run test:all:live`
+5. runs `bun run test:all:live`
 6. clears the managed allowlist rule
 
 Local live e2e secrets now default to a secure external path instead of the workspace:
@@ -172,7 +172,7 @@ OAuth start routes (`/auth/login`, `/auth/signup`, `/auth/x/login`, `/auth/x/sig
 Required worker secrets:
 
 ```bash
-cd /home/pyro1121/Documents/intel-dashboard/worker
+cd /home/pyro1121/Documents/intel-dashboard/apps/edge
 wrangler secret put TURNSTILE_SITE_KEY
 wrangler secret put TURNSTILE_SECRET_KEY
 wrangler deploy

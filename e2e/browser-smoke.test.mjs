@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { chromium } from "@playwright/test";
-import { SITE_ORIGIN } from "../packages/shared/site-config.ts";
+import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 import {
   AUTHENTICATED_BROWSER_NOERROR_ROUTES,
   AUTHENTICATED_BROWSER_ROUTES,
@@ -255,7 +255,7 @@ async function validateSessionCookie(t, cookieHeader, missingMessage) {
 
   const validation = await sessionValidationCache.get(cookie);
   if (!validation.ok) {
-    const detail = `${missingMessage.replace("is required", "is present")} but invalid or expired (auth/me returned ${validation.status}). Refresh it with npm run e2e:save-secrets after logging in again.`;
+    const detail = `${missingMessage.replace("is required", "is present")} but invalid or expired (auth/me returned ${validation.status}). Refresh it with bun run e2e:save-secrets after logging in again.`;
     if (REQUIRE_AUTH || STRICT) {
       assert.fail(detail);
     }
@@ -1403,7 +1403,7 @@ test("browser-authenticated app pages stay free of uncaught, console, and same-o
   }
 });
 
-test("browser public auth pages render current SentinelStream access UI", async (t) => {
+test("browser public auth pages render current Intel Dashboard access UI", async (t) => {
   const runtime = await createPublicBrowserContext(t);
   if (!runtime) return;
   const { browser, context } = runtime;
@@ -1590,7 +1590,7 @@ test("browser public landing and 404 surfaces render expected production content
       assert.ok(landingResponse, "landing page should return a response");
       assert.equal(landingResponse.status(), 200, "landing page should render successfully");
       const landingText = (await page.textContent("body")) || "";
-      assert.match(landingText, /SentinelStream/i, "landing should render SentinelStream branding");
+      assert.match(landingText, /Intel Dashboard/i, "landing should render Intel Dashboard branding");
       assert.match(landingText, /Start 7-Day Trial/i, "landing should render trial CTA");
       assert.doesNotMatch(landingText, /PyRoBOT|PyRo1121Bot/i, "landing should not render legacy branding");
 
@@ -1635,7 +1635,7 @@ test("browser public landing CTAs navigate to the intended auth surfaces", async
     });
     await page.getByRole("link", { name: "Login" }).first().click();
     await page.waitForURL(`${EDGE_BASE_URL}/login`, { timeout: 30_000 });
-    assert.match((await page.textContent("body")) || "", /Sign in to SentinelStream/i);
+    assert.match((await page.textContent("body")) || "", /Sign in to Intel Dashboard/i);
 
     await page.goto(`${EDGE_BASE_URL}/`, {
       waitUntil: "domcontentloaded",
@@ -1643,7 +1643,7 @@ test("browser public landing CTAs navigate to the intended auth surfaces", async
     });
     await page.getByRole("link", { name: /Start 7-Day Trial|Start Trial with OAuth/i }).first().click();
     await page.waitForURL(`${EDGE_BASE_URL}/signup`, { timeout: 30_000 });
-    assert.match((await page.textContent("body")) || "", /Create your SentinelStream access/i);
+    assert.match((await page.textContent("body")) || "", /Create your Intel Dashboard account/i);
 
     await page.goto(`${EDGE_BASE_URL}/`, {
       waitUntil: "domcontentloaded",
@@ -1730,16 +1730,16 @@ test("browser authenticated sidebar navigation opens the expected routes", async
       timeout: 45_000,
     });
 
-    await page.getByRole("link", { name: "SentinelStream dashboard home" }).click();
+    await page.getByRole("link", { name: "Intel Dashboard home" }).click();
     await page.waitForURL(/\/overview$/, { timeout: 30_000 });
-    assert.match((await page.textContent("body")) || "", /SentinelStream Command Overview/i);
+    assert.match((await page.textContent("body")) || "", /Intel Dashboard Overview/i);
     await page.goto(`${EDGE_BASE_URL}/osint`, {
       waitUntil: "networkidle",
       timeout: 45_000,
     });
 
     const checks = [
-      { label: "Overview", heading: "SentinelStream Command Overview", path: "/overview" },
+      { label: "Overview", heading: "Intel Dashboard Overview", path: "/overview" },
       { label: "Threat Map", heading: "Threat Map", path: "/map" },
       { label: "Air/Sea Ops", heading: "Air / Sea Ops", path: "/air-sea" },
       { label: "Briefings", heading: "Briefings", path: "/briefings" },
@@ -1779,10 +1779,10 @@ test("browser mobile sidebar brand link returns to overview", async (t) => {
       await openNavigation.click();
 
       const mobileSidebar = page.locator("#mobile-navigation");
-      await mobileSidebar.getByRole("link", { name: "SentinelStream dashboard home" }).waitFor({ state: "visible", timeout: 30_000 });
-      await mobileSidebar.getByRole("link", { name: "SentinelStream dashboard home" }).click();
+      await mobileSidebar.getByRole("link", { name: "Intel Dashboard home" }).waitFor({ state: "visible", timeout: 30_000 });
+      await mobileSidebar.getByRole("link", { name: "Intel Dashboard home" }).click();
       await page.waitForURL(/\/overview$/, { timeout: 30_000 });
-      assert.match((await page.textContent("body")) || "", /SentinelStream Command Overview/i);
+      assert.match((await page.textContent("body")) || "", /Intel Dashboard Overview/i);
       assert.equal(await openNavigation.getAttribute("aria-expanded"), "false", "mobile drawer should close after brand navigation");
     } catch (error) {
       await captureBrowserArtifacts(page, "mobile-sidebar-brand-home", error);
@@ -1897,7 +1897,7 @@ test("browser-authenticated sign out clears access and forces re-auth on protect
       const afterLogoutBody = (await page.textContent("body")) || "";
       assert.match(
         afterLogoutBody,
-        /Start 7-Day Trial|Sign in to SentinelStream|Create your SentinelStream access/i,
+        /Start 7-Day Trial|Sign in to Intel Dashboard|Create your Intel Dashboard account/i,
         "sign out should land on a public access surface",
       );
 

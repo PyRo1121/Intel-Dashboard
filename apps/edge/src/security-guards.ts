@@ -1,4 +1,4 @@
-import { SITE_ORIGIN } from "../../../packages/shared/site-config.ts";
+import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 
 export const DEFAULT_APP_ORIGIN = SITE_ORIGIN;
 export const DEFAULT_SECURITY_HEADERS = Object.freeze({

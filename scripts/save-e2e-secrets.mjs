@@ -1,6 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { BACKEND_E2E_ORIGIN, SITE_ORIGIN } from "../packages/shared/site-config.ts";
+import { BACKEND_E2E_ORIGIN, SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 import { resolveSecureE2eEnvPath } from "./e2e-env-path.mjs";
 
 const root = process.cwd();

@@ -13,7 +13,7 @@ import {
   formatUsdMonthlyCompact,
   formatUsdMonthlySpaced,
   UPGRADE_INSTANT_FEED_LABEL,
-} from "../../../../packages/shared/access-offers.ts";
+} from "@intel-dashboard/shared/access-offers.ts";
 
 test("shared access offer constants and formatters stay aligned", () => {
   assert.equal(FREE_FEED_DELAY_MINUTES, 90);

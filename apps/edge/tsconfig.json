@@ -5,7 +5,11 @@
     "module": "ES2022",
     "moduleResolution": "bundler",
     "lib": ["ES2022"],
-    "baseUrl": "."
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@intel-dashboard/shared/*": ["../../packages/shared/*"]
+    }
   },
   "include": ["worker-configuration.d.ts", "src/**/*.ts", "test/**/*.ts", "../../packages/shared/**/*.ts"]
 }

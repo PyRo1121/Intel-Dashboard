@@ -52,7 +52,7 @@
         "@solidjs/start": "^1.1.0",
         "leaflet": "^1.9.4",
         "lightweight-charts": "^5.1.0",
-        "lucide-solid": "^0.563.0",
+        "lucide-solid": "^0.577.0",
         "solid-js": "^1.9.5",
         "solid-motionone": "^1.0.4",
         "solid-transition-group": "^0.3.0",
@@ -1089,7 +1089,7 @@
 
     "lru.min": ["lru.min@1.1.4", "", {}, "sha512-DqC6n3QQ77zdFpCMASA1a3Jlb64Hv2N2DciFGkO/4L9+q/IpIAuRlKOvCXabtRW6cQf8usbmM6BE/TOPysCdIA=="],
 
-    "lucide-solid": ["lucide-solid@0.563.0", "", { "peerDependencies": { "solid-js": "^1.4.7" } }, "sha512-Ort9I6BaKdarM/e0VwWddcd9tuven/y0wHqfXIPNzPPe3zwXtIZJDjR2UcAj2XBCfx1aHw/SWiLHPvn9O1Fniw=="],
+    "lucide-solid": ["lucide-solid@0.577.0", "", { "peerDependencies": { "solid-js": "^1.4.7" } }, "sha512-r/rsauBlyNjFlUhXCkD544tOH1GgcFFupw9oP2zZT4BiFkHoO3MTr12QfKBrS5zCRIhktc/qY2tRr925hFlNuQ=="],
 
     "magic-string": ["magic-string@0.30.21", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.5" } }, "sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ=="],
 

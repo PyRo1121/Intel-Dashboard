@@ -2154,7 +2154,37 @@ async function enrichNewsItemWithAi(args: {
     env: args.env,
     routeKind: "text",
     expectJson: true,
-    maxTokens: 384,
+    maxTokens: 224,
+    jsonSchema: {
+      name: "news_enrichment",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "language",
+          "title_en",
+          "summary_en",
+          "severity",
+          "region",
+          "category",
+          "priority",
+          "confidence",
+        ],
+        properties: {
+          language: { type: "string" },
+          title_en: { type: "string" },
+          summary_en: { type: "string" },
+          severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
+          region: {
+            type: "string",
+            enum: ["middle_east", "ukraine", "europe", "pacific", "africa", "east_asia", "central_america", "military", "global", "us"],
+          },
+          category: { type: "string", enum: ["news", "conflict", "notam", "military_movement"] },
+          priority: { type: "number" },
+          confidence: { type: "number" },
+        },
+      },
+    },
     cacheHint: "news-enrich-v1",
     metadata: {
       pipeline: "news_enrichment",
@@ -3016,6 +3046,11 @@ type AiGatewayInvocationResult = {
   errorMessage?: string;
 };
 
+type AiGatewayJsonSchema = {
+  name: string;
+  schema: Record<string, unknown>;
+};
+
 function isCerebrasRouteModel(model: string): boolean {
   const normalized = model.trim().toLowerCase();
   return normalized.startsWith("cerebras/");
@@ -3063,6 +3098,7 @@ async function invokeAiGatewayDetailed(args: {
   messages: AiGatewayMessage[];
   maxTokens: number;
   expectJson: boolean;
+  jsonSchema?: AiGatewayJsonSchema;
   routeKind?: AiGatewayRouteKind;
   modelOverride?: string;
   urlOverride?: string;
@@ -3094,13 +3130,29 @@ async function invokeAiGatewayDetailed(args: {
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
 
+  const normalizedMessagesForCache = args.messages.map((message) => ({
+    ...message,
+    content:
+      typeof message.content === "string"
+        ? message.content.replace(/\s+/g, " ").trim()
+        : message.content.map((part) =>
+            part.type === "text"
+              ? {
+                  ...part,
+                  text: part.text.replace(/\s+/g, " ").trim(),
+                }
+              : part,
+          ),
+  }));
+
   let cacheKey: string | undefined;
   if (cacheTtlSeconds > 0) {
     const cachePayload = stableStringify({
       model: route.model,
       expectJson: args.expectJson,
       hint: args.cacheHint ?? "default",
-      messages: args.messages,
+      schema: args.jsonSchema?.name ?? null,
+      messages: normalizedMessagesForCache,
     });
     cacheKey = `intel:${await sha256Hex(cachePayload)}`;
   }
@@ -3121,7 +3173,20 @@ async function invokeAiGatewayDetailed(args: {
       ...(isCerebrasRouteModel(route.model)
         ? { max_completion_tokens: Math.max(32, Math.floor(args.maxTokens)) }
         : { max_tokens: Math.max(32, Math.floor(args.maxTokens)) }),
-      ...(args.expectJson ? { response_format: { type: "json_object" } } : {}),
+      ...(args.expectJson
+        ? args.jsonSchema
+          ? {
+              response_format: {
+                type: "json_schema",
+                json_schema: {
+                  name: args.jsonSchema.name,
+                  strict: true,
+                  schema: args.jsonSchema.schema,
+                },
+              },
+            }
+          : { response_format: { type: "json_object" } }
+        : {}),
       messages: args.messages,
     };
     if (shouldUseLowReasoningEffort({
@@ -3225,6 +3290,7 @@ async function invokeAiGateway(args: {
   messages: AiGatewayMessage[];
   maxTokens: number;
   expectJson: boolean;
+  jsonSchema?: AiGatewayJsonSchema;
   routeKind?: AiGatewayRouteKind;
   modelOverride?: string;
   urlOverride?: string;
@@ -3344,6 +3410,17 @@ async function deriveDedupeKeyWithAi(args: {
       routeKind: lane,
       maxTokens: 48,
       expectJson: true,
+      jsonSchema: {
+        name: "dedupe_key",
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["dedupe_key"],
+          properties: {
+            dedupe_key: { type: "string" },
+          },
+        },
+      },
       cacheHint: "dedupe-key-v2",
       metadata: {
         pipeline: "dedupe",
@@ -6657,10 +6734,11 @@ async function executeAiJob(args: {
 
   if (args.job.type === "translate") {
     const textRoute = resolveAiGatewayRouteConfig({ env: args.env, routeKind: "text" });
+    const normalizedText = args.job.text.replace(/\s+/g, " ").trim();
     const translated = await invokeAiGateway({
       env: args.env,
       routeKind: "text",
-      maxTokens: estimateTranslateMaxTokens(args.job.text),
+      maxTokens: estimateTranslateMaxTokens(normalizedText),
       expectJson: false,
       cacheHint: `translate-${args.job.targetLanguage.toLowerCase()}`,
       metadata: {
@@ -6675,7 +6753,7 @@ async function executeAiJob(args: {
         },
         {
           role: "user",
-          content: `Target language: ${args.job.targetLanguage}\nText:\n${args.job.text}`,
+          content: `Target language: ${args.job.targetLanguage}\nText:\n${normalizedText}`,
         },
       ],
     });
@@ -6692,11 +6770,24 @@ async function executeAiJob(args: {
   }
 
   const textRoute = resolveAiGatewayRouteConfig({ env: args.env, routeKind: "text" });
+  const normalizedText = args.job.text.replace(/\s+/g, " ").trim();
   const classified = await invokeAiGateway({
     env: args.env,
     routeKind: "text",
     maxTokens: 48,
     expectJson: true,
+    jsonSchema: {
+      name: "classification",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["label", "confidence"],
+        properties: {
+          label: { type: "string" },
+          confidence: { type: "number" },
+        },
+      },
+    },
     cacheHint: "classify-v1",
     metadata: {
       pipeline: "ai_jobs_classify",
@@ -6710,7 +6801,7 @@ async function executeAiJob(args: {
       },
       {
         role: "user",
-        content: `Labels: ${args.job.labels.join(", ")}\nText:\n${args.job.text}`,
+        content: `Labels: ${args.job.labels.join(", ")}\nText:\n${normalizedText}`,
       },
     ],
   });
@@ -6965,8 +7056,9 @@ function buildAiGatewayRequestForJob(job: AiJobRequest): {
   }
 
   if (job.type === "translate") {
+    const normalizedText = job.text.replace(/\s+/g, " ").trim();
     return {
-      maxTokens: estimateTranslateMaxTokens(job.text),
+      maxTokens: estimateTranslateMaxTokens(normalizedText),
       expectJson: false,
       messages: [
         {
@@ -6976,12 +7068,13 @@ function buildAiGatewayRequestForJob(job: AiJobRequest): {
         },
         {
           role: "user",
-          content: `Target language: ${job.targetLanguage}\nText:\n${job.text}`,
+          content: `Target language: ${job.targetLanguage}\nText:\n${normalizedText}`,
         },
       ],
     };
   }
 
+  const normalizedText = job.text.replace(/\s+/g, " ").trim();
   return {
     maxTokens: 48,
     expectJson: true,
@@ -6992,7 +7085,7 @@ function buildAiGatewayRequestForJob(job: AiJobRequest): {
       },
       {
         role: "user",
-        content: `Labels: ${job.labels.join(", ")}\nText:\n${job.text}`,
+        content: `Labels: ${job.labels.join(", ")}\nText:\n${normalizedText}`,
       },
     ],
   };

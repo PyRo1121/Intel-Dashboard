@@ -2639,10 +2639,73 @@ describe("intel-dashboard backend worker", () => {
       const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
       expect(body.model).toBe("cerebras/gpt-oss-120b");
       expect(body.max_completion_tokens ?? body.max_tokens).toBeDefined();
-      if (body.response_format?.type === "json_object") {
+      if (body.response_format?.type === "json_object" || body.response_format?.type === "json_schema") {
         expect(body.reasoning_effort).toBe("low");
       }
     }
+  });
+
+  it("normalizes translate/classify text and uses strict schemas for JSON tasks", async () => {
+    const aiFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+      const systemPrompt = String(body.messages?.[0]?.content ?? "");
+      const content = systemPrompt.includes("Translate the user text")
+        ? "Hola mundo"
+        : JSON.stringify({ label: "conflict", confidence: 0.93 });
+
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content } }],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    });
+    vi.stubGlobal("fetch", aiFetch);
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/ai/jobs", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer admin-token",
+        },
+        body: JSON.stringify({
+          jobs: [
+            {
+              type: "translate",
+              text: "Hello   world",
+              targetLanguage: "es",
+            },
+            {
+              type: "classify",
+              text: "Heavy   fighting near the border.",
+              labels: ["conflict", "diplomacy"],
+            },
+          ],
+        }),
+      }),
+      {
+        BILLING_ADMIN_TOKEN: "admin-token",
+        AI_GATEWAY_URL: "https://gateway.example.com/v1/chat/completions",
+        AI_GATEWAY_MODEL: "cerebras/gpt-oss-120b",
+        AI_BATCH_PROVIDER: "internal",
+      },
+    );
+
+    expect(response.status).toBe(200);
+
+    const translateBody = JSON.parse(String((aiFetch.mock.calls[0]?.[1] as RequestInit).body));
+    expect(translateBody.messages[1].content).toContain("Hello world");
+    expect(translateBody.max_completion_tokens).toBeLessThanOrEqual(64);
+
+    const classifyBody = JSON.parse(String((aiFetch.mock.calls[1]?.[1] as RequestInit).body));
+    expect(classifyBody.messages[1].content).toContain("Heavy fighting near the border.");
+    expect(classifyBody.response_format?.type).toBe("json_schema");
+    expect(classifyBody.response_format?.json_schema?.name).toBe("classification");
+    expect(classifyBody.reasoning_effort).toBe("low");
   });
 
   it("routes media dedupe jobs to the Groq Scout media lane", async () => {

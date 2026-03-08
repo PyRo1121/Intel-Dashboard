@@ -1,0 +1,93 @@
+name = "pyrobot-worker"
+main = "src/index.ts"
+compatibility_date = "2026-03-08"
+compatibility_flags = ["nodejs_compat"]
+
+[[services]]
+binding = "INTEL_BACKEND"
+service = "intel-dashboard-backend"
+
+# Route ALL requests on intel.pyro1121.com through this Worker
+# Worker handles /api/* via DO cache, /auth/* directly, static assets via Pages CDN, pages via backend SSR
+[[routes]]
+pattern = "intel.pyro1121.com/*"
+zone_name = "pyro1121.com"
+
+[durable_objects]
+bindings = [
+  { name = "INTEL_CACHE", class_name = "IntelCacheDO" },
+  { name = "TELEGRAM_SCRAPER", class_name = "TelegramScraperDO" },
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["IntelCacheDO", "FlashCrashDO"]
+
+[[migrations]]
+tag = "v2"
+deleted_classes = ["FlashCrashDO"]
+
+[[r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "intel-telegram"
+
+[[r2_buckets]]
+binding = "ARCHIVE_BUCKET"
+bucket_name = "intel-telegram-archive"
+
+[[kv_namespaces]]
+binding = "TELEGRAM_STATE"
+id = "cd25b7bb6d14483a94faeecef9b017d6"
+
+[[d1_databases]]
+binding = "INTEL_DB"
+database_name = "intel-telegram-db"
+database_id = "0d064b35-0f3d-46db-badd-5ac8cd098eda"
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["TelegramScraperDO"]
+
+[limits]
+cpu_ms = 300000
+subrequests = 50000
+
+[assets]
+directory = "../web/.output/public"
+binding = "ASSETS"
+run_worker_first = [
+  "/",
+  "/login",
+  "/signup",
+  "/auth/*",
+  "/oauth/*",
+  "/api/*",
+  "/media/*",
+  "/media-proxy",
+  "/osint*",
+  "/telegram*",
+  "/map*",
+  "/air-sea*",
+  "/briefings*",
+  "/billing*",
+  "/crm*",
+  "/polymarket",
+  "/drops",
+  "/robots.txt",
+  "/sitemap.xml",
+]
+
+[observability]
+enabled = true
+head_sampling_rate = 0.05
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 0.05
+invocation_logs = true
+persist = true
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.05
+persist = true

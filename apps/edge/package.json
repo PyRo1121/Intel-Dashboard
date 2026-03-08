@@ -1,0 +1,22 @@
+{
+  "name": "@intel-dashboard/edge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "tail": "wrangler tail",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250124.0",
+    "wrangler": "^4.70.0"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.5.3",
+    "better-auth": "^1.5.3",
+    "better-auth-cloudflare": "^0.2.9",
+    "drizzle-orm": "^0.44.7"
+  }
+}

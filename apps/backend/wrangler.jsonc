@@ -1,0 +1,106 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "intel-dashboard-backend",
+  "main": "src/index.ts",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "backend-e2e.pyro1121.com",
+      "custom_domain": true
+    }
+  ],
+  "compatibility_date": "2026-03-08",
+  "placement": {
+    "mode": "smart"
+  },
+  "triggers": {
+    "crons": [
+      "* * * * *"
+    ]
+  },
+  "kv_namespaces": [
+    {
+      "binding": "USAGE_KV",
+      "id": "80f4d0e2a02d490b8e85986deca557b5",
+      "preview_id": "af26039f86ac408e931197b74aaecb54"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "NEWS_INGEST_COORDINATOR",
+        "class_name": "NewsIngestCoordinator"
+      }
+    ]
+  },
+  "queues": {
+    "producers": [
+      {
+        "binding": "AI_JOB_QUEUE",
+        "queue": "intel-dashboard-ai-jobs"
+      },
+      {
+        "binding": "USAGE_SEED_QUEUE",
+        "queue": "intel-dashboard-ai-jobs"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "intel-dashboard-ai-jobs",
+        "max_batch_size": 20,
+        "max_batch_timeout": 5,
+        "max_retries": 8,
+        "dead_letter_queue": "intel-dashboard-ai-jobs-dlq"
+      }
+    ]
+  },
+  "ratelimits": [
+    {
+      "name": "FREE_TIER_RATE_LIMIT_BINDING",
+      "namespace_id": "11001",
+      "simple": {
+        "limit": 60,
+        "period": 60
+      }
+    },
+    {
+      "name": "TRIAL_TIER_RATE_LIMIT_BINDING",
+      "namespace_id": "11002",
+      "simple": {
+        "limit": 180,
+        "period": 60
+      }
+    },
+    {
+      "name": "SUBSCRIBER_TIER_RATE_LIMIT_BINDING",
+      "namespace_id": "11003",
+      "simple": {
+        "limit": 600,
+        "period": 60
+      }
+    }
+  ],
+  "migrations": [
+    {
+      "tag": "v1-news-ingest-coordinator",
+      "new_sqlite_classes": [
+        "NewsIngestCoordinator"
+      ]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.2,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 0.2,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.2,
+      "persist": true
+    }
+  }
+}

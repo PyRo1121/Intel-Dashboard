@@ -1,0 +1,22 @@
+{
+  "name": "@intel-dashboard/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "wrangler deploy --dry-run --env=\"\"",
+    "deploy": "wrangler deploy --env=\"\"",
+    "seed": "node --import tsx scripts/seed-usage-kv.ts",
+    "bench:usage": "node --import tsx scripts/bench-usage-rpc.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@cloudflare/workers-types": "^4.20260305.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.70.0"
+  }
+}

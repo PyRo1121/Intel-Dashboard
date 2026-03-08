@@ -1,23 +1,31 @@
-# Build/runtime artifacts
-**/node_modules/
-**/.output/
-**/.vinxi/
-**/.wrangler/
-**/.cache/
-**/dist/
-**/coverage/
+dist
+.wrangler
+.output
+.vercel
+.netlify
+.vinxi
+output/e2e-browser/
+app.config.timestamp_*.js
 
-# Env/secrets
-**/.env
-**/.env.*
-**/*token*
-**/*session*
-**/*secret*
-**/*.key
+# Environment
+.env
+.env*.local
+.dev.vars
+.dev.vars.*
 
-# Python artifacts
-**/__pycache__/
-**/*.pyc
+# dependencies
+/node_modules
 
-# Logs
-**/*.log
+# IDEs and editors
+/.idea
+.project
+.classpath
+*.launch
+.settings/
+
+# Temp
+gitignore
+
+# System Files
+.DS_Store
+Thumbs.db

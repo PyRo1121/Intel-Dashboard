@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["vitest/globals", "node"],
+    "lib": ["ES2022", "DOM"],
+    "baseUrl": "."
+  },
+  "include": ["worker-configuration.d.ts", "src/**/*.ts", "scripts/**/*.ts", "../../packages/shared/**/*.ts", "wrangler.jsonc", "vitest.config.ts"]
+}

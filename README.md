@@ -1,168 +1,190 @@
-# Intel Dashboard Backup
+# Intel Dashboard
 
-Private backup + restore runbook for:
+Bun-workspace monorepo for the Cloudflare-hosted Intel Dashboard platform on `intel.pyro1121.com`.
 
-- `website/intel-dashboard/` - SolidStart intel dashboard
-- `website/intel-dashboard/worker/` - Cloudflare Worker (API proxy + DO cache)
-- `openclaw/scripts/` - Telegram/aviation/data ingestion scripts
-- `openclaw/skills/` - installed global skill links
-- `openclaw/workspace/skills/` - active skill projects + state
-- `openclaw/cron/` - cron job definitions and run logs
+## Workspace Layout
 
-## 1) Prerequisites
+- `apps/web` - SolidStart frontend
+- `apps/edge` - production edge worker and Durable Objects for `intel.pyro1121.com/*`
+- `apps/backend` - backend API worker
+- `packages/shared` - shared product constants, metadata, auth flows, and entitlement logic
 
-- Node.js `>=22`
-- npm (bundled with Node)
-- Bun (for some OpenClaw skill workflows)
-- Python 3.11+
-- Git + GitHub CLI (`gh`)
-- Wrangler CLI (Cloudflare)
-
-Install and auth:
+## Local Commands
 
 ```bash
-gh auth login
-npx wrangler login
+bun run dev:web
+bun run typecheck
+bun run test
+bun run test:e2e
+bun run test:all
+bun run build:web
+bun run billing:stripe:setup -- --help
 ```
 
-## 2) Clone On New PC
+## E2E + TDD Gate
+
+- Default smoke E2E: `bun run test:e2e`
+- Browser-authenticated smoke E2E: `bun run test:e2e:browser`
+- Full strict E2E (fails if auth vars are missing): `bun run test:e2e:strict`
+- Full test gate (typecheck + worker tests + backend tests + fetch e2e + browser e2e): `bun run test:all`
+- Full live gate (requires authenticated/backend secrets and fails if any are missing): `bun run test:all:live`
+- Full strict gate (for CI/CD): `bun run test:all:strict`
+
+Optional strict E2E env vars:
 
 ```bash
-git clone https://github.com/PyRo1121/openclaw-intel-backup.git
-cd openclaw-intel-backup
+export E2E_BACKEND_TOKEN="<USAGE_DATA_SOURCE_TOKEN>"
+export E2E_SESSION_COOKIE="pyrobot_session=<cookie-value>"
+export E2E_SIGNOUT_SESSION_COOKIE="pyrobot_session=<separate-cookie-value>"
+export E2E_USER_ID="PyRo1121"
+export E2E_EXPECT_DELAY_MINUTES="0"
+export E2E_EXPECT_TIER="subscriber"
 ```
 
-## 3) Restore Layout
-
-Recommended target layout:
-
-- dashboard code: `~/Documents/intel-dashboard`
-- OpenClaw home: `~/.openclaw`
+Cloudflare-style local secret file flow:
 
 ```bash
-mkdir -p "$HOME/Documents/intel-dashboard"
-mkdir -p "$HOME/.openclaw"
-
-cp -a website/intel-dashboard/. "$HOME/Documents/intel-dashboard/"
-cp -a openclaw/. "$HOME/.openclaw/"
+npm run e2e:save-secrets
 ```
 
-## 4) Website Dev + Build
+- `test:e2e`, `test:e2e:strict`, and `test:e2e:auth` now auto-load `.dev.vars.e2e` first, then `.dev.vars`.
+- `e2e:save-secrets` writes `.dev.vars.e2e` from your current shell values or the default `/tmp/e2e_session_cookie.txt` and `/tmp/e2e_backend_token.txt` files.
+- If you only have the raw BetterAuth cookie value, set `E2E_SESSION_TOKEN=<value>` before running `npm run e2e:save-secrets`; the script will normalize it into `__Secure-better-auth.session_token=<value>`.
+- If you want destructive logout coverage in the browser lane, also set `E2E_SIGNOUT_SESSION_TOKEN=<value>` or `E2E_SIGNOUT_SESSION_COOKIE=<name=value>` before running `npm run e2e:save-secrets`. This should be a separate live session so the main authenticated suite is not invalidated mid-run.
+- `E2E_SIGNOUT_SESSION_COOKIE` should be a separate live session. It is intentionally not defaulted to the main session, because the logout test invalidates whatever session token it uses.
+- The default direct backend base URL is `https://backend-e2e.pyro1121.com`.
+- `.dev.vars.e2e.example` shows the expected keys.
+- `.dev.vars*` is gitignored.
+- `npm run check:e2e-live` verifies that the required live e2e keys are present and that `E2E_SESSION_COOKIE` is still a valid authenticated edge session before running the strict live suite.
+- If `E2E_SIGNOUT_SESSION_COOKIE` is set, `check:e2e-live` validates it too and now fails if it matches `E2E_SESSION_COOKIE`.
+- If `E2E_SESSION_COOKIE` is stale, refresh it with `npm run e2e:save-secrets` after logging in again.
 
-From dashboard root:
+## Stripe Subscription Bootstrap
+
+Session-backed edge billing routes are available for the dashboard client:
+
+- `GET /api/billing/status`
+- `POST /api/billing/start-trial`
+- `POST /api/billing/checkout`
+- `POST /api/billing/portal`
+- `GET /api/billing/activity`
+
+Feed gating is enforced at the edge for non-subscribers:
+
+- Delay: backend-driven non-subscriber delay (currently up to 90 minutes)
+- Caps: tier-based max visible items/messages for free and trial tiers
+- Headers: `X-News-Tier`, `X-News-Role`, `X-News-Delay-Minutes`, `X-News-Capped`, `X-News-Total-Before-Gate`, `X-News-Total-Visible`
+
+Optional worker vars for cap tuning:
+
+- `FREE_INTEL_MAX_ITEMS`
+- `FREE_BRIEFINGS_MAX_ITEMS`
+- `FREE_AIR_SEA_MAX_ITEMS`
+- `FREE_TELEGRAM_TOTAL_MESSAGES_MAX`
+- `FREE_TELEGRAM_CHANNEL_MESSAGES_MAX`
+- `TRIAL_INTEL_MAX_ITEMS`
+- `TRIAL_BRIEFINGS_MAX_ITEMS`
+- `TRIAL_AIR_SEA_MAX_ITEMS`
+- `TRIAL_TELEGRAM_TOTAL_MESSAGES_MAX`
+- `TRIAL_TELEGRAM_CHANNEL_MESSAGES_MAX`
+
+Bootstrap Stripe + Wrangler secrets with:
 
 ```bash
-cd "$HOME/Documents/intel-dashboard"
-npm install
-npm run dev
+npm run billing:stripe:setup -- --apply --create-webhook --usage-token "$(openssl rand -hex 32)"
 ```
 
-Production build for Cloudflare Pages (required):
+Optional args:
+
+- `--price-id price_xxx` to reuse existing Stripe price.
+- `--stripe-secret-key sk_test_xxx` to write backend Stripe API key.
+- `--webhook-secret whsec_xxx` to write webhook secret directly.
+- `--listen` to start a forwarding listener for local webhook testing.
+
+## Deploy
 
 ```bash
-cd "$HOME/Documents/intel-dashboard"
-BUILD_TARGET=cloudflare npm run build
-```
-
-Why this matters: `BUILD_TARGET=cloudflare` switches SolidStart to static preset in `app.config.ts` and avoids asset mismatch/hydration chunk issues.
-
-## 5) Cloudflare Pages Deploy
-
-Use this exact deploy flow:
-
-```bash
-cd "$HOME/Documents/intel-dashboard"
-BUILD_TARGET=cloudflare npm run build
-npx wrangler pages deploy ".output/public" --project-name pyrobot-intel
-```
-
-## 6) Worker Commands (API + Durable Objects)
-
-Worker config: `website/intel-dashboard/worker/wrangler.toml`
-
-```bash
-cd "$HOME/Documents/intel-dashboard/worker"
-npm install
-npm run dev
+cd /home/pyro1121/Documents/intel-dashboard/worker
 npm run deploy
-npm run tail
 ```
 
-Notes:
-
-- Worker routes are configured for `intel.pyro1121.com/*`
-- Durable Object binding: `INTEL_CACHE`
-- Cron trigger in worker: every 5 minutes
-
-## 7) OpenClaw Data Refresh Commands
-
-Telegram intel scrape + translation:
+## Auth Health Check
 
 ```bash
-python3 "$HOME/.openclaw/scripts/fetch-telegram-intel.py"
+cd /home/pyro1121/Documents/intel-dashboard
+npm run health:oauth
 ```
 
-OSINT pipeline refresh:
+## Cloudflare Owner E2E Allowlist
+
+To let synthetic auth-route checks bypass Bot Fight Mode from your current public IP:
 
 ```bash
-cd "$HOME/.openclaw/workspace/skills/osint-intel"
-bun install
-bun run refresh
+CLOUDFLARE_API_TOKEN=... npm run security:cf:allow-owner-e2e-ip
 ```
 
-Aviation ingest (if used):
+- This creates or refreshes a zone-level IP Access allow rule for `pyro1121.com`
+- It is intended for your owner/test IP only
+- If your public IP changes, rerun the command
+
+To remove the managed allowlist rule for the current IP:
 
 ```bash
-python3 "$HOME/.openclaw/scripts/fetch-aviation-intel.py"
+CLOUDFLARE_API_TOKEN=... npm run security:cf:clear-owner-e2e-ip
 ```
 
-## 8) Cron Jobs
+## Continuous Production E2E
 
-Primary cron definition file:
+GitHub Actions workflow:
 
-- `openclaw/cron/jobs.json`
+- [e2e-production.yml](/home/pyro1121/Documents/intel-dashboard/.github/workflows/e2e-production.yml)
 
-Run logs:
+Expected GitHub Actions secrets:
 
-- `openclaw/cron/runs/*.jsonl`
+- `CLOUDFLARE_API_TOKEN`
+- `E2E_SESSION_TOKEN`
+- `E2E_SIGNOUT_SESSION_TOKEN` (optional, recommended for destructive logout coverage)
+- `E2E_CF_ACCESS_CLIENT_ID` (optional, required once `backend-e2e.pyro1121.com` is protected by Cloudflare Access)
+- `E2E_CF_ACCESS_CLIENT_SECRET` (optional, required once `backend-e2e.pyro1121.com` is protected by Cloudflare Access)
+- `E2E_BACKEND_TOKEN`
+- `E2E_USER_ID`
+- `E2E_NON_OWNER_USER_ID`
 
-If moving machines, validate paths inside jobs still match your new home directory.
+The workflow:
 
-## 9) Required Secrets / Local-Only Files
+1. installs dependencies and Chromium
+2. writes `.dev.vars.e2e`
+3. verifies live e2e config is present
+4. allowlists the runner IP for auth-route checks
+5. runs `npm run test:all:live`
+6. clears the managed allowlist rule
 
-This backup intentionally excludes secrets and volatile credentials. Recreate on new machine:
+Local live e2e secrets now default to a secure external path instead of the workspace:
 
-- `~/.openclaw/credentials/*`
-- `~/.openclaw/openclaw.json*`
-- API keys, OAuth secrets, session tokens
-- `.env` files
+- `~/.codex/secrets/intel-dashboard.e2e.env`
 
-## 10) Quick Health Checks
+Override it with `E2E_ENV_FILE=/absolute/path` if needed.
 
-Dashboard local:
+## Turnstile Login Protection
+
+OAuth start routes (`/auth/login`, `/auth/signup`, `/auth/x/login`, `/auth/x/signup`) are now gated by Cloudflare Turnstile.
+
+Required worker secrets:
 
 ```bash
-curl -I http://localhost:3200
+cd /home/pyro1121/Documents/intel-dashboard/worker
+wrangler secret put TURNSTILE_SITE_KEY
+wrangler secret put TURNSTILE_SECRET_KEY
+wrangler deploy
 ```
 
-Production:
+If either secret is missing, Turnstile gating is bypassed automatically to avoid auth lockout.
 
-```bash
-curl -I https://intel.pyro1121.com/
-curl -I https://intel.pyro1121.com/telegram
-curl -I https://intel.pyro1121.com/air-sea
-```
+## Current Production Notes
 
-## 11) Common Gotchas
-
-- If you see chunk 404/hydration mismatches, rebuild with `BUILD_TARGET=cloudflare` and redeploy Pages output.
-- If Telegram shows non-English leakage, rerun `fetch-telegram-intel.py` (translation pass is enforced there).
-- If worker API paths fail but static pages load, redeploy worker separately from `website/intel-dashboard/worker`.
-
-## Security Notes
-
-Excluded on purpose:
-
-- credentials/secrets (`~/.openclaw/credentials`, key files, tokens)
-- local session material
-- transient build/cache directories (`node_modules`, `.output`, `.vinxi`, `.wrangler`, etc.)
+- OAuth callback supports transient X API failures with provisional login + server-side re-hydration.
+- Dashboard shell HTML is `no-store` to prevent stale manifest/asset mismatch after deploy.
+- `/api/auth/me` is the canonical authenticated user endpoint for frontend session state and now includes entitlement tier/limits for plan-aware UI.
+- Telegram translation uses `AI_GATEWAY_TOKEN` by default; fallback to `CF_API_TOKEN` is now disabled unless `ALLOW_CF_API_TOKEN_AS_AIG=true` is explicitly set.
+- Owner CRM dashboard is available at `/crm` (owner-only) and powered by `/api/admin/crm/overview` for signup directory, subscription state, and telemetry rollups.
+- Verbose scrape/cache info logs are now gated behind `DEBUG_RUNTIME_LOGS=true` in the edge worker/DO runtime.

@@ -1,0 +1,238 @@
+import { DASHBOARD_HOME_PATH } from "../shared/auth-next-routes.ts";
+import {
+  AIR_SEA_DESCRIPTION,
+  AIR_SEA_TITLE,
+  APP_LANDING_DESCRIPTION,
+  BILLING_DESCRIPTION,
+  BILLING_TITLE,
+  BRIEFINGS_DESCRIPTION,
+  BRIEFINGS_TITLE,
+  CRM_DESCRIPTION,
+  CRM_TITLE,
+  LOGIN_DESCRIPTION,
+  LOGIN_TITLE,
+  MAP_DESCRIPTION,
+  MAP_TITLE,
+  OSINT_DESCRIPTION,
+  OVERVIEW_DESCRIPTION,
+  PRODUCTION_HOME_DESCRIPTION,
+  OSINT_TITLE,
+  OVERVIEW_TITLE,
+  PRODUCTION_HOME_TITLE,
+  SIGNUP_DESCRIPTION,
+  SIGNUP_TITLE,
+  TELEGRAM_DESCRIPTION,
+  TELEGRAM_TITLE,
+} from "../shared/route-meta.ts";
+import { siteUrl } from "../shared/site-config.ts";
+
+export const AUTHENTICATED_BROWSER_ROUTES = Object.freeze([
+  { path: DASHBOARD_HOME_PATH, heading: "SentinelStream Command Overview" },
+  { path: "/osint", heading: "OSINT Feed" },
+  { path: "/telegram", heading: "Telegram Intel" },
+  { path: "/map", heading: "Threat Map" },
+  { path: "/air-sea", heading: "Air / Sea Ops" },
+  { path: "/briefings", heading: "Briefings" },
+  { path: "/billing", heading: "Billing & Access" },
+  { path: "/crm", heading: "Revenue Command Center" },
+]);
+
+export const AUTHENTICATED_BROWSER_NOERROR_ROUTES = Object.freeze([
+  DASHBOARD_HOME_PATH,
+  "/osint",
+  "/telegram",
+  "/map",
+  "/air-sea",
+  "/briefings",
+  "/billing",
+  "/crm",
+]);
+
+export const PUBLIC_AUTH_BROWSER_ROUTES = Object.freeze([
+  {
+    path: "/login",
+    heading: "Sign in to SentinelStream",
+    labels: ["Continue with X", "Continue with GitHub"],
+  },
+  {
+    path: "/signup",
+    heading: "Create your SentinelStream access",
+    labels: ["Create Account with X", "Create Account with GitHub"],
+  },
+]);
+
+export const PUBLIC_BROWSER_ROUTES = Object.freeze([
+  "/",
+  "/landing",
+  "/login",
+  "/signup",
+  "/this-page-should-not-exist-xyz",
+]);
+
+export const BROWSER_METADATA_EXPECTATIONS = Object.freeze([
+  {
+    path: "/",
+    title: PRODUCTION_HOME_TITLE,
+    description: PRODUCTION_HOME_DESCRIPTION,
+    canonicalHref: siteUrl("/"),
+    robotsPattern: /index,follow/i,
+  },
+  {
+    path: DASHBOARD_HOME_PATH,
+    title: OVERVIEW_TITLE,
+    description: OVERVIEW_DESCRIPTION,
+    canonicalHref: siteUrl(DASHBOARD_HOME_PATH),
+    robotsPattern: /noindex,nofollow/i,
+  },
+  {
+    path: "/osint",
+    title: OSINT_TITLE,
+    description: OSINT_DESCRIPTION,
+    canonicalHref: siteUrl("/osint"),
+    robotsPattern: /noindex,nofollow/i,
+  },
+  {
+    path: "/telegram",
+    title: TELEGRAM_TITLE,
+    description: TELEGRAM_DESCRIPTION,
+    canonicalHref: siteUrl("/telegram"),
+    robotsPattern: /noindex,nofollow/i,
+  },
+  {
+    path: "/briefings",
+    title: BRIEFINGS_TITLE,
+    description: BRIEFINGS_DESCRIPTION,
+    canonicalHref: siteUrl("/briefings"),
+    robotsPattern: /noindex,nofollow/i,
+  },
+  {
+    path: "/map",
+    title: MAP_TITLE,
+    description: MAP_DESCRIPTION,
+    canonicalHref: siteUrl("/map"),
+    robotsPattern: /noindex,nofollow/i,
+  },
+  {
+    path: "/air-sea",
+    title: AIR_SEA_TITLE,
+    description: AIR_SEA_DESCRIPTION,
+    canonicalHref: siteUrl("/air-sea"),
+    robotsPattern: /noindex,nofollow/i,
+  },
+  {
+    path: "/billing",
+    title: BILLING_TITLE,
+    description: BILLING_DESCRIPTION,
+    robotsPattern: /noindex,nofollow/i,
+  },
+  {
+    path: "/crm",
+    title: CRM_TITLE,
+    description: CRM_DESCRIPTION,
+    robotsPattern: /noindex,nofollow/i,
+  },
+  {
+    path: "/login",
+    title: LOGIN_TITLE,
+    description: LOGIN_DESCRIPTION,
+    robotsPattern: /noindex,nofollow/i,
+  },
+  {
+    path: "/signup",
+    title: SIGNUP_TITLE,
+    description: SIGNUP_DESCRIPTION,
+    robotsPattern: /noindex,nofollow/i,
+  },
+]);
+
+export const APP_ROUTE_FILE_CLASSIFICATION = Object.freeze({
+  "[...404].tsx": "browser-public-404",
+  "air-sea.tsx": "browser-authenticated",
+  "billing.tsx": "browser-authenticated",
+  "briefings.tsx": "browser-authenticated",
+  "crm.tsx": "browser-authenticated",
+  "index.tsx": "worker-shadowed-root",
+  "landing.tsx": "worker-shadowed-root",
+  "login.tsx": "browser-public-auth",
+  "map.tsx": "browser-authenticated",
+  "overview.tsx": "browser-authenticated",
+  "osint.tsx": "browser-authenticated",
+  "signup.tsx": "browser-public-auth",
+  "telegram.tsx": "browser-authenticated",
+});
+
+export const APP_API_ROUTES = Object.freeze([
+  "/api/intel",
+  "/api/briefings",
+  "/api/telegram",
+  "/api/air-sea",
+  "/api/whales",
+]);
+
+export const APP_API_FILE_CLASSIFICATION = Object.freeze({
+  "air-sea.ts": "/api/air-sea",
+  "briefings.ts": "/api/briefings",
+  "intel.ts": "/api/intel",
+  "telegram.ts": "/api/telegram",
+  "whales.ts": "/api/whales",
+});
+
+export const WORKER_SHADOWED_ROUTE_EXPECTATIONS = Object.freeze({
+  "index.tsx": { productionPath: "/" },
+  "landing.tsx": { productionPath: "/landing", expectedStatus: 404 },
+});
+
+export const EDGE_API_ROUTE_CLASSIFICATION = Object.freeze({
+  "/api/auth/turnstile/verify": "public-turnstile-verify",
+  "/api/webhooks/stripe": "public-webhook-contract",
+  "/api/cache-bust": "privileged-signed-admin",
+  "/api/scraper/trigger": "privileged-signed-admin",
+  "/api/auth/me": "session-probe",
+  "/api/auth/debug": "owner-diagnostics",
+  "/api/billing/status": "session-billing",
+  "/api/billing/start-trial": "session-billing-mutation",
+  "/api/billing/checkout": "session-billing-mutation",
+  "/api/billing/portal": "session-billing-mutation",
+  "/api/billing/activity": "session-billing",
+  "/api/admin/crm/overview": "owner-edge-crm",
+  "/api/admin/crm/customer": "owner-edge-crm-mutation",
+  "/api/admin/crm/cancel-subscription": "owner-edge-crm-mutation",
+  "/api/admin/crm/refund": "owner-edge-crm-mutation",
+  "/api/telegram/dedupe-feedback": "owner-telegram-dedupe",
+  "/api/telegram/stream": "session-telegram-stream",
+  "/api/status": "owner-ops-read",
+  "/api/telegram": "session-feed",
+  "/api/intel": "session-feed",
+  "/api/briefings": "session-feed",
+  "/api/whales": "owner-ops-read",
+  "/api/air-sea": "session-feed",
+  "/api/polymarket": "retired-endpoint",
+  "/api/drops": "retired-endpoint",
+  "/api/crypto": "retired-endpoint",
+  "/api/intel-dashboard/*": "backend-pass-through",
+  "/api/*": "api-catch-all-not-found",
+});
+
+export const BACKEND_ENDPOINT_CLASSIFICATION = Object.freeze({
+  "/": "backend-landing",
+  "/api/intel-dashboard/usage-data-source": "usage-rpc",
+  "/api/intel-dashboard/news": "token-protected-news",
+  "/api/intel-dashboard/news/publish": "admin-protected-news-publish",
+  "/api/intel-dashboard/billing/status": "token-protected-billing",
+  "/api/intel-dashboard/billing/start-trial": "token-protected-billing-mutation",
+  "/api/intel-dashboard/billing/subscribe": "admin-protected-billing-mutation",
+  "/api/intel-dashboard/billing/checkout": "token-protected-billing-mutation",
+  "/api/intel-dashboard/billing/portal": "token-protected-billing-mutation",
+  "/api/intel-dashboard/billing/activity": "token-protected-billing",
+  "/api/intel-dashboard/billing/webhook": "public-webhook-contract",
+  "/api/intel-dashboard/feature-gates": "token-protected-feature-gates",
+  "/api/intel-dashboard/user-info": "token-protected-user-info",
+  "/api/intel-dashboard/admin/crm/summary": "token-protected-owner-crm",
+  "/api/intel-dashboard/admin/crm/customer": "token-protected-owner-crm-mutation",
+  "/api/intel-dashboard/admin/crm/cancel-subscription": "token-protected-owner-crm-mutation",
+  "/api/intel-dashboard/admin/crm/refund": "token-protected-owner-crm-mutation",
+  "/api/intel-dashboard/sources": "token-protected-sources",
+  "/api/intel-dashboard/ai/jobs": "admin-protected-ai-jobs",
+  "/api/intel-dashboard/outbound/publish": "admin-protected-outbound",
+  "/api/intel-dashboard/usage-data-source/seed": "usage-seed",
+});

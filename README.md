@@ -57,7 +57,7 @@ Manual fallback commands:
 - `@codex review`
 - `@sourcery-ai review` only if Sourcery is intentionally kept active for this repo
 
-See [review-bots.md](/home/pyro1121/Documents/intel-dashboard/docs/review-bots.md) for the detailed reviewer policy and why this repo does not run a separate Codex GitHub Action.
+See [review-bots.md](docs/review-bots.md) for the detailed reviewer policy and why this repo does not run a separate Codex GitHub Action.
 
 ## E2E + TDD Gate
 
@@ -149,7 +149,7 @@ bun run deploy:backend
 ## Auth Health Check
 
 ```bash
-cd /home/pyro1121/Documents/intel-dashboard
+cd .
 bun run health:oauth
 ```
 
@@ -175,7 +175,7 @@ CLOUDFLARE_API_TOKEN=... bun run security:cf:clear-owner-e2e-ip
 
 GitHub Actions workflow:
 
-- [e2e-production.yml](/home/pyro1121/Documents/intel-dashboard/.github/workflows/e2e-production.yml)
+- [e2e-production.yml](.github/workflows/e2e-production.yml)
 
 Expected GitHub Actions secrets:
 
@@ -210,7 +210,7 @@ OAuth start routes (`/auth/login`, `/auth/signup`, `/auth/x/login`, `/auth/x/sig
 Required worker secrets:
 
 ```bash
-cd /home/pyro1121/Documents/intel-dashboard/apps/edge
+cd apps/edge
 wrangler secret put TURNSTILE_SITE_KEY
 wrangler secret put TURNSTILE_SECRET_KEY
 wrangler deploy

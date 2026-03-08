@@ -5,7 +5,7 @@ Scope: `src/`, `worker/src/`, `backend/src/`, deployment config, test coverage
 
 ## Executive Summary
 
-A focused deep-dive was completed on auth, subscription gating, and public data exposure. Three high-risk issues were identified and fixed in code: public backend feed exposure, anonymous delay bypass, and built-in owner fallback defaults. Current test suites are green after the fixes (`worker`: 19/19, `backend`: 49/49).
+A focused deep-dive was completed on auth, subscription gating, and public data exposure. Six high-risk issues and one medium-risk issue were identified and fixed in code. Current test suites are green after the fixes (`worker`: 19/19, `backend`: 51/51).
 
 ## Fixed This Pass
 
@@ -89,10 +89,9 @@ A focused deep-dive was completed on auth, subscription gating, and public data 
 ## Validation
 
 - `bun run typecheck` passed
-- `bun run typecheck:worker` passed
-- `bun run test:worker` passed (19/19)
-- `npm --prefix backend test` passed (49/49)
-- `npm --prefix backend test` passed (51/51)
+- `bun run typecheck:edge` passed
+- `bun run test:edge` passed (19/19)
+- `bun run test:backend` passed (51/51)
 
 ## Dependency Audit Snapshot
 
@@ -101,6 +100,6 @@ A focused deep-dive was completed on auth, subscription gating, and public data 
 - Backend production dependency audit remains clean (`0` vulnerabilities).
 
 Recommended actions:
-1. Keep `npm audit --omit=dev` and `npm --prefix worker audit --omit=dev` in release checklist.
+1. Keep `bun audit` and `bun audit --cwd apps/edge` in the release checklist.
 2. Keep backend dependency surface minimal and rerun `bun audit` after each dependency change.
 3. Re-run full regression (`test:all` + authenticated e2e) before each production deploy.

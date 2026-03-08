@@ -17,4 +17,4 @@ AI execution now supports both sync and async modes:
 
 Concurrency is environment-bounded at 10-20 parallel AI operations via `AI_PIPELINE_MAX_CONNECTIONS`, and async queue processing uses the `AI_JOB_QUEUE` binding.
 
-For current route ownership and runtime flow, see `ARCHITECTURE_INTEL_BACKEND.md`.
+For current route ownership and runtime flow, see [Production Architecture](../architecture/production-architecture.md).

@@ -2,6 +2,16 @@
 
 Bun-workspace monorepo for the Cloudflare-hosted Intel Dashboard platform on `intel.pyro1121.com`.
 
+## Documentation
+
+- [Documentation Index](docs/README.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security Policy](SECURITY.md)
+- [License](LICENSE)
+- [Production Architecture](docs/architecture/production-architecture.md)
+- [Workspace Overview](docs/reference/workspace-overview.md)
+- [Repository Standards](docs/reference/repository-standards.md)
+
 ## Workspace Layout
 
 - `apps/web` - SolidStart frontend
@@ -38,6 +48,16 @@ bun run billing:stripe:setup -- --help
 - Pull requests are expected to pass:
   - `CI / validate`
   - `PR Guard / enforce-pr-policy`
+
+## Support Matrix
+
+- Public repository: documentation, issue templates, and advisory review bots
+- Merge authority: human maintainer plus required CI gates
+- Security reports: private disclosure only through GitHub Security Advisories
+
+## License
+
+This repository is released under the [MIT License](LICENSE).
 
 ## Review Stack
 

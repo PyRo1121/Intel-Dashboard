@@ -7,6 +7,7 @@ Bun-workspace monorepo for the Cloudflare-hosted Intel Dashboard platform on `in
 - [Documentation Index](docs/README.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security Policy](SECURITY.md)
+- [License](LICENSE)
 - [Production Architecture](docs/architecture/production-architecture.md)
 - [Workspace Overview](docs/reference/workspace-overview.md)
 - [Repository Standards](docs/reference/repository-standards.md)
@@ -54,10 +55,9 @@ bun run billing:stripe:setup -- --help
 - Merge authority: human maintainer plus required CI gates
 - Security reports: private disclosure only through GitHub Security Advisories
 
-## Professional Gaps
+## License
 
-- The repository still needs an explicit `LICENSE` file before it is truly open source in a legal sense.
-- That choice should be made intentionally rather than guessed.
+This repository is released under the [MIT License](LICENSE).
 
 ## Review Stack
 

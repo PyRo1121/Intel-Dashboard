@@ -51,8 +51,8 @@ Summary snapshot:
 Post-change benchmark artifacts:
 - Immediate after deploy: `benchmarks/free-tier-post-deploy-immediate.json`
 - After tuning secrets: `benchmarks/free-tier-post-tuning.json`
-- Worldclass pass 1: `benchmarks/free-tier-post-worldclass-pass1.json`
-- Worldclass pass 2 rerun: `benchmarks/free-tier-post-worldclass-pass2-rerun.json`
+- World-class pass 1: `benchmarks/free-tier-post-worldclass-pass1.json`
+- World-class pass 2 rerun: `benchmarks/free-tier-post-worldclass-pass2-rerun.json`
 
 ## Free-Tier Constraints to Design Around
 

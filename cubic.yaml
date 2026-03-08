@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://cubic.dev/schema/cubic-repository-config.schema.json
+
+version: 1
+
+reviews:
+  enabled: true
+  sensitivity: medium
+  incremental_commits: false
+  check_drafts: false
+  architecture_diagrams: false
+  resolve_threads_when_addressed: true
+  custom_instructions: |
+    Review for correctness and operational safety first.
+
+    Priorities for this repository:
+    - Cloudflare Workers, Durable Objects, bindings, routing, auth, and deployment correctness
+    - Fail closed on auth, token, and webhook paths
+    - No fake-success paths or silent fallbacks unless explicitly intended
+    - Keep edge behavior, backend behavior, and shared business rules aligned
+    - Prefer root-cause fixes over symptom patches
+    - Require or suggest regression tests for behavior changes
+
+    Be conservative about style-only feedback when CI or formatting would already cover it.
+  ignore:
+    files:
+      - apps/web/.output/**
+      - apps/web/.vinxi/**
+      - apps/edge/.wrangler/**
+      - apps/backend/.wrangler/**
+      - output/**
+      - "**/worker-configuration.d.ts"
+      - apps/web/public/robots.txt
+      - apps/web/public/sitemap.xml
+    pr_labels:
+      - skip-review
+      - no-ai-cubic
+
+pr_descriptions:
+  generate: false
+
+issues:
+  fix_with_cubic_buttons: false

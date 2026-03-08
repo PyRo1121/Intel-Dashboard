@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
 
 function collectLockfiles() {
   const output = execFileSync(
@@ -53,33 +55,42 @@ if (offenders.length > 0) {
   process.exit(1);
 }
 
-let relativeSharedImports = "";
-try {
-  relativeSharedImports = execFileSync(
-    "rg",
-    [
-      "-n",
-      "from\\s+[\"'](?:\\.\\./)+packages/shared/",
-      "apps",
-      "e2e",
-      "scripts",
-      "--glob",
-      "!node_modules",
-    ],
-    { encoding: "utf8" },
-  );
-} catch (error) {
-  if (error && typeof error === "object" && "status" in error && error.status === 1) {
-    relativeSharedImports = "";
-  } else {
-    throw error;
+const textFileExtensions = new Set([".ts", ".tsx", ".js", ".mjs", ".cjs"]);
+const relativeImportPattern =
+  /\b(?:from|import(?:\s*\(|\s+)|require\s*\()\s*["'](?:\.\.\/)+packages\/shared(?:\/|["'])/;
+
+function walkFiles(rootDir) {
+  const results = [];
+  const entries = readdirSync(rootDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name === "node_modules") continue;
+    const fullPath = join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...walkFiles(fullPath));
+      continue;
+    }
+    const ext = entry.name.slice(entry.name.lastIndexOf("."));
+    if (textFileExtensions.has(ext)) {
+      results.push(fullPath);
+    }
   }
+  return results;
 }
 
-const importDrift = relativeSharedImports
-  .split("\n")
-  .map((line) => line.trim())
-  .filter(Boolean);
+const importDrift = [];
+
+for (const rootDir of ["apps", "e2e", "scripts"]) {
+  for (const file of walkFiles(rootDir)) {
+    const source = readFileSync(file, "utf8");
+    const lines = source.split("\n");
+    for (let index = 0; index < lines.length; index += 1) {
+      if (relativeImportPattern.test(lines[index])) {
+        importDrift.push(`${relative(process.cwd(), file)}:${index + 1}:${lines[index].trim()}`);
+      }
+      relativeImportPattern.lastIndex = 0;
+    }
+  }
+}
 
 if (importDrift.length > 0) {
   console.error("Workspace import drift detected. Use @intel-dashboard/shared package imports instead:");

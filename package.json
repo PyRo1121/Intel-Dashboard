@@ -45,7 +45,7 @@
     "e2e:save-secrets": "node --experimental-strip-types scripts/save-e2e-secrets.mjs",
     "admin:sign": "node --experimental-strip-types apps/edge/sign-admin-request.ts",
     "health:oauth": "node --experimental-strip-types apps/edge/test/oauth-health-check.ts",
-    "typegen:cf": "bunx wrangler types apps/edge/worker-configuration.d.ts -c apps/edge/wrangler.toml -c apps/backend/wrangler.jsonc && bunx wrangler types apps/backend/worker-configuration.d.ts -c apps/backend/wrangler.jsonc",
+    "typegen:cf": "apps/edge/node_modules/.bin/wrangler types apps/edge/worker-configuration.d.ts -c apps/edge/wrangler.toml -c apps/backend/wrangler.jsonc && apps/backend/node_modules/.bin/wrangler types apps/backend/worker-configuration.d.ts -c apps/backend/wrangler.jsonc",
     "deploy:edge": "bun run --cwd apps/edge deploy",
     "deploy:backend": "bun run --cwd apps/backend deploy"
   }

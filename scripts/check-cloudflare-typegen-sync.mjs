@@ -6,10 +6,12 @@ const root = process.cwd();
 
 const cases = [
   {
+    bin: "apps/edge/node_modules/.bin/wrangler",
     output: "apps/edge/worker-configuration.d.ts",
     args: ["wrangler", "types", "apps/edge/worker-configuration.d.ts", "-c", "apps/edge/wrangler.toml", "-c", "apps/backend/wrangler.jsonc"],
   },
   {
+    bin: "apps/backend/node_modules/.bin/wrangler",
     output: "apps/backend/worker-configuration.d.ts",
     args: ["wrangler", "types", "apps/backend/worker-configuration.d.ts", "-c", "apps/backend/wrangler.jsonc"],
   },
@@ -24,7 +26,7 @@ try {
     const outputPath = join(root, item.output);
     const original = readFileSync(outputPath, "utf8");
 
-    execFileSync("bunx", item.args, {
+    execFileSync(join(root, item.bin), item.args.slice(1), {
       cwd: root,
       stdio: "pipe",
       encoding: "utf8",

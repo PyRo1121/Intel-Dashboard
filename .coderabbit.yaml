@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: en-US
+tone_instructions: >
+  Review for correctness, regressions, security, and operational safety first.
+  Prefer direct, factual comments. Avoid low-value style feedback that CI or formatting
+  would catch.
+enable_free_tier: true
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: false
+  high_level_summary_in_walkthrough: false
+  review_status: true
+  review_details: false
+  commit_status: true
+  fail_commit_status: false
+  collapse_walkthrough: true
+  changed_files_summary: false
+  in_progress_fortune: false
+  poem: false
+  suggested_reviewers: false
+  auto_assign_reviewers: false
+  enable_prompt_for_ai_agents: false
+  path_filters:
+    - "!apps/web/.output/**"
+    - "!apps/web/.vinxi/**"
+    - "!apps/edge/.wrangler/**"
+    - "!apps/backend/.wrangler/**"
+    - "!output/**"
+    - "!**/worker-configuration.d.ts"
+  path_instructions:
+    - path: "apps/edge/**/*.ts"
+      instructions: >
+        Focus on Cloudflare Workers correctness: routes, auth, headers, Durable Objects,
+        bindings, service bindings, R2/KV/D1 usage, and deployment safety. Flag fake-success
+        paths and missing regression tests for behavior changes.
+    - path: "apps/backend/**/*.ts"
+      instructions: >
+        Focus on API contracts, queue behavior, auth enforcement, AI routing correctness,
+        and fail-closed behavior. Flag missing tests for changed request or response behavior.
+    - path: "apps/web/**/*.{ts,tsx}"
+      instructions: >
+        Focus on user-visible regressions, auth/session state alignment with edge behavior,
+        and duplicated business logic that should stay shared.
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 3
+    ignore_title_keywords:
+      - "WIP"
+      - "Draft"

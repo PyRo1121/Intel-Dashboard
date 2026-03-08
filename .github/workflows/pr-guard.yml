@@ -1,0 +1,43 @@
+name: PR Guard
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
+
+jobs:
+  enforce-pr-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce target branch and branch naming
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const baseRef = context.payload.pull_request.base.ref;
+            const headRef = context.payload.pull_request.head.ref;
+            const headRepo = context.payload.pull_request.head.repo;
+            const headOwner = headRepo?.owner?.login ?? null;
+            const repoOwner = context.repo.owner;
+            const headRepoFork = headRepo?.fork ?? false;
+            const authorType = context.payload.pull_request.user.type;
+            const allowed = /^(codex|feature|fix|chore|docs|refactor|hotfix|dependabot|renovate)\//;
+
+            if (baseRef !== 'main') {
+              core.setFailed(`Pull requests must target main. Received base branch: ${baseRef}`);
+              return;
+            }
+
+            if (authorType === 'Bot' || !headRepo || headRepoFork || headOwner !== repoOwner) {
+              core.info(`Skipping branch-prefix enforcement for ${authorType.toLowerCase()} or fork-based PR source: ${headRef}`);
+              return;
+            }
+
+            if (!allowed.test(headRef)) {
+              core.setFailed(
+                `Branch names must start with codex/, feature/, fix/, chore/, docs/, refactor/, hotfix/, dependabot/, or renovate/. Received: ${headRef}`,
+              );
+            }

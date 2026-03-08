@@ -21,6 +21,44 @@ bun run build:web
 bun run billing:stripe:setup -- --help
 ```
 
+## Branch Policy
+
+- `main` is the protected integration branch.
+- Direct pushes to `main` are not part of the normal workflow.
+- Changes should land through pull requests from branches named:
+  - `codex/*`
+  - `feature/*`
+  - `fix/*`
+  - `chore/*`
+  - `docs/*`
+  - `refactor/*`
+  - `hotfix/*`
+  - `dependabot/*`
+  - `renovate/*`
+- Pull requests are expected to pass:
+  - `CI / validate`
+  - `PR Guard / enforce-pr-policy`
+
+## Review Stack
+
+- `CodeRabbit` is the primary automatic AI reviewer.
+- `cubic` is the optional deeper second reviewer and should be used selectively for high-risk PRs.
+- `Codex` is manual/interactive only. Use `@codex review` when you want a second opinion without adding another always-on review lane.
+- `Sourcery` is optional. If it remains installed, treat it as an extra opinion rather than a merge gate.
+- AI reviews are advisory only. Merge authority stays with:
+  - human approval
+  - `CI / validate`
+  - `PR Guard / enforce-pr-policy`
+
+Manual fallback commands:
+
+- `@coderabbitai review`
+- `@cubic-dev-ai review this PR`
+- `@codex review`
+- `@sourcery-ai review` only if Sourcery is intentionally kept active for this repo
+
+See [review-bots.md](docs/review-bots.md) for the detailed reviewer policy and why this repo does not run a separate Codex GitHub Action.
+
 ## E2E + TDD Gate
 
 - Default smoke E2E: `bun run test:e2e`
@@ -111,7 +149,7 @@ bun run deploy:backend
 ## Auth Health Check
 
 ```bash
-cd /home/pyro1121/Documents/intel-dashboard
+cd .
 bun run health:oauth
 ```
 
@@ -137,7 +175,7 @@ CLOUDFLARE_API_TOKEN=... bun run security:cf:clear-owner-e2e-ip
 
 GitHub Actions workflow:
 
-- [e2e-production.yml](/home/pyro1121/Documents/intel-dashboard/.github/workflows/e2e-production.yml)
+- [e2e-production.yml](.github/workflows/e2e-production.yml)
 
 Expected GitHub Actions secrets:
 
@@ -172,7 +210,7 @@ OAuth start routes (`/auth/login`, `/auth/signup`, `/auth/x/login`, `/auth/x/sig
 Required worker secrets:
 
 ```bash
-cd /home/pyro1121/Documents/intel-dashboard/apps/edge
+cd apps/edge
 wrangler secret put TURNSTILE_SITE_KEY
 wrangler secret put TURNSTILE_SECRET_KEY
 wrangler deploy

@@ -3172,13 +3172,21 @@ async function invokeAiGatewayDetailed(args: {
           ),
   }));
 
+  const schemaCacheKey =
+    args.jsonSchema === undefined
+      ? null
+      : {
+          name: args.jsonSchema.name,
+          hash: await sha256Hex(stableStringify(args.jsonSchema.schema)),
+        };
+
   let cacheKey: string | undefined;
   if (cacheTtlSeconds > 0) {
     const cachePayload = stableStringify({
       model: route.model,
       expectJson: args.expectJson,
       hint: args.cacheHint ?? "default",
-      schema: args.jsonSchema?.name ?? null,
+      schema: schemaCacheKey,
       messages: normalizedMessagesForCache,
     });
     cacheKey = `intel:${await sha256Hex(cachePayload)}`;

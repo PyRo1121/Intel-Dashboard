@@ -33,6 +33,8 @@ bun run billing:stripe:setup -- --help
   - `docs/*`
   - `refactor/*`
   - `hotfix/*`
+  - `dependabot/*`
+  - `renovate/*`
 - Pull requests are expected to pass:
   - `CI / validate`
   - `PR Guard / enforce-pr-policy`

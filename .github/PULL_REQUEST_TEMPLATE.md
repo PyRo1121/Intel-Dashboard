@@ -17,8 +17,9 @@
 
 ## Review
 
-- Automated review bots are triggered on PR events.
-- If this is the first bootstrap PR or a bot missed the event, add:
-  - `@coderabbitai review`
-  - `@sourcery-ai review`
-  - `@cubic-dev-ai review this PR`
+- CodeRabbit is the primary automatic AI reviewer for this repo.
+- Manual fallback commands only when needed:
+  - `@coderabbitai review` if CodeRabbit missed the PR or paused after repeated pushes
+  - `@cubic-dev-ai review this PR` for a deeper second opinion on high-risk changes
+  - `@codex review` for a manual Codex second opinion
+  - `@sourcery-ai review` only if Sourcery is still installed and you explicitly want an additional review

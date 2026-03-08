@@ -38,10 +38,26 @@ bun run billing:stripe:setup -- --help
 - Pull requests are expected to pass:
   - `CI / validate`
   - `PR Guard / enforce-pr-policy`
-- PR review bots are auto-tagged on PR events. For the first bootstrap PR or if a bot misses a trigger, comment:
-  - `@coderabbitai review`
-  - `@sourcery-ai review`
-  - `@cubic-dev-ai review this PR`
+
+## Review Stack
+
+- `CodeRabbit` is the primary automatic AI reviewer.
+- `cubic` is the optional deeper second reviewer and should be used selectively for high-risk PRs.
+- `Codex` is manual/interactive only. Use `@codex review` when you want a second opinion without adding another always-on review lane.
+- `Sourcery` is optional. If it remains installed, treat it as an extra opinion rather than a merge gate.
+- AI reviews are advisory only. Merge authority stays with:
+  - human approval
+  - `CI / validate`
+  - `PR Guard / enforce-pr-policy`
+
+Manual fallback commands:
+
+- `@coderabbitai review`
+- `@cubic-dev-ai review this PR`
+- `@codex review`
+- `@sourcery-ai review` only if Sourcery is intentionally kept active for this repo
+
+See [review-bots.md](/home/pyro1121/Documents/intel-dashboard/docs/review-bots.md) for the detailed reviewer policy and why this repo does not run a separate Codex GitHub Action.
 
 ## E2E + TDD Gate
 

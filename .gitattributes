@@ -1,0 +1,4 @@
+apps/edge/worker-configuration.d.ts linguist-generated=true
+apps/backend/worker-configuration.d.ts linguist-generated=true
+apps/web/public/robots.txt linguist-generated=true
+apps/web/public/sitemap.xml linguist-generated=true

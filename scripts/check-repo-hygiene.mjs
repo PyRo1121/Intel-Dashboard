@@ -56,7 +56,8 @@ if (offenders.length > 0) {
 }
 
 const textFileExtensions = new Set([".ts", ".tsx", ".js", ".mjs", ".cjs"]);
-const relativeImportPattern = /from\s+["'](?:\.\.\/)+packages\/shared\//;
+const relativeImportPattern =
+  /\b(?:from|import(?:\s*\(|\s+)|require\s*\()\s*["'](?:\.\.\/)+packages\/shared(?:\/|["'])/;
 
 function walkFiles(rootDir) {
   const results = [];

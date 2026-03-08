@@ -21,6 +21,26 @@ bun run build:web
 bun run billing:stripe:setup -- --help
 ```
 
+## Branch Policy
+
+- `main` is the protected integration branch.
+- Direct pushes to `main` are not part of the normal workflow.
+- Changes should land through pull requests from branches named:
+  - `codex/*`
+  - `feature/*`
+  - `fix/*`
+  - `chore/*`
+  - `docs/*`
+  - `refactor/*`
+  - `hotfix/*`
+- Pull requests are expected to pass:
+  - `CI / validate`
+  - `PR Guard / enforce-pr-policy`
+- PR review bots are auto-tagged on PR events. For the first bootstrap PR or if a bot misses a trigger, comment:
+  - `@coderabbitai review`
+  - `@sourcery-ai review`
+  - `@cubic-dev-ai review this PR`
+
 ## E2E + TDD Gate
 
 - Default smoke E2E: `bun run test:e2e`

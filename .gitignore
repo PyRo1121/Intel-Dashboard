@@ -10,6 +10,12 @@ apps/edge/.wrangler
 apps/backend/.wrangler
 output/
 output/e2e-browser/
+coverage/
+test-results/
+playwright-report/
+.cache/
+.tmp/
+*.log
 app.config.timestamp_*.js
 package-lock.json
 pnpm-lock.yaml

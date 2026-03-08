@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolveE2eEnvCandidates } from "./e2e-env-path.mjs";
-import { SITE_ORIGIN } from "../shared/site-config.ts";
+import { SITE_ORIGIN } from "../packages/shared/site-config.ts";
 
 const root = process.cwd();
 const envName = process.env.E2E_ENV_NAME?.trim() || "e2e";

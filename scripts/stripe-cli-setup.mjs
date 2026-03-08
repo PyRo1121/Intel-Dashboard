@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { SITE_ORIGIN, siteUrl } from "../shared/site-config.ts";
+import { SITE_ORIGIN, siteUrl } from "../packages/shared/site-config.ts";
 
 function parseArgs(argv) {
   const out = {
     apply: false,
     monthlyUsd: 8,
     appOrigin: SITE_ORIGIN,
-    workerConfig: "worker/wrangler.toml",
-    backendConfig: "backend/wrangler.jsonc",
+    workerConfig: "apps/edge/wrangler.toml",
+    backendConfig: "apps/backend/wrangler.jsonc",
     workerEnv: "",
     backendEnv: "",
     productName: "SentinelStream Pro",

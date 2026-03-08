@@ -2,14 +2,14 @@
 import { readFileSync, existsSync } from "node:fs";
 
 const WRANGLER_FILES = [
-  "worker/wrangler.toml",
-  "backend/wrangler.jsonc",
+  "apps/edge/wrangler.toml",
+  "apps/backend/wrangler.jsonc",
 ];
 
 const ENV_FILES = [
   ".env",
-  "worker/.env",
-  "backend/.env",
+  "apps/edge/.env",
+  "apps/backend/.env",
 ];
 
 const errors = [];

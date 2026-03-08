@@ -2,7 +2,7 @@
 import { performance } from "node:perf_hooks";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { BACKEND_E2E_ORIGIN, SITE_ORIGIN } from "../shared/site-config.ts";
+import { BACKEND_E2E_ORIGIN, SITE_ORIGIN } from "../packages/shared/site-config.ts";
 
 const DEFAULT_EDGE_BASE = SITE_ORIGIN;
 const DEFAULT_BACKEND_BASE = BACKEND_E2E_ORIGIN;

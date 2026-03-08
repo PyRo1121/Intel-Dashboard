@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
-import { FREE_FEED_DELAY_MINUTES } from "../shared/access-offers.ts";
-import { SITE_ORIGIN } from "../shared/site-config.ts";
+import { FREE_FEED_DELAY_MINUTES } from "../packages/shared/access-offers.ts";
+import { SITE_ORIGIN } from "../packages/shared/site-config.ts";
 import { WORKER_SHADOWED_ROUTE_EXPECTATIONS } from "./coverage-manifest.mjs";
 
 const REQUEST_TIMEOUT_MS = 20_000;

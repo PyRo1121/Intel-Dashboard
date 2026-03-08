@@ -1,9 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { buildRobotsTxt, buildSitemapXml } from "../shared/seo-assets.ts";
+import { buildRobotsTxt, buildSitemapXml } from "../packages/shared/seo-assets.ts";
 
 const rootDir = path.resolve(import.meta.dirname, "..");
-const publicDir = path.join(rootDir, "public");
+const publicDir = path.join(rootDir, "apps", "web", "public");
 const now = new Date().toISOString();
 
 await mkdir(publicDir, { recursive: true });

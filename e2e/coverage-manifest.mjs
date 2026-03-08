@@ -1,4 +1,4 @@
-import { DASHBOARD_HOME_PATH } from "../shared/auth-next-routes.ts";
+import { DASHBOARD_HOME_PATH } from "../packages/shared/auth-next-routes.ts";
 import {
   AIR_SEA_DESCRIPTION,
   AIR_SEA_TITLE,
@@ -23,8 +23,8 @@ import {
   SIGNUP_TITLE,
   TELEGRAM_DESCRIPTION,
   TELEGRAM_TITLE,
-} from "../shared/route-meta.ts";
-import { siteUrl } from "../shared/site-config.ts";
+} from "../packages/shared/route-meta.ts";
+import { siteUrl } from "../packages/shared/site-config.ts";
 
 export const AUTHENTICATED_BROWSER_ROUTES = Object.freeze([
   { path: DASHBOARD_HOME_PATH, heading: "SentinelStream Command Overview" },

@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import { chromium } from "@playwright/test";
-import { SITE_ORIGIN } from "../shared/site-config.ts";
+import { SITE_ORIGIN } from "../packages/shared/site-config.ts";
 import {
   AUTHENTICATED_BROWSER_NOERROR_ROUTES,
   AUTHENTICATED_BROWSER_ROUTES,

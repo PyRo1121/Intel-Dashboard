@@ -6,12 +6,12 @@ const root = process.cwd();
 
 const cases = [
   {
-    output: "worker/worker-configuration.d.ts",
-    args: ["wrangler", "types", "worker/worker-configuration.d.ts", "-c", "worker/wrangler.toml", "-c", "backend/wrangler.jsonc"],
+    output: "apps/edge/worker-configuration.d.ts",
+    args: ["wrangler", "types", "apps/edge/worker-configuration.d.ts", "-c", "apps/edge/wrangler.toml", "-c", "apps/backend/wrangler.jsonc"],
   },
   {
-    output: "backend/worker-configuration.d.ts",
-    args: ["wrangler", "types", "backend/worker-configuration.d.ts", "-c", "backend/wrangler.jsonc"],
+    output: "apps/backend/worker-configuration.d.ts",
+    args: ["wrangler", "types", "apps/backend/worker-configuration.d.ts", "-c", "apps/backend/wrangler.jsonc"],
   },
 ];
 

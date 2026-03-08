@@ -16,7 +16,7 @@ import {
 } from "./coverage-manifest.mjs";
 
 test("route coverage manifest classifies every top-level app route file", () => {
-  const routeFiles = readdirSync("src/routes", { withFileTypes: true })
+  const routeFiles = readdirSync("apps/web/src/routes", { withFileTypes: true })
     .filter((entry) => entry.isFile())
     .map((entry) => entry.name)
     .sort();
@@ -26,7 +26,7 @@ test("route coverage manifest classifies every top-level app route file", () => 
 });
 
 test("route coverage manifest classifies every app api route file", () => {
-  const apiFiles = readdirSync("src/routes/api", { withFileTypes: true })
+  const apiFiles = readdirSync("apps/web/src/routes/api", { withFileTypes: true })
     .filter((entry) => entry.isFile())
     .map((entry) => entry.name)
     .sort();
@@ -79,7 +79,7 @@ test("browser route manifests stay aligned with classified production paths", ()
 
 test("edge api coverage manifest stays aligned with worker route declarations", async () => {
   const { readFileSync } = await import("node:fs");
-  const workerSource = readFileSync("worker/src/index.ts", "utf8");
+  const workerSource = readFileSync("apps/edge/src/index.ts", "utf8");
   const detected = new Set();
 
   for (const match of workerSource.matchAll(/path\s*===\s*"([^"]+)"/g)) {
@@ -112,7 +112,7 @@ test("edge api coverage manifest stays aligned with worker route declarations", 
 
 test("backend endpoint coverage manifest stays aligned with backend path constants", async () => {
   const { readFileSync } = await import("node:fs");
-  const backendSource = readFileSync("backend/src/index.ts", "utf8");
+  const backendSource = readFileSync("apps/backend/src/index.ts", "utf8");
   const detected = new Set(["/"]);
   let endpointPath = null;
   let seedSuffix = null;

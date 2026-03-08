@@ -35,7 +35,7 @@ function printUsage(): void {
   process.stdout.write(
     [
       "Usage:",
-      "  node --experimental-strip-types worker/sign-admin-request.ts --path /api/cache-bust --secret <CACHE_BUST_SECRET> [options]",
+      "  node --experimental-strip-types apps/edge/sign-admin-request.ts --path /api/cache-bust --secret <CACHE_BUST_SECRET> [options]",
       "",
       "Options:",
       "  --path <path>           Required request path to sign (for example /api/cache-bust)",

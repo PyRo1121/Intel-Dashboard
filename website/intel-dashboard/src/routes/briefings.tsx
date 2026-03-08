@@ -1,15 +1,20 @@
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
+import { Title, Meta, Link } from "@solidjs/meta";
 import type { Briefing } from "~/lib/types";
 import {
-  buildFreshnessStatus,
+  buildFreshnessStatusAt,
   freshnessBannerTone,
   freshnessPillTone,
   freshnessTooltip,
   maxIsoTimestamp,
   useFreshnessTransitionNotice,
 } from "~/lib/freshness";
-import { useLiveRefresh } from "~/lib/live-refresh";
+import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
+import { formatAgeCompactFromMs } from "~/lib/utils";
 import { FileText, ChevronDown, Clock, Send } from "lucide-solid";
+import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
+import { BRIEFINGS_DESCRIPTION, BRIEFINGS_TITLE } from "../../shared/route-meta.ts";
+import { siteUrl } from "../../shared/site-config.ts";
 
 async function loadBriefings(): Promise<Briefing[]> {
   try {
@@ -29,22 +34,29 @@ export default function Briefings() {
   const [briefings, { refetch }] = createResource(loadBriefings, { initialValue: [] as Briefing[] });
   const [expanded, setExpanded] = createSignal<string | null>(null);
   const feedThresholds = { liveMaxMinutes: 240, delayedMaxMinutes: 480 } as const;
+  const nowMs = useWallClock(1000);
 
   useLiveRefresh(() => {
     void refetch();
-  }, 120_000, { runImmediately: false });
+  }, 120_000, { runImmediately: true });
 
   const items = () => briefings.latest ?? briefings() ?? [];
   const loadingInitial = () => briefings.state === "refreshing" && items().length === 0;
   const latestBriefingTs = createMemo(() => maxIsoTimestamp(items().map((briefing) => briefing.timestamp)));
   const feedFreshness = createMemo(() =>
-    buildFreshnessStatus(latestBriefingTs(), feedThresholds, {
+    buildFreshnessStatusAt(nowMs(), latestBriefingTs(), feedThresholds, {
       noData: "No briefings",
       live: "On schedule",
       delayed: "Late",
       stale: "Stale",
     }),
   );
+  const latestFeedAgeMs = createMemo(() => {
+    const ts = latestBriefingTs();
+    if (!ts) return null;
+    return Math.max(0, nowMs() - ts);
+  });
+  const latestFeedAgeLabel = createMemo(() => formatAgeCompactFromMs(latestFeedAgeMs()));
   const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "Briefing feed");
 
   const formatBriefingTime = (ts: string) => {
@@ -78,25 +90,36 @@ export default function Briefings() {
     setExpanded((prev) => (prev === id ? null : id));
 
   return (
-    <div class="space-y-6 animate-fade-in">
+    <>
+      <Title>{BRIEFINGS_TITLE}</Title>
+      <Meta name="description" content={BRIEFINGS_DESCRIPTION} />
+      <Meta property="og:title" content={BRIEFINGS_TITLE} />
+      <Meta property="og:description" content={BRIEFINGS_DESCRIPTION} />
+      <Meta property="og:url" content={siteUrl("/briefings")} />
+      <Meta property="og:type" content="website" />
+      <Meta name="twitter:card" content="summary_large_image" />
+      <Meta name="twitter:title" content={BRIEFINGS_TITLE} />
+      <Meta name="twitter:description" content={BRIEFINGS_DESCRIPTION} />
+      <Link rel="canonical" href={siteUrl("/briefings")} />
+      <div class="intel-page">
       {/* Header */}
-      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+      <header class="intel-page-header">
         <div>
           <div class="flex items-center gap-2 mb-2">
-            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+            <div class="intel-badge">
               <Send size={11} class="text-emerald-400" />
-              <span class="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">Auto-Generated</span>
+              Auto-Generated
             </div>
           </div>
-          <h1 class="text-3xl font-bold text-white tracking-tight">Briefings</h1>
-          <p class="text-sm text-zinc-500 mt-1.5">
+          <h1 class="intel-heading">Briefings</h1>
+          <p class="intel-subheading">
             AI-generated intelligence briefings delivered every 4 hours via Telegram
           </p>
         </div>
         <div class="flex items-center gap-2">
           <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
             Briefings: {feedFreshness().label}
-            <Show when={feedFreshness().minutes !== null}> ({feedFreshness().minutes}m)</Show>
+            <Show when={latestFeedAgeMs() !== null}> ({latestFeedAgeLabel()})</Show>
           </span>
           <Show when={items().length > 0}>
             <div class="flex items-center gap-1 p-1 surface-card rounded-2xl">
@@ -107,7 +130,7 @@ export default function Briefings() {
             </div>
           </Show>
         </div>
-      </div>
+      </header>
 
       <Show when={freshnessNotice()}>
         {(notice) => (
@@ -120,6 +143,8 @@ export default function Briefings() {
           </section>
         )}
       </Show>
+
+      <FeedAccessNotice surface="Briefings" />
 
       <Show
         when={!loadingInitial()}
@@ -150,7 +175,7 @@ export default function Briefings() {
               </h3>
               <p class="text-[12px] text-zinc-600 max-w-md mx-auto">
                 Intelligence briefings are generated every 4 hours (0/4/8/12/16/20 UTC) and delivered to Telegram.
-                They will appear here once the first briefing cycle completes. You can also check your Telegram bot @PyRo1121Bot.
+                They will appear here once the first briefing cycle completes.
               </p>
             </div>
           }
@@ -262,6 +287,7 @@ export default function Briefings() {
           </div>
         </Show>
       </Show>
-    </div>
+      </div>
+    </>
   );
 }

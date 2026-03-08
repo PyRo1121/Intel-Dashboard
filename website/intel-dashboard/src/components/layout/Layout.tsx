@@ -1,6 +1,6 @@
 import { createSignal, onMount, onCleanup, type JSX } from "solid-js";
 
-export default function Layout(props: { children: JSX.Element }) {
+export default function Layout(props: { children: JSX.Element; noSidebar?: boolean }) {
   const readStoredCollapsed = (): boolean => {
     if (typeof window === "undefined") return false;
     const storage = window.localStorage;
@@ -33,7 +33,7 @@ export default function Layout(props: { children: JSX.Element }) {
   return (
     <main
       class={`flex-1 min-h-screen relative z-10 p-6 md:p-8 transition-[margin-left] duration-300 ease-[var(--ease-out-expo)] ${
-        collapsed() ? "md:ml-16" : "md:ml-[17rem]"
+        props.noSidebar ? "md:ml-0" : collapsed() ? "md:ml-16" : "md:ml-[17rem]"
       }`}
     >
       {props.children}

@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /auth/
+Disallow: /oauth/
+Disallow: /login
+Disallow: /signup
+Disallow: /chat-history
+
+Sitemap: https://intel.pyro1121.com/sitemap.xml

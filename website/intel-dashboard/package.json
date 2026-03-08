@@ -3,8 +3,34 @@
   "type": "module",
   "scripts": {
     "dev": "vinxi dev --port 3200",
-    "build": "vinxi build",
-    "start": "vinxi start"
+    "build": "npm run generate:seo-assets && vinxi build",
+    "generate:seo-assets": "node --experimental-strip-types scripts/generate-seo-assets.ts",
+    "start": "vinxi start",
+    "check:secrets": "node scripts/check-wrangler-secrets.mjs",
+    "check:typegen": "node scripts/check-cloudflare-typegen-sync.mjs",
+    "check:e2e-live": "node --experimental-strip-types scripts/check-e2e-live-config.mjs",
+    "bench:latency": "node --experimental-strip-types scripts/benchmark-latency.mjs",
+    "bench:assert": "node scripts/compare-benchmarks.mjs",
+    "security:cf:apply": "node scripts/cloudflare-hardening.mjs",
+    "security:cf:verify": "node scripts/cloudflare-security-verify.mjs",
+    "security:cf:allow-owner-e2e-ip": "node scripts/cloudflare-allow-owner-e2e-ip.mjs",
+    "security:cf:clear-owner-e2e-ip": "node scripts/cloudflare-clear-owner-e2e-ip.mjs",
+    "billing:stripe:setup": "node --experimental-strip-types scripts/stripe-cli-setup.mjs",
+    "e2e:save-secrets": "node --experimental-strip-types scripts/save-e2e-secrets.mjs",
+    "admin:sign": "node --experimental-strip-types worker/sign-admin-request.ts",
+    "health:oauth": "node --experimental-strip-types worker/test/oauth-health-check.ts",
+    "test:app": "node --experimental-strip-types --experimental-specifier-resolution=node --test src/lib/*.test.ts",
+    "test:worker": "node --experimental-strip-types --test worker/test/*.test.ts",
+    "test:e2e": "node scripts/run-e2e-with-dev-vars.mjs",
+    "test:e2e:browser": "node scripts/run-e2e-with-dev-vars.mjs --test e2e/browser-smoke.test.mjs",
+    "test:e2e:strict": "E2E_STRICT=1 node scripts/run-e2e-with-dev-vars.mjs",
+    "test:e2e:auth": "E2E_STRICT=1 E2E_REQUIRE_AUTH=1 node scripts/run-e2e-with-dev-vars.mjs",
+    "test:all": "npm run check:secrets && npm run check:typegen && npm run typecheck && npm run typecheck:worker && npm run test:app && npm run test:worker && npm --prefix backend test && npm run test:e2e && npm run test:e2e:browser",
+    "test:all:strict": "npm run check:secrets && npm run check:typegen && npm run typecheck && npm run typecheck:worker && npm run test:app && npm run test:worker && npm --prefix backend test && npm run test:e2e:strict && npm run test:e2e:browser",
+    "test:all:live": "E2E_STRICT=1 E2E_REQUIRE_AUTH=1 npm run check:e2e-live && npm run test:all",
+    "typegen:cf": "npx wrangler types worker/worker-configuration.d.ts -c worker/wrangler.toml -c backend/wrangler.jsonc && npx wrangler types backend/worker-configuration.d.ts -c backend/wrangler.jsonc",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:worker": "tsc --noEmit -p worker/tsconfig.json"
   },
   "dependencies": {
     "@kobalte/core": "^0.13.11",
@@ -12,22 +38,28 @@
     "@solid-primitives/media": "^2.3.3",
     "@solid-primitives/resize-observer": "^2.1.3",
     "@solid-primitives/scroll": "^2.1.3",
+    "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.15.0",
     "@solidjs/start": "^1.1.0",
     "leaflet": "^1.9.4",
     "lightweight-charts": "^5.1.0",
-    "lucide-solid": "^0.575.0",
+    "lucide-solid": "^0.563.0",
     "solid-js": "^1.9.5",
     "solid-motionone": "^1.0.4",
     "solid-transition-group": "^0.3.0",
     "vinxi": "^0.5.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/vite": "^4.0.7",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^24.5.2",
     "tailwindcss": "^4.0.7",
-    "wrangler": "^4.65.0"
+    "wrangler": "^4.70.0"
+  },
+  "overrides": {
+    "h3": "1.15.5",
+    "serialize-javascript": "7.0.4"
   },
   "engines": {
     "node": ">=22"

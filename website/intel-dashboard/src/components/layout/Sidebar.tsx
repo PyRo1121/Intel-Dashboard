@@ -22,8 +22,14 @@ import {
   X,
   Activity,
   LogOut,
+  CreditCard,
+  Users,
 } from "lucide-solid";
 import { useAuth } from "~/lib/auth";
+import { DASHBOARD_HOME_PATH } from "../../../shared/auth-next-routes.ts";
+import { formatDelayMinutesShortLabel, UPGRADE_INSTANT_FEED_LABEL } from "../../../shared/access-offers.ts";
+import { entitlementTierTone, formatEntitlementTier, isEntitledRole } from "../../../shared/entitlement.ts";
+import { SITE_NAME, SITE_OPERATIONS_LABEL } from "../../../shared/site-config.ts";
 
 // ============================================================================
 // Types
@@ -40,14 +46,16 @@ interface NavItem {
 // ============================================================================
 
 const mainNavItems: NavItem[] = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
+  { href: DASHBOARD_HOME_PATH, label: "Overview", icon: LayoutDashboard },
   { href: "/osint", label: "OSINT Feed", icon: Radio },
   { href: "/map", label: "Threat Map", icon: Globe },
   { href: "/air-sea", label: "Air/Sea Ops", icon: Anchor },
   { href: "/briefings", label: "Briefings", icon: FileText },
   { href: "/telegram", label: "Telegram", icon: MessageSquare },
-  { href: "/chat-history", label: "Chat History", icon: MessageSquare },
+  { href: "/billing", label: "Billing", icon: CreditCard },
 ];
+
+const ownerNavItem: NavItem = { href: "/crm", label: "CRM", icon: Users };
 
 // ============================================================================
 // Component
@@ -55,6 +63,7 @@ const mainNavItems: NavItem[] = [
 
 export default function Sidebar() {
   const location = useLocation();
+  const auth = useAuth();
 
   const readStoredCollapsed = (): boolean => {
     if (typeof window === "undefined") return false;
@@ -99,14 +108,19 @@ export default function Sidebar() {
     return location.pathname.startsWith(href);
   };
 
-  const renderNavItem = (item: NavItem, index: number) => {
+  const role = () => (auth.user()?.entitlement?.role || auth.user()?.entitlement?.tier || "free").toLowerCase();
+  const navItems = () => (role() === "owner" ? [...mainNavItems, ownerNavItem] : mainNavItems);
+
+  const renderNavItem = (item: NavItem, index: number, opts?: { collapsed?: boolean }) => {
+    const compact = opts?.collapsed === true;
     const active = () => isActive(item.href);
 
     return (
       <A
         href={item.href}
+        aria-label={item.label}
         class={`group relative flex items-center gap-3 rounded-2xl transition-all duration-300 ease-out ${
-          collapsed()
+          compact
             ? "justify-center px-3 py-3"
             : "px-3.5 py-2.5"
         } ${
@@ -132,7 +146,7 @@ export default function Sidebar() {
           <item.icon size={18} />
         </div>
 
-        <Show when={!collapsed()}>
+        <Show when={!compact}>
           <span
             class={`text-[13px] font-medium flex-1 truncate transition-colors duration-200 ${
               active() ? "text-white" : ""
@@ -143,8 +157,8 @@ export default function Sidebar() {
         </Show>
 
         {/* Collapsed tooltip */}
-        <Show when={collapsed()}>
-          <div class="absolute left-full ml-3 px-3 py-1.5 bg-zinc-900/95 backdrop-blur-xl border border-white/10 text-zinc-200 text-xs font-medium rounded-xl opacity-0 pointer-events-none group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-50 shadow-2xl shadow-black/50">
+        <Show when={compact}>
+          <div aria-hidden="true" class="absolute left-full ml-3 px-3 py-1.5 bg-zinc-900/95 backdrop-blur-xl border border-white/10 text-zinc-200 text-xs font-medium rounded-xl opacity-0 pointer-events-none group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-50 shadow-2xl shadow-black/50">
             {item.label}
           </div>
         </Show>
@@ -152,36 +166,43 @@ export default function Sidebar() {
     );
   };
 
-  const SidebarContent = () => (
+  const SidebarContent = (opts?: { collapsed?: boolean; mobile?: boolean }) => {
+    const compact = () => opts?.collapsed === true;
+    const isMobile = () => opts?.mobile === true;
+    return (
     <div class="flex flex-col h-full">
       {/* Brand */}
       <div
         class={`flex items-center ${
-          collapsed() ? "justify-center px-3 py-5" : "justify-between px-5 py-5"
+          compact() ? "justify-center px-3 py-5" : "justify-between px-5 py-5"
         }`}
       >
-        <A href="/" class="flex items-center gap-3 group">
+        <A href={DASHBOARD_HOME_PATH} aria-label="SentinelStream dashboard home" class="flex items-center gap-3 group">
           <div class="relative">
             <div class="w-10 h-10 rounded-2xl gradient-accent flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:shadow-emerald-500/30 transition-all duration-300 group-hover:scale-105">
               <Shield size={18} class="text-white drop-shadow-sm" />
             </div>
             <div class="absolute -inset-1 rounded-2xl bg-emerald-500/10 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10" />
           </div>
-          <Show when={!collapsed()}>
+          <Show when={!compact()}>
             <div class="flex flex-col">
               <span class="text-[15px] font-bold text-white tracking-tight leading-none">
-                PyRoBOT
+                {SITE_NAME}
               </span>
               <span class="text-[10px] font-medium text-zinc-600 tracking-widest uppercase mt-0.5">
-                Intel Platform
+                {SITE_OPERATIONS_LABEL}
               </span>
             </div>
           </Show>
         </A>
 
-        <Show when={!collapsed()}>
+        <Show when={!compact() && !isMobile()}>
           <button
+            type="button"
             onClick={() => setCollapsed(true)}
+            aria-label="Collapse sidebar"
+            aria-controls="desktop-navigation"
+            aria-expanded={!collapsed()}
             class="hidden md:flex items-center justify-center w-8 h-8 rounded-xl text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04] transition-all duration-200"
             title="Collapse sidebar (Ctrl+B)"
           >
@@ -191,13 +212,17 @@ export default function Sidebar() {
       </div>
 
       {/* Separator */}
-      <div class={`h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent ${collapsed() ? "mx-2" : "mx-4"}`} />
+      <div class={`h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent ${compact() ? "mx-2" : "mx-4"}`} />
 
       {/* Expand button when collapsed */}
-      <Show when={collapsed()}>
+      <Show when={compact() && !isMobile()}>
         <div class="flex justify-center px-3 pt-4 pb-1">
           <button
+            type="button"
             onClick={() => setCollapsed(false)}
+            aria-label="Expand sidebar"
+            aria-controls="desktop-navigation"
+            aria-expanded={!collapsed()}
             class="flex items-center justify-center w-8 h-8 rounded-xl text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04] transition-all duration-200"
             title="Expand sidebar (Ctrl+B)"
           >
@@ -208,49 +233,98 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        <Show when={!collapsed()}>
+        <Show when={!compact()}>
           <p class="text-[10px] font-semibold text-zinc-700 uppercase tracking-[0.15em] px-3.5 mb-2">
             Navigation
           </p>
         </Show>
-        <For each={mainNavItems}>
-          {(item, index) => renderNavItem(item, index())}
+        <For each={navItems()}>
+          {(item, index) => renderNavItem(item, index(), { collapsed: compact() })}
         </For>
       </nav>
 
       {/* User + Status footer */}
-      <div class={`border-t border-white/[0.04] ${collapsed() ? "px-3 py-3" : "px-4 py-3"} space-y-3`}>
+      <div class={`border-t border-white/[0.04] ${compact() ? "px-3 py-3" : "px-4 py-3"} space-y-3`}>
         {/* User profile */}
         {(() => {
           try {
-            const { user, logout } = useAuth();
-            const u = user();
+            const u = auth.user();
             return (
               <Show when={u}>
                 {(currentUser) => (
-                  <div class={`flex items-center gap-2.5 ${collapsed() ? "justify-center" : ""}`}>
-                    <img
-                      src={currentUser().avatar_url}
-                      alt={currentUser().login}
-                      class="w-7 h-7 rounded-xl flex-shrink-0 ring-1 ring-white/[0.06]"
-                    />
-                    <Show when={!collapsed()}>
-                      <div class="flex-1 min-w-0">
-                        <p class="text-[12px] font-medium text-zinc-300 truncate leading-tight">
-                          {currentUser().name || currentUser().login}
-                        </p>
-                        <p class="text-[10px] text-zinc-600 truncate leading-tight">
-                          @{currentUser().login}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => logout()}
-                        class="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-xl text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04] transition-all duration-200"
-                        title="Sign out"
-                      >
-                        <LogOut size={14} />
-                      </button>
-                    </Show>
+                  <div class={`flex items-center gap-2.5 ${compact() ? "justify-center" : ""}`}>
+                    {(() => {
+                      const [avatarFailed, setAvatarFailed] = createSignal(false);
+                      const login = () => (currentUser().login || "").trim();
+                      const name = () => (currentUser().name || "").trim();
+                      const avatarUrl = () => (currentUser().avatar_url || "").trim();
+                      const displayName = () => {
+                        return name() || login() || "User";
+                      };
+                      const displayLogin = () => {
+                        const value = login();
+                        if (!value) return "";
+                        return value.includes("@") ? value : `@${value}`;
+                      };
+                      const avatarLetter = () => displayName().slice(0, 1).toUpperCase();
+                      const entitlement = () => currentUser().entitlement;
+                      const role = () => (entitlement()?.role || entitlement()?.tier || "free").toLowerCase();
+                      const entitled = () => entitlement()?.entitled === true || isEntitledRole(role());
+                      const delayMinutes = () => {
+                        const raw = entitlement()?.delayMinutes;
+                        return typeof raw === "number" && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
+                      };
+                      const planLabel = () => {
+                        return formatEntitlementTier(entitlement()?.role || entitlement()?.tier);
+                      };
+                      const planTone = () => entitlementTierTone(entitlement()?.role || entitlement()?.tier);
+
+                      return (
+                        <>
+                          <Show
+                            when={avatarUrl().length > 0 && !avatarFailed()}
+                            fallback={
+                              <div class="w-7 h-7 rounded-xl flex-shrink-0 ring-1 ring-white/[0.06] bg-zinc-800 text-zinc-300 flex items-center justify-center text-[11px] font-semibold uppercase">
+                                {avatarLetter()}
+                              </div>
+                            }
+                          >
+                            <img
+                              src={avatarUrl()}
+                              alt={displayName()}
+                              class="w-7 h-7 rounded-xl flex-shrink-0 ring-1 ring-white/[0.06]"
+                              referrerpolicy="no-referrer"
+                              onError={() => setAvatarFailed(true)}
+                            />
+                          </Show>
+                          <Show when={!compact()}>
+                            <div class="flex-1 min-w-0">
+                              <p class="text-[12px] font-medium text-zinc-300 truncate leading-tight">
+                                {displayName()}
+                              </p>
+                              <p class="text-[10px] text-zinc-600 truncate leading-tight">
+                                {displayLogin()}
+                              </p>
+                              <p class={`text-[10px] truncate leading-tight ${planTone()}`}>
+                                <span>{planLabel()}</span>
+                                <Show when={!entitled()}>
+                                  <span>{` • ${formatDelayMinutesShortLabel(delayMinutes())} delay`}</span>
+                                </Show>
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => auth.logout()}
+                              aria-label="Sign out"
+                              class="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-xl text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04] transition-all duration-200"
+                              title="Sign out"
+                            >
+                              <LogOut size={14} />
+                            </button>
+                          </Show>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </Show>
@@ -261,40 +335,63 @@ export default function Sidebar() {
         })()}
 
         {/* Status indicator */}
-        <div class={`flex items-center gap-2.5 ${collapsed() ? "justify-center" : ""}`}>
+        <div class={`flex items-center gap-2.5 ${compact() ? "justify-center" : ""}`}>
           <div class="relative flex-shrink-0">
-            <div class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
+            <div class="w-2 h-2 rounded-full bg-emerald-400 glow-emerald-dot" />
             <div class="absolute inset-0 w-2 h-2 rounded-full bg-emerald-400 animate-ping opacity-20" />
           </div>
-          <Show when={!collapsed()}>
+          <Show when={!compact()}>
             <div class="flex items-center justify-between flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
                 <Activity size={12} class="text-emerald-500/60" />
-                <span class="text-[11px] text-zinc-500 font-medium">Live</span>
+                <span class="text-[11px] text-zinc-500 font-medium glow-emerald-text">Live</span>
               </div>
               <span class="text-[10px] text-zinc-700 font-mono-data">v0.2</span>
             </div>
           </Show>
         </div>
+        {(() => {
+          try {
+            const current = auth.user();
+            const role = (current?.entitlement?.role || current?.entitlement?.tier || "free").toLowerCase();
+            const entitled = current?.entitlement?.entitled === true || role === "owner" || role === "subscriber";
+            if (compact() || entitled) return null;
+            return (
+                              <A
+                                href="/billing"
+                                class="block w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-center text-[11px] font-medium text-amber-200 hover:bg-amber-500/15 transition-colors"
+                              >
+                                {UPGRADE_INSTANT_FEED_LABEL}
+                              </A>
+            );
+          } catch {
+            return null;
+          }
+        })()}
       </div>
     </div>
-  );
+    );
+  };
 
   return (
     <>
       {/* Desktop sidebar */}
       <aside
+        id="desktop-navigation"
         class={`hidden md:flex fixed left-0 top-0 h-screen flex-col z-40 transition-[width] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           collapsed() ? "w-[4.5rem]" : "w-[17rem]"
         }`}
         style="background: rgba(9, 9, 11, 0.85); backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%); border-right: 1px solid rgba(255, 255, 255, 0.04);"
       >
-        <SidebarContent />
+        {SidebarContent({ collapsed: collapsed(), mobile: false })}
       </aside>
 
       {/* Mobile hamburger */}
       <button
+        type="button"
         onClick={() => setMobileOpen(true)}
+        aria-expanded={mobileOpen()}
+        aria-controls="mobile-navigation"
         class="md:hidden fixed top-4 left-4 z-50 flex items-center justify-center w-11 h-11 rounded-2xl surface-card border border-white/[0.06] text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-all duration-200 shadow-2xl shadow-black/40"
         aria-label="Open navigation"
       >
@@ -303,27 +400,32 @@ export default function Sidebar() {
 
       {/* Mobile overlay */}
       <Show when={mobileOpen()}>
-        <div
+        <button
+          type="button"
           class="md:hidden fixed inset-0 bg-black/70 backdrop-blur-md z-50 animate-fade-in"
           onClick={() => setMobileOpen(false)}
+          aria-label="Close navigation overlay"
         />
       </Show>
 
       {/* Mobile sidebar */}
       <aside
+        id="mobile-navigation"
         class={`md:hidden fixed left-0 top-0 h-screen w-[17rem] flex flex-col z-50 transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           mobileOpen() ? "translate-x-0" : "-translate-x-full"
         }`}
         style="background: rgba(9, 9, 11, 0.95); backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%); border-right: 1px solid rgba(255, 255, 255, 0.06);"
       >
         <button
+          type="button"
           onClick={() => setMobileOpen(false)}
+          aria-controls="mobile-navigation"
           class="absolute top-5 right-4 flex items-center justify-center w-8 h-8 rounded-xl text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.06] transition-all duration-200"
           aria-label="Close navigation"
         >
           <X size={16} />
         </button>
-        <SidebarContent />
+        {SidebarContent({ collapsed: false, mobile: true })}
       </aside>
     </>
   );

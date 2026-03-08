@@ -32,9 +32,9 @@ const ACCENT_MAP = {
     glow: "shadow-blue-500/5",
   },
   purple: {
-    iconBg: "bg-purple-500/10",
-    iconText: "text-purple-400",
-    glow: "shadow-purple-500/5",
+    iconBg: "bg-cyan-500/10",
+    iconText: "text-cyan-400",
+    glow: "shadow-cyan-500/5",
   },
 };
 

@@ -1,709 +1,380 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
-import { Activity, Anchor, Crosshair, ExternalLink, Info, Pause, Plane, Play, ShieldAlert, Ship, Signal } from "lucide-solid";
+import { Title, Meta, Link } from "@solidjs/meta";
+import { Plane, Ship, ExternalLink, Clock, Eye, Navigation, Search, Radio, ChevronUp, ChevronDown, MapPin } from "lucide-solid";
 import {
-  buildFreshnessStatus,
-  freshnessBannerTone,
+  buildFreshnessStatusAt,
   freshnessPillTone,
   freshnessTooltip,
   useFreshnessTransitionNotice,
+  freshnessBannerTone,
 } from "~/lib/freshness";
-import { useLiveRefresh } from "~/lib/live-refresh";
-import { formatRelativeTime } from "~/lib/utils";
-import type { IntelItem } from "~/lib/types";
+import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
+import { formatAgeCompactFromMs, formatRelativeTimeAt, formatNumber } from "~/lib/utils";
+import type { Severity } from "~/lib/types";
+import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
+import { AIR_SEA_DESCRIPTION, AIR_SEA_SOCIAL_DESCRIPTION, AIR_SEA_TITLE } from "../../shared/route-meta.ts";
+import { siteUrl } from "../../shared/site-config.ts";
 import "leaflet/dist/leaflet.css";
 
-type Severity = "critical" | "high" | "medium" | "low";
+/* ── Types (matches api/air-sea.ts response) ───────────────────────── */
 
-interface AirSeaTrack {
-  id: string;
-  type: "air" | "sea";
-  label: string;
-  class: string;
-  severity: Severity;
-  confidence: number;
-  timestamp: string;
-  source: string;
+interface Aircraft {
+  icao24: string;
+  callsign: string;
+  type: string;
+  country: string;
   region: string;
+  squawk: string;
   latitude: number;
   longitude: number;
-  heading?: number;
-  speedKts?: number;
-  altitudeFt?: number;
+  altitudeFt: number;
+  speedKts: number;
+  heading: number;
+  verticalRateFpm: number;
+  onGround: boolean;
+  severity: Severity;
   tags: string[];
-  links: { primary?: string; secondary?: string };
-  summary: string;
-  evidence: Array<{ source: string; timestamp: string; text: string; url?: string }>;
-  placement?: {
-    mode: "reported" | "region-estimate";
-    anchorRegion?: string;
-    note: string;
-  };
+  description: string;
+  links: { adsbexchange?: string; flightradar24?: string };
+}
+
+interface IntelReport {
+  id: string;
+  domain: "air" | "sea";
+  category: string;
+  channel: string;
+  channelUsername: string;
+  text: string;
+  datetime: string;
+  link: string;
+  views: string;
+  severity: Severity;
+  region: string;
+  tags: string[];
+  media: Array<{ type: string; url: string; thumbnail?: string }>;
 }
 
 interface AirSeaPayload {
   timestamp: string;
-  sourceSummary: {
-    aviationTimestamp?: string;
-    telegramTimestamp?: string;
-    telegramChannels?: number;
-    telegramMessages?: number;
+  aviation: {
+    timestamp: string;
+    source: string;
+    emergencies: number;
+    aircraft: Aircraft[];
   };
+  intelFeed: IntelReport[];
   stats: {
-    totalTracks: number;
-    airTracks: number;
-    seaTracks: number;
+    aircraftCount: number;
+    airIntelCount: number;
+    seaIntelCount: number;
+    totalIntel: number;
     critical: number;
     high: number;
   };
-  tracks: AirSeaTrack[];
 }
 
-const EMPTY_AIR_SEA: AirSeaPayload = {
+const EMPTY: AirSeaPayload = {
   timestamp: "",
-  sourceSummary: {},
-  stats: { totalTracks: 0, airTracks: 0, seaTracks: 0, critical: 0, high: 0 },
-  tracks: [],
+  aviation: { timestamp: "", source: "OpenSky Network", emergencies: 0, aircraft: [] },
+  intelFeed: [],
+  stats: { aircraftCount: 0, airIntelCount: 0, seaIntelCount: 0, totalIntel: 0, critical: 0, high: 0 },
 };
 
-const FALLBACK_REGION_CENTER: Record<string, { lat: number; lon: number }> = {
-  middle_east: { lat: 30.2, lon: 42.5 },
-  ukraine: { lat: 49.0, lon: 31.3 },
-  europe: { lat: 50.3, lon: 11.0 },
-  pacific: { lat: 23.0, lon: 132.0 },
-  us: { lat: 38.0, lon: -97.0 },
-  global: { lat: 23.0, lon: 20.0 },
+/* ── Category styling (matches telegram.tsx) ───────────────────────── */
+
+const CAT_STYLE: Record<string, { bg: string; border: string; text: string }> = {
+  ru_milblog: { bg: "bg-red-500/10", border: "border-red-500/20", text: "text-red-300" },
+  ua_frontline: { bg: "bg-yellow-500/10", border: "border-yellow-500/20", text: "text-yellow-300" },
+  ua_intel: { bg: "bg-sky-500/10", border: "border-sky-500/20", text: "text-sky-300" },
+  ua_osint: { bg: "bg-cyan-500/10", border: "border-cyan-500/20", text: "text-cyan-300" },
+  en_analysis: { bg: "bg-emerald-500/10", border: "border-emerald-500/20", text: "text-emerald-300" },
+  en_osint: { bg: "bg-lime-500/10", border: "border-lime-500/20", text: "text-lime-300" },
+  air_defense: { bg: "bg-purple-500/10", border: "border-purple-500/20", text: "text-purple-300" },
+  drone: { bg: "bg-amber-500/10", border: "border-amber-500/20", text: "text-amber-300" },
+  naval: { bg: "bg-indigo-500/10", border: "border-indigo-500/20", text: "text-indigo-300" },
+  satellite: { bg: "bg-fuchsia-500/10", border: "border-fuchsia-500/20", text: "text-fuchsia-300" },
+  mapping: { bg: "bg-violet-500/10", border: "border-violet-500/20", text: "text-violet-300" },
+  israel_milblog: { bg: "bg-blue-400/10", border: "border-blue-400/20", text: "text-blue-200" },
+  iran_milblog: { bg: "bg-emerald-600/10", border: "border-emerald-600/20", text: "text-emerald-200" },
+  global_osint: { bg: "bg-zinc-400/10", border: "border-zinc-400/20", text: "text-zinc-200" },
+  middle_east_osint: { bg: "bg-amber-600/10", border: "border-amber-600/20", text: "text-amber-200" },
+  nato_tracking: { bg: "bg-blue-600/10", border: "border-blue-600/20", text: "text-blue-200" },
+  nuclear_monitoring: { bg: "bg-red-600/10", border: "border-red-600/20", text: "text-red-200" },
+};
+const DEFAULT_CAT = { bg: "bg-zinc-500/10", border: "border-zinc-500/20", text: "text-zinc-300" };
+function catStyle(cat: string) { return CAT_STYLE[cat] ?? DEFAULT_CAT; }
+
+/* ── Tag styling ───────────────────────────────────────────────────── */
+
+const TAG_COLORS: Record<string, string> = {
+  drone: "bg-amber-500/15 text-amber-300 border-amber-500/25",
+  missile: "bg-red-500/15 text-red-300 border-red-500/25",
+  "air-defense": "bg-purple-500/15 text-purple-300 border-purple-500/25",
+  "naval-major": "bg-indigo-500/15 text-indigo-300 border-indigo-500/25",
+  strike: "bg-orange-500/15 text-orange-300 border-orange-500/25",
 };
 
-function hashOffset(seed: string): number {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash << 5) - hash + seed.charCodeAt(i);
-    hash |= 0;
-  }
-  return ((Math.abs(hash) % 1000) / 1000) * 2 - 1;
+/* ── Severity helpers ──────────────────────────────────────────────── */
+
+function sevDot(s: Severity): string {
+  if (s === "critical") return "bg-red-400 shadow-[0_0_6px_rgba(239,68,68,0.5)]";
+  if (s === "high") return "bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.4)]";
+  if (s === "medium") return "bg-blue-400";
+  return "bg-zinc-500";
 }
 
-function fallbackTracksFromIntel(items: IntelItem[]): AirSeaTrack[] {
-  return items.slice(0, 120).map((item, idx) => {
-    const region = item.region || "global";
-    const center = FALLBACK_REGION_CENTER[region] || FALLBACK_REGION_CENTER.global;
-    const idSeed = `${item.timestamp}:${item.source}:${item.title}:${idx}`;
-    const latitude = center.lat + hashOffset(`${idSeed}:lat`) * 2.4;
-    const longitude = center.lon + hashOffset(`${idSeed}:lon`) * 3.6;
-    const lower = `${item.title} ${item.summary}`.toLowerCase();
-    const type: "air" | "sea" = /ship|fleet|naval|submarine|frigate|carrier|maritime/.test(lower) ? "sea" : "air";
-    const severity = (item.severity || "medium") as Severity;
-
-    return {
-      id: `fallback-${idx}-${Math.abs(Math.round(hashOffset(idSeed) * 1_000_000))}`,
-      type,
-      label: item.source || "OSINT",
-      class: type === "sea" ? "Intel Maritime Event" : "Intel Air Event",
-      severity,
-      confidence: severity === "critical" ? 84 : severity === "high" ? 78 : severity === "medium" ? 71 : 64,
-      timestamp: item.timestamp,
-      source: item.source || "OSINT Feed",
-      region,
-      latitude,
-      longitude,
-      tags: ["osint-fallback", item.category || "news"],
-      links: { primary: item.url },
-      summary: item.summary || item.title,
-      evidence: [{ source: item.source || "OSINT", timestamp: item.timestamp, text: item.title, url: item.url }],
-      placement: {
-        mode: "region-estimate",
-        anchorRegion: region,
-        note: "Position estimated from OSINT region tag while dedicated air/sea feed is unavailable.",
-      },
-    };
-  });
+function sevBadge(s: Severity): string {
+  if (s === "critical") return "bg-red-500/15 text-red-400 border-red-500/30";
+  if (s === "high") return "bg-amber-500/15 text-amber-400 border-amber-500/30";
+  if (s === "medium") return "bg-blue-500/15 text-blue-400 border-blue-500/30";
+  return "bg-zinc-500/15 text-zinc-400 border-zinc-500/30";
 }
 
-function seedFallbackTracks(): AirSeaTrack[] {
-  const now = Date.now();
-  const seeds: Array<{ label: string; type: "air" | "sea"; cls: string; region: string; severity: Severity; lat: number; lon: number }> = [
-    { label: "NATO AWACS", type: "air", cls: "Strategic C2", region: "europe", severity: "high", lat: 52.2, lon: 14.3 },
-    { label: "Black Sea Patrol", type: "sea", cls: "Surface Combatant", region: "ukraine", severity: "high", lat: 44.8, lon: 34.1 },
-    { label: "Gulf ISR", type: "air", cls: "ISR", region: "middle_east", severity: "medium", lat: 27.8, lon: 50.4 },
-    { label: "Carrier Group Report", type: "sea", cls: "Carrier Report", region: "middle_east", severity: "critical", lat: 15.4, lon: 42.3 },
-    { label: "Pacific Recon", type: "air", cls: "Maritime Patrol", region: "pacific", severity: "medium", lat: 24.6, lon: 137.9 },
-    { label: "Atlantic Transit", type: "sea", cls: "Naval Activity", region: "global", severity: "low", lat: 34.2, lon: -36.1 },
-  ];
-
-  return seeds.map((seed, idx) => {
-    const stamp = new Date(now - idx * 22 * 60 * 1000).toISOString();
-    return {
-      id: `seed-${idx}`,
-      type: seed.type,
-      label: seed.label,
-      class: seed.cls,
-      severity: seed.severity,
-      confidence: seed.severity === "critical" ? 86 : seed.severity === "high" ? 79 : seed.severity === "medium" ? 72 : 64,
-      timestamp: stamp,
-      source: "Fallback Ops Feed",
-      region: seed.region,
-      latitude: seed.lat,
-      longitude: seed.lon,
-      tags: ["fallback-seed"],
-      links: {},
-      summary: "Operational placeholder track while live intel feed is unavailable.",
-      evidence: [{ source: "Fallback Ops Feed", timestamp: stamp, text: "Live feed unavailable; displaying seeded operational markers." }],
-      placement: {
-        mode: "region-estimate",
-        anchorRegion: seed.region,
-        note: "Seeded fallback marker shown when no live tracks are currently available.",
-      },
-    };
-  });
-}
-
-async function loadIntelFallbackTracks(): Promise<AirSeaTrack[]> {
-  try {
-    const res = await fetch("/api/intel", {
-      signal: AbortSignal.timeout(25_000),
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (!Array.isArray(data)) return [];
-    return fallbackTracksFromIntel(data as IntelItem[]);
-  } catch {
-    return [];
-  }
-}
-
-async function loadAirSea(): Promise<AirSeaPayload> {
-  try {
-    const res = await fetch("/api/air-sea", {
-      signal: AbortSignal.timeout(45_000),
-      cache: "no-store",
-    });
-    if (!res.ok) throw new Error("request failed");
-    const payload = (await res.json()) as AirSeaPayload;
-    if (Array.isArray(payload.tracks) && payload.tracks.length > 0) {
-      return payload;
-    }
-    const fallbackTracks = await loadIntelFallbackTracks();
-    if (fallbackTracks.length > 0) {
-      return {
-        ...payload,
-        tracks: fallbackTracks,
-        stats: {
-          totalTracks: fallbackTracks.length,
-          airTracks: fallbackTracks.filter((track) => track.type === "air").length,
-          seaTracks: fallbackTracks.filter((track) => track.type === "sea").length,
-          critical: fallbackTracks.filter((track) => track.severity === "critical").length,
-          high: fallbackTracks.filter((track) => track.severity === "high").length,
-        },
-      };
-    }
-
-    const seeded = seedFallbackTracks();
-    return {
-      ...payload,
-      tracks: seeded,
-      stats: {
-        totalTracks: seeded.length,
-        airTracks: seeded.filter((track) => track.type === "air").length,
-        seaTracks: seeded.filter((track) => track.type === "sea").length,
-        critical: seeded.filter((track) => track.severity === "critical").length,
-        high: seeded.filter((track) => track.severity === "high").length,
-      },
-    };
-  } catch {
-    return {
-      timestamp: new Date().toISOString(),
-      sourceSummary: {},
-      stats: { totalTracks: 0, airTracks: 0, seaTracks: 0, critical: 0, high: 0 },
-      tracks: [],
-    };
-  }
-}
-
-function severityColor(s: Severity): string {
+function sevMapColor(s: Severity): string {
   if (s === "critical") return "#ef4444";
   if (s === "high") return "#f59e0b";
   if (s === "medium") return "#3b82f6";
   return "#71717a";
 }
 
-function compact(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
+function regionLabel(r: string): string {
+  return r.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function trackTime(track: AirSeaTrack): number {
-  return new Date(track.timestamp).getTime();
+function parseViews(v: string): number {
+  const upper = v.replace(/,/g, "").trim().toUpperCase();
+  const m = upper.match(/^([0-9]+(?:\.[0-9]+)?)([KMB])?$/);
+  if (!m) return Number.parseInt(upper.replace(/[^0-9]/g, ""), 10) || 0;
+  const base = Number.parseFloat(m[1]);
+  if (m[2] === "K") return Math.round(base * 1000);
+  if (m[2] === "M") return Math.round(base * 1_000_000);
+  if (m[2] === "B") return Math.round(base * 1_000_000_000);
+  return Math.round(base);
 }
 
-function trailKey(track: AirSeaTrack): string {
-  return `${track.type}::${track.label}::${track.class}::${track.source}`;
+/* ── Data loader ───────────────────────────────────────────────────── */
+
+async function loadAirSea(): Promise<AirSeaPayload> {
+  try {
+    const res = await fetch("/api/air-sea", { signal: AbortSignal.timeout(30_000), cache: "no-store" });
+    if (!res.ok) return EMPTY;
+    return (await res.json()) as AirSeaPayload;
+  } catch {
+    return EMPTY;
+  }
 }
 
-function payloadSignature(payload: AirSeaPayload): string {
-  const source = payload.sourceSummary;
-  const sourceKey = [
-    source.aviationTimestamp || "",
-    source.telegramTimestamp || "",
-    String(source.telegramChannels || 0),
-    String(source.telegramMessages || 0),
-  ].join("|");
-  const trackKey = payload.tracks
-    .map((track) => `${track.id}:${track.timestamp}:${track.latitude.toFixed(3)}:${track.longitude.toFixed(3)}:${track.severity}`)
-    .join(";");
-  return `${sourceKey}#${trackKey}`;
-}
+/* ── Component ─────────────────────────────────────────────────────── */
 
 export default function AirSeaOps() {
-  const [payload, { refetch }] = createResource(loadAirSea, { initialValue: EMPTY_AIR_SEA });
+  const [payload, { refetch }] = createResource(loadAirSea, { initialValue: EMPTY });
   const feedThresholds = { liveMaxMinutes: 15, delayedMaxMinutes: 60 } as const;
-  const [mode, setMode] = createSignal<"all" | "air" | "sea">("all");
-  const [severityFilter, setSeverityFilter] = createSignal<"all" | Severity>("all");
-  const [majorOnly, setMajorOnly] = createSignal(false);
-  const [query, setQuery] = createSignal("");
-  const [selectedId, setSelectedId] = createSignal<string | null>(null);
-  const [basemap, setBasemap] = createSignal<"dark" | "satellite">("dark");
 
+  const [domainFilter, setDomainFilter] = createSignal<"all" | "air" | "sea">("all");
+  const [sevFilter, setSevFilter] = createSignal<"all" | Severity>("all");
+  const [query, setQuery] = createSignal("");
+  const [showCount, setShowCount] = createSignal(60);
+  const [selectedAircraft, setSelectedAircraft] = createSignal<string | null>(null);
+
+  // Leaflet refs
   let mapEl: HTMLDivElement | undefined;
   let map: import("leaflet").Map | null = null;
   let L: typeof import("leaflet") | null = null;
   let markerLayer: import("leaflet").LayerGroup | null = null;
-  let trailLayer: import("leaflet").LayerGroup | null = null;
-  let heatLayer: import("leaflet").LayerGroup | null = null;
-  let baseLayer: import("leaflet").TileLayer | null = null;
-
-  const [playbackEnabled, setPlaybackEnabled] = createSignal(false);
-  const [playbackOn, setPlaybackOn] = createSignal(false);
-  const [playbackIndex, setPlaybackIndex] = createSignal(0);
-  const [windowMinutes, setWindowMinutes] = createSignal(360);
-  const [playbackPrimed, setPlaybackPrimed] = createSignal(false);
   const [mapReady, setMapReady] = createSignal(false);
-  const [renderPayload, setRenderPayload] = createSignal<AirSeaPayload>(EMPTY_AIR_SEA);
-  const [renderSignature, setRenderSignature] = createSignal(payloadSignature(EMPTY_AIR_SEA));
+  const nowMs = useWallClock(1000);
 
-  const payloadData = () => payload.latest ?? payload() ?? EMPTY_AIR_SEA;
+  useLiveRefresh(() => void refetch(), 35_000, { runImmediately: true });
 
-  createEffect(() => {
-    const next = payloadData();
-    const nextSignature = payloadSignature(next);
-    if (nextSignature !== renderSignature()) {
-      setRenderPayload(next);
-      setRenderSignature(nextSignature);
-    }
+  const data = () => payload.latest ?? payload() ?? EMPTY;
+  const aircraft = () => data().aviation.aircraft;
+  const stats = () => data().stats;
+
+  const feedFreshness = createMemo(() =>
+    buildFreshnessStatusAt(nowMs(), Date.parse(data().timestamp || ""), feedThresholds, { noData: "Unknown" }),
+  );
+  const latestFeedAgeMs = createMemo(() => {
+    const ts = Date.parse(data().timestamp || "");
+    if (!Number.isFinite(ts) || ts <= 0) return null;
+    return Math.max(0, nowMs() - ts);
   });
+  const latestFeedAgeLabel = createMemo(() => formatAgeCompactFromMs(latestFeedAgeMs()));
+  const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "Air/Sea feed");
 
-  useLiveRefresh(async () => {
-    const beforeSignature = renderSignature();
-    const next = await refetch();
-    if (!next) return false;
-    const nextSignature = payloadSignature(next);
-    if (nextSignature === beforeSignature) {
-      return false;
-    }
-    setRenderPayload(next);
-    setRenderSignature(nextSignature);
-    return true;
-  }, 35_000, { runImmediately: false });
-
-  const tracks = () => renderPayload().tracks;
-  const stats = () => renderPayload().stats;
-
-  const baseFiltered = createMemo(() => {
+  // Filtered intel feed
+  const filteredFeed = createMemo(() => {
     const q = query().trim().toLowerCase();
-    return tracks().filter((track) => {
-      if (mode() !== "all" && track.type !== mode()) return false;
-      if (severityFilter() !== "all" && track.severity !== severityFilter()) return false;
-      if (majorOnly()) {
-        const majorTag =
-          track.severity === "critical" ||
-          track.severity === "high" ||
-          track.class.includes("Carrier") ||
-          track.class.includes("Strategic") ||
-          track.class.includes("Bomber") ||
-          track.class.includes("Air Defense");
-        if (!majorTag) return false;
-      }
-      if (!q) return true;
-      return (
-        track.label.toLowerCase().includes(q) ||
-        track.class.toLowerCase().includes(q) ||
-        track.source.toLowerCase().includes(q) ||
-        track.summary.toLowerCase().includes(q)
-      );
+    return data().intelFeed.filter((r) => {
+      if (domainFilter() !== "all" && r.domain !== domainFilter()) return false;
+      if (sevFilter() !== "all" && r.severity !== sevFilter()) return false;
+      if (q && !r.text.toLowerCase().includes(q) && !r.channel.toLowerCase().includes(q) && !r.tags.some((t) => t.includes(q))) return false;
+      return true;
     });
   });
 
-  const timelinePoints = createMemo(() => {
-    const times = Array.from(new Set(baseFiltered().map((track) => track.timestamp))).sort(
-      (a, b) => new Date(a).getTime() - new Date(b).getTime(),
-    );
-    return times;
-  });
+  const visibleFeed = createMemo(() => filteredFeed().slice(0, showCount()));
 
-  createEffect(() => {
-    const points = timelinePoints();
-    if (points.length === 0) {
-      setPlaybackIndex(0);
-      setPlaybackPrimed(false);
-      return;
-    }
-    if (!playbackPrimed()) {
-      setPlaybackIndex(points.length - 1);
-      setPlaybackPrimed(true);
-      return;
-    }
-    if (playbackIndex() >= points.length) {
-      setPlaybackIndex(points.length - 1);
-    }
-  });
-
-  createEffect(() => {
-    if (!playbackEnabled() || !playbackOn()) return;
-    const points = timelinePoints();
-    if (points.length <= 1) return;
-    const timer = setInterval(() => {
-      setPlaybackIndex((prev) => {
-        const next = prev + 1;
-        if (next >= points.length) return 0;
-        return next;
-      });
-    }, 900);
-    onCleanup(() => clearInterval(timer));
-  });
-
-  const visibleTracks = createMemo(() => {
-    const all = baseFiltered().slice().sort((a, b) => trackTime(b) - trackTime(a));
-    if (!playbackEnabled() || timelinePoints().length === 0) return all;
-    const pivot = timelinePoints()[playbackIndex()] || timelinePoints()[timelinePoints().length - 1];
-    const pivotMs = new Date(pivot).getTime();
-    const lower = pivotMs - windowMinutes() * 60 * 1000;
-    const windowed = all.filter((track) => {
-      const t = trackTime(track);
-      return t <= pivotMs && t >= lower;
-    });
-    return windowed.length > 0 ? windowed : all;
-  });
-
-  const selected = createMemo(() => {
-    const id = selectedId();
-    if (!id) return null;
-    return visibleTracks().find((track) => track.id === id) || null;
-  });
-
-  createEffect(() => {
-    const list = visibleTracks();
-    if (list.length === 0) {
-      setSelectedId(null);
-      return;
-    }
-    const current = selectedId();
-    if (!current || !list.some((t) => t.id === current)) {
-      setSelectedId(list[0].id);
-    }
-  });
-
-  const topTracks = createMemo(() => visibleTracks().slice(0, 180));
-
-  const selectedTimeline = createMemo(() => {
-    const item = selected();
-    if (!item) return [] as AirSeaTrack[];
-    const key = trailKey(item);
-    return tracks()
-      .filter((track) => trailKey(track) === key)
-      .sort((a, b) => trackTime(b) - trackTime(a))
-      .slice(0, 8);
-  });
-
-  const heatRegions = createMemo(() => {
-    const regions = new Map<string, { lat: number; lon: number; weight: number; count: number }>();
-    for (const track of visibleTracks()) {
-      const weight = track.severity === "critical" ? 5 : track.severity === "high" ? 3 : track.severity === "medium" ? 2 : 1;
-      const existing = regions.get(track.region);
-      if (existing) {
-        existing.count += 1;
-        existing.weight += weight;
-      } else {
-        regions.set(track.region, { lat: track.latitude, lon: track.longitude, weight, count: 1 });
-      }
-    }
-    return [...regions.entries()].map(([region, value]) => ({ region, ...value }));
-  });
-
+  // Map setup
   onMount(async () => {
     const leaflet = await import("leaflet");
     L = leaflet;
     if (!mapEl) return;
 
     map = leaflet.map(mapEl, {
-      center: [26, 18],
-      zoom: 2,
+      center: [48, 14],
+      zoom: 4,
       minZoom: 2,
-      maxZoom: 7,
+      maxZoom: 12,
       zoomControl: true,
       worldCopyJump: true,
       attributionControl: false,
     });
 
-    baseLayer = leaflet.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    leaflet.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       subdomains: "abcd",
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
     }).addTo(map);
 
-    trailLayer = leaflet.layerGroup().addTo(map);
-    heatLayer = leaflet.layerGroup().addTo(map);
     markerLayer = leaflet.layerGroup().addTo(map);
+
+    window.setTimeout(() => map?.invalidateSize(), 0);
     setMapReady(true);
 
-    window.setTimeout(() => {
-      map?.invalidateSize();
-    }, 0);
-
     onCleanup(() => {
-      setMapReady(false);
       map?.remove();
       map = null;
       markerLayer = null;
-      trailLayer = null;
-      heatLayer = null;
-      baseLayer = null;
       L = null;
+      setMapReady(false);
     });
   });
 
+  // Update map markers when aircraft change
   createEffect(() => {
-    if (!mapReady()) return;
-    if (!L || !map) return;
-
-    baseLayer?.remove();
-    if (basemap() === "satellite") {
-      baseLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-        maxZoom: 19,
-        attribution: 'Tiles &copy; Esri',
-      }).addTo(map);
-    } else {
-      baseLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        subdomains: "abcd",
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-      }).addTo(map);
-    }
-  });
-
-  createEffect(() => {
-    if (!mapReady()) return;
-    if (!L || !map || !markerLayer || !trailLayer || !heatLayer) return;
-
+    if (!mapReady() || !L || !map || !markerLayer) return;
+    markerLayer.clearLayers();
     map.invalidateSize();
 
-    markerLayer.clearLayers();
-    trailLayer.clearLayers();
-    heatLayer.clearLayers();
+    const acList = aircraft();
+    if (acList.length === 0) return;
 
-    for (const zone of heatRegions()) {
-      const radius = Math.min(300000, 50000 + zone.weight * 14000);
-      const isHot = zone.weight >= 10;
-      const isCritical = zone.weight >= 20;
-      const color = isCritical ? "#ef4444" : isHot ? "#f59e0b" : "#22d3ee";
+    for (const ac of acList) {
+      const isSelected = selectedAircraft() === ac.icao24;
+      const color = sevMapColor(ac.severity);
+      const radius = isSelected ? 9 : 6;
 
-      L.circle([zone.lat, zone.lon], {
-        radius: radius * 1.3,
-        color,
-        weight: 0,
-        fillColor: color,
-        fillOpacity: 0.03,
-      }).addTo(heatLayer);
-
-      L.circle([zone.lat, zone.lon], {
-        radius,
-        color,
-        weight: isCritical ? 1.2 : 0.8,
-        opacity: isCritical ? 0.5 : 0.25,
-        fillColor: color,
-        fillOpacity: isCritical ? 0.1 : 0.05,
-        dashArray: "4 6",
-      })
-        .bindTooltip(`<div style="font-weight:600">${zone.region.replace(/_/g, " ").toUpperCase()}</div><div style="opacity:0.7">${zone.count} tracks &bull; threat weight ${zone.weight}</div>`, {
-          direction: "center",
-          className: "intel-map-tooltip",
-          opacity: 0.9,
-        })
-        .addTo(heatLayer);
-    }
-
-    const grouped = new Map<string, AirSeaTrack[]>();
-    for (const track of visibleTracks()) {
-      const key = trailKey(track);
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key)!.push(track);
-    }
-
-    for (const group of grouped.values()) {
-      if (group.length < 2) continue;
-      const ordered = group.slice().sort((a, b) => trackTime(a) - trackTime(b)).slice(-8);
-      const current = ordered[ordered.length - 1];
-      const coords = ordered.map((track) => [track.latitude, track.longitude] as [number, number]);
-
-      L.polyline(coords, {
-        color: severityColor(current.severity),
-        weight: current.type === "air" ? 1.5 : 2,
-        opacity: 0.15,
-        dashArray: current.type === "air" ? "6 4" : undefined,
-      }).addTo(trailLayer);
-
-      L.polyline(coords, {
-        color: severityColor(current.severity),
-        weight: current.type === "air" ? 2.5 : 3,
-        opacity: current.type === "air" ? 0.45 : 0.55,
-        dashArray: current.type === "air" ? "8 3" : undefined,
-      }).addTo(trailLayer);
-    }
-
-    for (const track of topTracks()) {
-      const selectedNow = selectedId() === track.id;
-      const isCritical = track.severity === "critical";
-      const isHigh = track.severity === "high";
-      const estimated = track.placement?.mode === "region-estimate";
-      const baseRadius = isCritical ? 7 : isHigh ? 6 : track.severity === "medium" ? 5 : 4;
-      const radius = selectedNow ? baseRadius + 3 : baseRadius;
-
-      if (isCritical || isHigh) {
-        L.circleMarker([track.latitude, track.longitude], {
-          radius: radius + 6,
-          color: severityColor(track.severity),
+      // Glow ring for selected
+      if (isSelected) {
+        L.circleMarker([ac.latitude, ac.longitude], {
+          radius: 14,
+          color,
           weight: 0,
-          fillColor: severityColor(track.severity),
-          fillOpacity: 0.08,
-        }).addTo(markerLayer);
+          fillColor: color,
+          fillOpacity: 0.15,
+        }).addTo(markerLayer!);
       }
 
-      const marker = L.circleMarker([track.latitude, track.longitude], {
+      const marker = L.circleMarker([ac.latitude, ac.longitude], {
         radius,
-        color: selectedNow ? "#ffffff" : severityColor(track.severity),
-        weight: selectedNow ? 2.5 : isCritical ? 2 : 1.4,
-        fillColor: severityColor(track.severity),
-        fillOpacity: estimated ? 0.42 : selectedNow ? 0.95 : isCritical ? 0.9 : 0.78,
-        dashArray: estimated ? "4 3" : undefined,
+        color: isSelected ? "#ffffff" : color,
+        weight: isSelected ? 2.5 : 1.5,
+        fillColor: color,
+        fillOpacity: isSelected ? 0.95 : 0.85,
       });
 
-      const tooltipContent = `<div style="font-weight:600">${track.label}</div><div style="opacity:0.7;font-size:10px">${track.class} &bull; ${track.severity.toUpperCase()}</div><div style="opacity:0.65;font-size:10px">${estimated ? "Estimated region position" : "Reported coordinates"}</div>`;
+      const tip = `<div style="font-weight:700;font-family:monospace;font-size:13px">${ac.callsign}</div>` +
+        `<div style="opacity:0.7;font-size:11px">${ac.type}</div>` +
+        `<div style="opacity:0.6;font-size:10px">FL${Math.round(ac.altitudeFt / 100)} &bull; ${Math.round(ac.speedKts)}kts &bull; ${Math.round(ac.heading)}&deg;</div>`;
+
       marker
+        .bindTooltip(tip, { direction: "top", opacity: 0.95, className: "intel-map-tooltip" })
         .on("click", () => {
-          setSelectedId(track.id);
-          map?.panTo([track.latitude, track.longitude], { animate: true, duration: 0.4 });
+          setSelectedAircraft(ac.icao24);
+          map?.panTo([ac.latitude, ac.longitude], { animate: true, duration: 0.35 });
         })
-        .bindTooltip(tooltipContent, {
-          direction: "top",
-          opacity: 0.94,
-          className: "intel-map-tooltip",
-        })
-        .addTo(markerLayer);
+        .addTo(markerLayer!);
+
+      // Heading indicator line
+      if (ac.speedKts > 10 && !ac.onGround) {
+        const radians = (ac.heading * Math.PI) / 180;
+        const len = 0.3 + (ac.speedKts / 600) * 0.5;
+        const endLat = ac.latitude + Math.cos(radians) * len;
+        const endLon = ac.longitude + Math.sin(radians) * len;
+        L.polyline([[ac.latitude, ac.longitude], [endLat, endLon]], {
+          color,
+          weight: 1.5,
+          opacity: 0.5,
+          dashArray: "4 3",
+        }).addTo(markerLayer!);
+      }
+    }
+
+    // Fit bounds if not manually panned
+    if (!selectedAircraft() && acList.length > 1) {
+      const bounds = L.latLngBounds(acList.map((ac) => [ac.latitude, ac.longitude]));
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 6 });
     }
   });
 
-  const visibleStats = createMemo(() => {
-    const list = visibleTracks();
-    return {
-      total: list.length,
-      air: list.filter((track) => track.type === "air").length,
-      sea: list.filter((track) => track.type === "sea").length,
-      critical: list.filter((track) => track.severity === "critical").length,
-      high: list.filter((track) => track.severity === "high").length,
-    };
-  });
-
-  const dataTier = createMemo<"live" | "osint-fallback" | "seeded-fallback" | "empty">(() => {
-    const list = renderPayload().tracks;
-    if (list.length === 0) return "empty";
-    const seeded = list.every((track) => track.tags.includes("fallback-seed"));
-    if (seeded) return "seeded-fallback";
-    const osint = list.every((track) => track.tags.includes("osint-fallback"));
-    if (osint) return "osint-fallback";
-    return "live";
-  });
-
-  const estimatedVisibleCount = createMemo(() => visibleTracks().filter((track) => track.placement?.mode === "region-estimate").length);
-
-  const dataTierLabel = () => {
-    if (dataTier() === "live") return "Live fused feeds";
-    if (dataTier() === "osint-fallback") return "OSINT fallback";
-    if (dataTier() === "seeded-fallback") return "Seeded placeholder markers";
-    return "No active tracks";
-  };
-
-  const opsFreshness = createMemo(() =>
-    buildFreshnessStatus(Date.parse(renderPayload().timestamp || ""), feedThresholds, { noData: "Unknown" }),
-  );
-  const freshnessNotice = useFreshnessTransitionNotice(opsFreshness, "Air/Sea feed");
-
   return (
-    <div class="space-y-6 animate-fade-in">
-      <section class="relative overflow-hidden rounded-3xl border border-cyan-500/15 bg-gradient-to-br from-[#030a12] via-[#061420] to-[#0a101c] p-6 sm:p-8">
-        <div class="absolute -left-24 -top-12 h-72 w-72 rounded-full bg-cyan-500/[0.07] blur-[80px]" />
-        <div class="absolute -right-16 -bottom-16 h-64 w-64 rounded-full bg-emerald-500/[0.05] blur-[60px]" />
-        <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent" />
-        <div class="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <div class="mb-3 inline-flex items-center gap-2 rounded-lg border border-cyan-400/20 bg-cyan-500/[0.08] px-3 py-1.5 shadow-[0_0_12px_rgba(34,211,238,0.08)]">
-              <div class="h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.6)] animate-pulse" />
-              <span class="text-[11px] font-semibold text-cyan-300 uppercase tracking-widest">Command Surface</span>
+    <>
+      <Title>{AIR_SEA_TITLE}</Title>
+      <Meta name="description" content={AIR_SEA_DESCRIPTION} />
+      <Link rel="canonical" href={siteUrl("/air-sea")} />
+      <Meta property="og:title" content={AIR_SEA_TITLE} />
+      <Meta property="og:description" content={AIR_SEA_SOCIAL_DESCRIPTION} />
+      <Meta property="og:url" content={siteUrl("/air-sea")} />
+      <Meta name="twitter:title" content={AIR_SEA_TITLE} />
+      <Meta name="twitter:description" content={AIR_SEA_SOCIAL_DESCRIPTION} />
+    <div class="intel-page">
+      {/* ── Header ──────────────────────────────────────────────── */}
+      <header class="intel-page-header">
+        <div>
+          <div class="flex items-center gap-2 mb-2">
+            <div class="intel-badge">
+              <div class="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.5)] animate-pulse" />
+              Live Feed
             </div>
-            <h1 class="text-3xl font-bold text-white tracking-tight">Air / Sea Ops</h1>
-            <p class="mt-2 text-sm text-zinc-400/80 max-w-lg">Real-time air and maritime surveillance. Threat-weighted tracks with timeline playback, source fusion, and region heatmaps.</p>
-          </div>
-
-          <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
-            <div class="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 text-center min-w-[72px]">
-              <p class="font-mono-data text-xl font-bold text-white">{visibleStats().total}</p>
-              <p class="text-[9px] uppercase tracking-widest text-zinc-500 mt-0.5">Tracks</p>
-            </div>
-            <div class="rounded-xl border border-cyan-400/10 bg-cyan-500/[0.04] px-3 py-2.5 text-center min-w-[72px]">
-              <p class="font-mono-data text-xl font-bold text-cyan-300">{visibleStats().air}</p>
-              <p class="text-[9px] uppercase tracking-widest text-cyan-400/50 mt-0.5">Air</p>
-            </div>
-            <div class="rounded-xl border border-emerald-400/10 bg-emerald-500/[0.04] px-3 py-2.5 text-center min-w-[72px]">
-              <p class="font-mono-data text-xl font-bold text-emerald-300">{visibleStats().sea}</p>
-              <p class="text-[9px] uppercase tracking-widest text-emerald-400/50 mt-0.5">Sea</p>
-            </div>
-            <div class="rounded-xl border border-red-400/10 bg-red-500/[0.04] px-3 py-2.5 text-center min-w-[72px]">
-              <p class="font-mono-data text-xl font-bold text-red-400">{visibleStats().critical}</p>
-              <p class="text-[9px] uppercase tracking-widest text-red-400/50 mt-0.5">Critical</p>
-            </div>
-            <div class="rounded-xl border border-amber-400/10 bg-amber-500/[0.04] px-3 py-2.5 text-center min-w-[72px]">
-              <p class="font-mono-data text-xl font-bold text-amber-300">{visibleStats().high}</p>
-              <p class="text-[9px] uppercase tracking-widest text-amber-400/50 mt-0.5">High</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="surface-card p-4">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div class="space-y-1.5">
-            <p class="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-300">
-              <Info size={13} class="text-cyan-300" /> How to read this board
-            </p>
-            <p class="max-w-3xl text-xs text-zinc-400">
-              Solid markers are reported coordinates. Dashed markers are region-estimated positions from text reports. Confidence scores reflect source reliability and corroboration, not exact geo precision.
-            </p>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(opsFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
-              Feed: {opsFreshness().label}
-              <Show when={opsFreshness().minutes !== null}> ({opsFreshness().minutes}m)</Show>
-            </span>
-            <span class="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] text-cyan-200 font-medium">
-              Data mode: {dataTierLabel()}
+            <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+              {feedFreshness().label}
+              <Show when={latestFeedAgeMs() !== null}> ({latestFeedAgeLabel()})</Show>
             </span>
           </div>
+          <h1 class="intel-heading">Air / Sea Ops</h1>
+          <p class="intel-subheading">Military aircraft tracking plus air/sea milblogger intelligence from a broad Telegram source network.</p>
         </div>
-      </section>
 
+        <Show when={stats().totalIntel > 0 || stats().aircraftCount > 0}>
+          <div class="intel-kpi-strip">
+            <div class="intel-kpi-segment">
+              <p class="intel-kpi-value text-cyan-300">{stats().aircraftCount}</p>
+              <p class="intel-kpi-label">Aircraft</p>
+            </div>
+            <div class="intel-kpi-segment">
+              <p class="intel-kpi-value text-blue-300">{stats().airIntelCount}</p>
+              <p class="intel-kpi-label">Air Intel</p>
+            </div>
+            <div class="intel-kpi-segment">
+              <p class="intel-kpi-value text-emerald-300">{stats().seaIntelCount}</p>
+              <p class="intel-kpi-label">Sea Intel</p>
+            </div>
+            <div class="intel-kpi-segment">
+              <p class="intel-kpi-value text-red-400">{stats().critical}</p>
+              <p class="intel-kpi-label">Critical</p>
+            </div>
+            <div class="intel-kpi-segment">
+              <p class="intel-kpi-value text-amber-400">{stats().high}</p>
+              <p class="intel-kpi-label">High</p>
+            </div>
+          </div>
+        </Show>
+      </header>
+
+      {/* Freshness notice */}
       <Show when={freshnessNotice()}>
         {(notice) => (
           <section
-            class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
+            class={`rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
             role="status"
             aria-live="polite"
           >
@@ -712,292 +383,219 @@ export default function AirSeaOps() {
         )}
       </Show>
 
-      <section class="surface-card p-4 space-y-3">
-        <div class="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setMode("all")} class={`min-h-11 px-3.5 py-1.5 text-xs rounded-xl border transition ${mode() === "all" ? "border-white/20 bg-white/10 text-white" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>All Tracks</button>
-          <button type="button" onClick={() => setMode("air")} class={`min-h-11 px-3.5 py-1.5 text-xs rounded-xl border transition ${mode() === "air" ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>Air</button>
-          <button type="button" onClick={() => setMode("sea")} class={`min-h-11 px-3.5 py-1.5 text-xs rounded-xl border transition ${mode() === "sea" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>Sea</button>
+      <FeedAccessNotice surface="Air-Sea" />
 
-          <div class="mx-1 h-6 w-px bg-white/[0.08]" />
-
-          <button type="button" onClick={() => setSeverityFilter("all")} class={`min-h-11 px-3.5 py-1.5 text-xs rounded-xl border transition ${severityFilter() === "all" ? "border-white/20 bg-white/10 text-white" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>Any Severity</button>
-          <button type="button" onClick={() => setSeverityFilter("critical")} class={`min-h-11 px-3.5 py-1.5 text-xs rounded-xl border transition ${severityFilter() === "critical" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>Critical</button>
-          <button type="button" onClick={() => setSeverityFilter("high")} class={`min-h-11 px-3.5 py-1.5 text-xs rounded-xl border transition ${severityFilter() === "high" ? "border-amber-400/30 bg-amber-500/10 text-amber-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>High</button>
-
-          <label class="ml-auto inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-1.5 text-xs text-zinc-300" title="Keeps critical/high tracks and strategic classes like Carrier, Bomber, Air Defense.">
-            <input type="checkbox" checked={majorOnly()} onInput={(e) => setMajorOnly(e.currentTarget.checked)} />
-            Major assets only
-          </label>
+      {/* ── Aircraft Tracker ────────────────────────────────────── */}
+      <section class="surface-card overflow-hidden">
+        <div class="flex items-center gap-2 px-4 pt-4 pb-2">
+          <Plane size={15} class="text-cyan-400" />
+          <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Military Aircraft Tracker</h2>
+          <span class="ml-auto text-[10px] text-zinc-600 font-mono-data">
+            Source: {data().aviation.source} &bull; {data().aviation.timestamp || "n/a"}
+          </span>
         </div>
 
-        <div class="grid grid-cols-1 items-center gap-2 xl:grid-cols-[1fr_auto]">
-          <input
-            value={query()}
-            onInput={(e) => setQuery(e.currentTarget.value)}
-            placeholder="Search callsign, vessel class, source, or summary..."
-            class="h-11 w-full rounded-xl border border-white/10 bg-black/30 px-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-cyan-400/30 focus:outline-none"
-          />
-
-          <div class="flex items-center gap-2 text-xs">
-            <label class="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-3 text-zinc-300">
-              <input type="checkbox" checked={playbackEnabled()} onInput={(e) => setPlaybackEnabled(e.currentTarget.checked)} />
-              Timeline
-            </label>
-            <button
-              type="button"
-              onClick={() => setPlaybackOn((v) => !v)}
-              disabled={!playbackEnabled() || timelinePoints().length <= 1}
-              class="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-zinc-300 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-40"
-            >
-              <Show when={playbackOn()} fallback={<Play size={12} />}>
-                <Pause size={12} />
-              </Show>
-              {playbackOn() ? "Pause" : "Play"}
-            </button>
-          </div>
-        </div>
-
-        <Show when={playbackEnabled() && timelinePoints().length > 0}>
-          <div class="space-y-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-            <div class="flex items-center justify-between text-[11px] text-zinc-500">
-              <span>Temporal window: {Math.round(windowMinutes() / 60)}h</span>
-              <span>{timelinePoints()[playbackIndex()] ? new Date(timelinePoints()[playbackIndex()]).toLocaleString() : "n/a"}</span>
+        <div class="grid grid-cols-1 xl:grid-cols-[1fr_380px]">
+          {/* Map */}
+          <div class="relative">
+            <div ref={mapEl} class="h-[350px] w-full" />
+            <div class="pointer-events-none absolute bottom-3 left-3 z-[500] rounded-lg border border-white/10 bg-black/70 backdrop-blur-sm px-2.5 py-1.5 text-[10px] text-zinc-400 font-mono-data">
+              {aircraft().length} aircraft &bull; real ADS-B positions
             </div>
-            <p class="text-[11px] text-zinc-500">Showing tracks reported between pivot time and {Math.round(windowMinutes() / 60)} hours earlier.</p>
-            <input
-              type="range"
-              min="0"
-              max={Math.max(0, timelinePoints().length - 1)}
-              value={playbackIndex()}
-              onInput={(e) => setPlaybackIndex(Number(e.currentTarget.value))}
-              class="intel-range"
-            />
-            <input
-              type="range"
-              min="120"
-              max="1440"
-              step="60"
-              value={windowMinutes()}
-              onInput={(e) => setWindowMinutes(Number(e.currentTarget.value))}
-              class="intel-range intel-range--secondary"
-            />
-          </div>
-        </Show>
-      </section>
-
-      <div class="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_390px]">
-        <section class="surface-card map-container relative overflow-hidden p-0">
-          <div ref={mapEl} class="relative z-10 h-[500px] w-full rounded-xl sm:h-[640px]" />
-          <div class="map-scanline rounded-xl" />
-
-          <div class="absolute right-4 top-4 z-[500] inline-flex rounded-lg border border-white/15 bg-black/70 backdrop-blur-sm p-0.5">
-            <button
-              type="button"
-              onClick={() => setBasemap("dark")}
-              class={`rounded-md px-2.5 py-1.5 text-[10px] uppercase tracking-wider font-medium transition ${basemap() === "dark" ? "bg-cyan-500/20 text-cyan-200 shadow-[0_0_8px_rgba(34,211,238,0.15)]" : "text-zinc-400 hover:text-zinc-200"}`}
-            >
-              Dark
-            </button>
-            <button
-              type="button"
-              onClick={() => setBasemap("satellite")}
-              class={`rounded-md px-2.5 py-1.5 text-[10px] uppercase tracking-wider font-medium transition ${basemap() === "satellite" ? "bg-cyan-500/20 text-cyan-200 shadow-[0_0_8px_rgba(34,211,238,0.15)]" : "text-zinc-400 hover:text-zinc-200"}`}
-            >
-              Satellite
-            </button>
-          </div>
-
-          <div class="pointer-events-none absolute left-4 top-4 z-[500] flex items-center gap-2">
-            <svg class="radar-sweep" viewBox="0 0 40 40">
-              <circle cx="20" cy="20" r="18" fill="none" stroke="rgba(34,211,238,0.15)" stroke-width="1" />
-              <circle cx="20" cy="20" r="10" fill="none" stroke="rgba(34,211,238,0.1)" stroke-width="0.5" />
-              <line class="radar-sweep-arc" x1="20" y1="20" x2="20" y2="3" stroke="rgba(34,211,238,0.5)" stroke-width="1.5" stroke-linecap="round" />
-            </svg>
-            <div class="rounded-lg border border-cyan-400/25 bg-black/70 backdrop-blur-sm px-2.5 py-1 text-[10px] uppercase tracking-wider text-cyan-200 font-semibold">
-              Global Operational Picture
-            </div>
-          </div>
-
-          <div class="pointer-events-none absolute bottom-4 left-4 z-[500] inline-flex flex-wrap items-center gap-3 rounded-lg border border-white/10 bg-black/70 backdrop-blur-sm px-3 py-1.5 text-[10px] text-zinc-300 font-medium">
-            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-red-400 shadow-[0_0_6px_rgba(239,68,68,0.5)]" /> Critical</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.4)]" /> High</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-blue-400" /> Medium</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-zinc-500" /> Low</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-full border border-zinc-300/80 bg-transparent" /> Estimated geo</span>
-          </div>
-
-          <div class="pointer-events-none absolute bottom-4 right-4 z-[500] rounded-lg border border-white/10 bg-black/70 backdrop-blur-sm px-3 py-1.5 text-[10px] text-zinc-400 font-mono-data">
-            {visibleStats().total} tracks &bull; {estimatedVisibleCount()} estimated &bull; {renderPayload().sourceSummary?.telegramChannels || 0} sources
-          </div>
-        </section>
-
-        <div class="space-y-4">
-          <Show
-            when={selected()}
-            fallback={
-              <div class="surface-card p-4 space-y-2">
-                <p class="text-sm text-zinc-300 font-medium">Select a track for deep intel details</p>
-                <p class="text-xs text-zinc-600">Click any marker to inspect confidence, evidence, kinetics, and source links.</p>
+            <Show when={data().aviation.emergencies > 0}>
+              <div class="pointer-events-none absolute top-3 right-3 z-[500] rounded-lg border border-red-500/30 bg-red-500/15 px-2.5 py-1.5 text-[11px] text-red-300 font-semibold animate-pulse">
+                {data().aviation.emergencies} EMERGENCY SQUAWK
               </div>
-            }
-          >
-            {(itemAccessor) => {
-              const item = itemAccessor();
-              if (!item) return null;
-              return (
-              <div class="surface-card p-4 ring-1 ring-white/[0.08] space-y-4">
-                <div class="flex items-start justify-between gap-3">
-                  <div>
-                    <div class="flex items-center gap-2 mb-1">
-                      <Show when={item.type === "air"} fallback={<Ship size={15} class="text-emerald-300" />}>
-                        <Plane size={15} class="text-cyan-300" />
-                      </Show>
-                      <span class="text-[10px] uppercase tracking-wider text-zinc-500">{item.type.toUpperCase()} Track</span>
-                    </div>
-                    <h3 class="text-base font-semibold text-white leading-snug">{item.label}</h3>
-                    <p class="text-xs text-zinc-500 mt-0.5">{item.class} • {item.source}</p>
-                  </div>
-                  <div class="text-right">
-                    <p class="text-[11px] uppercase tracking-wider font-bold" style={{ color: severityColor(item.severity) }}>{item.severity}</p>
-                    <p class="text-sm font-mono-data text-zinc-300" title="Confidence reflects source credibility and corroboration, not exact map precision.">{item.confidence}%</p>
-                  </div>
+            </Show>
+          </div>
+
+          {/* Aircraft list */}
+          <div class="border-l border-white/[0.06] max-h-[350px] overflow-y-auto">
+            <Show
+              when={aircraft().length > 0}
+              fallback={
+                <div class="flex flex-col items-center justify-center h-full p-8 text-center">
+                  <Plane size={28} class="text-zinc-700 mb-2" />
+                  <p class="text-sm text-zinc-500">No military aircraft currently tracked</p>
+                  <p class="text-xs text-zinc-700 mt-1">OpenSky data refreshes every 5 minutes</p>
                 </div>
-
-                <div class="grid grid-cols-2 gap-2 text-xs">
-                  <div class="rounded-xl bg-white/[0.03] border border-white/[0.06] p-2.5">
-                    <p class="text-zinc-600">Last Seen</p>
-                    <p class="text-zinc-300 font-medium">{formatRelativeTime(item.timestamp)}</p>
-                  </div>
-                  <div class="rounded-xl bg-white/[0.03] border border-white/[0.06] p-2.5">
-                    <p class="text-zinc-600">Region</p>
-                    <p class="text-zinc-300 font-medium">{item.region}</p>
-                  </div>
-                  <div class="rounded-xl bg-white/[0.03] border border-white/[0.06] p-2.5">
-                    <p class="text-zinc-600">Coordinates</p>
-                    <p class="text-zinc-300 font-mono-data">{item.placement?.mode === "region-estimate" ? "~" : ""}{item.latitude.toFixed(2)}, {item.longitude.toFixed(2)}</p>
-                  </div>
-                  <div class="rounded-xl bg-white/[0.03] border border-white/[0.06] p-2.5">
-                    <p class="text-zinc-600">Kinetics</p>
-                    <p class="text-zinc-300 font-mono-data">
-                      {typeof item.speedKts === "number" ? `${compact(item.speedKts)} kts` : "n/a"}
-                      {typeof item.altitudeFt === "number" ? ` • FL${Math.round(item.altitudeFt / 100)}` : ""}
-                    </p>
-                  </div>
-                  <div class="rounded-xl bg-white/[0.03] border border-white/[0.06] p-2.5 col-span-2">
-                    <p class="text-zinc-600">Geolocation Method</p>
-                    <p class="text-zinc-300 font-medium">{item.placement?.note || "Position source not specified"}</p>
-                    <Show when={item.placement?.anchorRegion}>
-                      <p class="text-[11px] text-zinc-500 mt-1">Anchor region: {item.placement?.anchorRegion}</p>
-                    </Show>
-                  </div>
-                </div>
-
-                <div>
-                  <p class="text-xs uppercase tracking-wider text-zinc-500 mb-1.5">Assessment</p>
-                  <p class="text-sm text-zinc-300 leading-relaxed">{item.summary}</p>
-                </div>
-
-                <div class="space-y-2">
-                  <p class="text-xs uppercase tracking-wider text-zinc-500">Evidence</p>
-                  <For each={item.evidence.slice(0, 4)}>
-                    {(e) => (
-                      <div class="rounded-xl bg-black/20 border border-white/[0.06] p-2.5">
-                        <div class="flex items-center justify-between gap-2">
-                          <p class="text-xs text-zinc-400">{e.source}</p>
-                          <p class="text-[11px] text-zinc-600">{formatRelativeTime(e.timestamp)}</p>
-                        </div>
-                        <p class="text-xs text-zinc-300 mt-1 leading-relaxed">{e.text}</p>
-                      </div>
-                    )}
-                  </For>
-                </div>
-
-                <Show when={selectedTimeline().length > 1}>
-                  <div class="space-y-2">
-                    <p class="text-xs uppercase tracking-wider text-zinc-500">Track Timeline</p>
-                    <div class="space-y-1.5 rounded-xl border border-white/[0.06] bg-black/20 p-2.5">
-                      <For each={selectedTimeline()}>
-                        {(node) => (
-                          <div class="flex items-center justify-between text-[11px]">
-                            <span class="truncate text-zinc-300">{node.summary.slice(0, 80)}</span>
-                            <span class="ml-2 shrink-0 text-zinc-500">{formatRelativeTime(node.timestamp)}</span>
-                          </div>
-                        )}
-                      </For>
-                    </div>
-                  </div>
-                </Show>
-
-                <div class="flex items-center gap-2">
-                  <Show when={item.links.primary}>
-                    <a href={item.links.primary} target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-xs text-zinc-300 hover:text-white hover:bg-white/[0.1] transition">
-                      Primary Link <ExternalLink size={12} />
-                    </a>
-                  </Show>
-                  <Show when={item.links.secondary}>
-                    <a href={item.links.secondary} target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/[0.06] text-xs text-zinc-300 hover:text-white hover:bg-white/[0.1] transition">
-                      Secondary <ExternalLink size={12} />
-                    </a>
-                  </Show>
-                </div>
-              </div>
-            );}}
-          </Show>
-
-          <div class="surface-card p-4">
-            <div class="flex items-center justify-between mb-3">
-              <p class="text-xs uppercase tracking-widest text-zinc-500 font-semibold">Priority Tracks</p>
-              <span class="text-[10px] text-zinc-600 font-mono-data">{visibleTracks().length} total</span>
-            </div>
-            <div class="max-h-[300px] space-y-1 overflow-auto pr-1">
-              <For each={visibleTracks().slice(0, 18)}>
-                {(track) => (
+              }
+            >
+              <For each={aircraft()}>
+                {(ac) => (
                   <button
                     type="button"
                     onClick={() => {
-                      setSelectedId(track.id);
-                      if (map) map.panTo([track.latitude, track.longitude], { animate: true, duration: 0.4 });
+                      setSelectedAircraft(ac.icao24);
+                      if (map) map.panTo([ac.latitude, ac.longitude], { animate: true, duration: 0.35 });
                     }}
-                    class={`w-full rounded-xl border px-3 py-2.5 text-left text-xs transition-all ${selectedId() === track.id ? "track-card-active border-cyan-400/20 bg-cyan-500/[0.06]" : "border-white/[0.05] hover:bg-white/[0.04] hover:border-white/[0.1]"}`}
+                    class={`w-full text-left px-4 py-3 border-b border-white/[0.04] transition-colors ${selectedAircraft() === ac.icao24 ? "bg-cyan-500/[0.06]" : "hover:bg-white/[0.03]"}`}
                   >
                     <div class="flex items-center justify-between gap-2">
-                      <div class="flex items-center gap-2 min-w-0">
-                        <Show when={track.type === "air"} fallback={<Ship size={12} class="text-emerald-400 shrink-0" />}>
-                          <Plane size={12} class="text-cyan-400 shrink-0" />
-                        </Show>
-                        <p class="truncate font-medium text-zinc-100">{track.label}</p>
+                      <div class="flex items-center gap-2.5 min-w-0">
+                        <span class={`h-2 w-2 rounded-full shrink-0 ${sevDot(ac.severity)}`} />
+                        <span class="font-mono-data text-sm font-bold text-white truncate">{ac.callsign}</span>
+                        <span class={`shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] uppercase tracking-wider font-medium ${sevBadge(ac.severity)}`}>{ac.type}</span>
                       </div>
                       <div class="flex items-center gap-1.5 shrink-0">
-                        <span class="h-1.5 w-1.5 rounded-full" style={{ background: severityColor(track.severity) }} />
-                        <span class="font-mono-data text-[10px] uppercase" style={{ color: severityColor(track.severity) }}>{track.severity}</span>
+                        <Show when={ac.links.adsbexchange}>
+                          <a href={ac.links.adsbexchange} target="_blank" rel="noopener noreferrer" class="text-zinc-600 hover:text-cyan-400 transition" onClick={(e) => e.stopPropagation()} title="ADS-B Exchange">
+                            <MapPin size={12} />
+                          </a>
+                        </Show>
+                        <Show when={ac.links.flightradar24}>
+                          <a href={ac.links.flightradar24} target="_blank" rel="noopener noreferrer" class="text-zinc-600 hover:text-cyan-400 transition" onClick={(e) => e.stopPropagation()} title="FlightRadar24">
+                            <ExternalLink size={12} />
+                          </a>
+                        </Show>
                       </div>
                     </div>
-                    <div class="mt-1 flex items-center justify-between gap-2 text-[10px] text-zinc-500">
-                      <span class="truncate">{track.class}</span>
-                      <span class="font-mono-data shrink-0">{formatRelativeTime(track.timestamp)}</span>
+                    <div class="mt-1 flex items-center gap-3 text-[11px] text-zinc-500">
+                      <Show when={!ac.onGround} fallback={<span class="text-amber-400/70">On Ground</span>}>
+                        <span class="font-mono-data">FL{Math.round(ac.altitudeFt / 100).toString().padStart(3, "0")}</span>
+                        <span class="font-mono-data">{Math.round(ac.speedKts)}kts</span>
+                        <span class="font-mono-data">{Math.round(ac.heading)}°</span>
+                        <Show when={ac.verticalRateFpm !== 0}>
+                          <span class="inline-flex items-center gap-0.5">
+                            {ac.verticalRateFpm > 0 ? <ChevronUp size={10} class="text-green-400" /> : <ChevronDown size={10} class="text-red-400" />}
+                            <span class="font-mono-data">{Math.abs(ac.verticalRateFpm)}fpm</span>
+                          </span>
+                        </Show>
+                      </Show>
+                      <span class="ml-auto">{ac.country} &bull; {regionLabel(ac.region)}</span>
                     </div>
                   </button>
                 )}
               </For>
-            </div>
-          </div>
-
-          <div class="surface-card p-4">
-            <div class="mb-3 flex items-center justify-between gap-2">
-              <p class="text-xs uppercase tracking-widest text-zinc-500 font-semibold">Source Health</p>
-              <span class="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] text-zinc-300">{dataTierLabel()}</span>
-            </div>
-            <div class="space-y-0 text-xs text-zinc-400">
-              <div class="source-health-row"><span class="inline-flex items-center gap-2"><Activity size={12} class="text-cyan-400" /> Aviation</span><span class="font-mono-data text-zinc-300">{renderPayload().sourceSummary?.aviationTimestamp ? formatRelativeTime(renderPayload().sourceSummary.aviationTimestamp!) : "n/a"}</span></div>
-              <div class="source-health-row"><span class="inline-flex items-center gap-2"><Anchor size={12} class="text-emerald-400" /> Telegram</span><span class="font-mono-data text-zinc-300">{renderPayload().sourceSummary?.telegramTimestamp ? formatRelativeTime(renderPayload().sourceSummary.telegramTimestamp!) : "n/a"}</span></div>
-              <div class="source-health-row"><span class="inline-flex items-center gap-2"><Crosshair size={12} class="text-zinc-500" /> Channels</span><span class="font-mono-data text-zinc-300">{renderPayload().sourceSummary?.telegramChannels || 0}</span></div>
-              <div class="source-health-row"><span class="inline-flex items-center gap-2"><ShieldAlert size={12} class="text-zinc-500" /> Messages</span><span class="font-mono-data text-zinc-300">{renderPayload().sourceSummary?.telegramMessages || 0}</span></div>
-              <div class="source-health-row"><span class="inline-flex items-center gap-2"><Signal size={12} class="text-zinc-500" /> Payload age</span><span class="font-mono-data text-zinc-300">{opsFreshness().minutes === null ? "n/a" : `${opsFreshness().minutes}m`}</span></div>
-              <div class="source-health-row"><span class="inline-flex items-center gap-2"><Signal size={12} class="text-zinc-500" /> Feed</span><span class="font-mono-data text-zinc-300">{stats().totalTracks} tracks ({estimatedVisibleCount()} estimated)</span></div>
-            </div>
+            </Show>
           </div>
         </div>
+      </section>
+
+      {/* ── Intel Feed ──────────────────────────────────────────── */}
+      <section class="surface-card p-4 space-y-3">
+        <div class="flex items-center gap-2 mb-1">
+          <Radio size={14} class="text-blue-400" />
+          <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Air / Sea Intel Feed</h2>
+          <span class="ml-auto text-[10px] text-zinc-600 font-mono-data">{filteredFeed().length} reports</span>
+        </div>
+
+        {/* Filters */}
+        <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Air and sea filters">
+          <button type="button" aria-label="All domain filter" aria-pressed={domainFilter() === "all"} onClick={() => setDomainFilter("all")} class={`min-h-10 px-3 py-1.5 text-xs rounded-xl border transition ${domainFilter() === "all" ? "border-white/20 bg-white/10 text-white" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>All</button>
+          <button type="button" aria-label="Air domain filter" aria-pressed={domainFilter() === "air"} onClick={() => setDomainFilter("air")} class={`min-h-10 px-3 py-1.5 text-xs rounded-xl border transition inline-flex items-center gap-1.5 ${domainFilter() === "air" ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>
+            <Plane size={12} /> Air
+          </button>
+          <button type="button" aria-label="Sea domain filter" aria-pressed={domainFilter() === "sea"} onClick={() => setDomainFilter("sea")} class={`min-h-10 px-3 py-1.5 text-xs rounded-xl border transition inline-flex items-center gap-1.5 ${domainFilter() === "sea" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>
+            <Ship size={12} /> Sea
+          </button>
+
+          <div class="mx-1 h-6 w-px bg-white/[0.08]" />
+
+          <button type="button" aria-label="Any severity filter" aria-pressed={sevFilter() === "all"} onClick={() => setSevFilter("all")} class={`min-h-10 px-3 py-1.5 text-xs rounded-xl border transition ${sevFilter() === "all" ? "border-white/20 bg-white/10 text-white" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>Any</button>
+          <button type="button" aria-label="Critical severity filter" aria-pressed={sevFilter() === "critical"} onClick={() => setSevFilter("critical")} class={`min-h-10 px-3 py-1.5 text-xs rounded-xl border transition ${sevFilter() === "critical" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>Critical</button>
+          <button type="button" aria-label="High severity filter" aria-pressed={sevFilter() === "high"} onClick={() => setSevFilter("high")} class={`min-h-10 px-3 py-1.5 text-xs rounded-xl border transition ${sevFilter() === "high" ? "border-amber-400/30 bg-amber-500/10 text-amber-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>High</button>
+
+          <div class="relative ml-auto flex-1 min-w-[200px] max-w-sm">
+            <Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+            <input
+              value={query()}
+              onInput={(e) => setQuery(e.currentTarget.value)}
+              placeholder="Search reports, channels, tags..."
+              class="h-10 w-full rounded-xl border border-white/10 bg-black/30 pl-9 pr-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-cyan-400/30 focus:outline-none"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Feed items */}
+      <div class="space-y-2">
+        <Show
+          when={visibleFeed().length > 0}
+          fallback={
+            <div class="surface-card p-8 text-center">
+              <p class="text-sm text-zinc-500">No air/sea intel reports match your filters</p>
+            </div>
+          }
+        >
+          <For each={visibleFeed()}>
+            {(report) => {
+              const cs = catStyle(report.category);
+              return (
+                <div class="surface-card p-4 hover:border-white/[0.12] transition-colors">
+                  <div class="flex items-start gap-3">
+                    {/* Severity indicator */}
+                    <div class="pt-1 shrink-0">
+                      <div class={`h-2.5 w-2.5 rounded-full ${sevDot(report.severity)}`} />
+                    </div>
+
+                    <div class="min-w-0 flex-1 space-y-2">
+                      {/* Top row: domain + channel + time */}
+                      <div class="flex items-center flex-wrap gap-2">
+                        <span class={`rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-wider font-semibold ${report.domain === "air" ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/25" : "bg-emerald-500/15 text-emerald-300 border-emerald-500/25"}`}>
+                          {report.domain === "air" ? "AIR" : "SEA"}
+                        </span>
+                        <span class={`rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-wider font-medium ${cs.bg} ${cs.border} ${cs.text}`}>
+                          {report.category.replace(/_/g, " ")}
+                        </span>
+                        <span class="text-xs font-medium text-zinc-300">{report.channel}</span>
+                        <span data-e2e="air-sea-item-age" class="text-[10px] text-zinc-600 ml-auto shrink-0 flex items-center gap-1">
+                          <Clock size={10} /> {formatRelativeTimeAt(report.datetime, nowMs())}
+                        </span>
+                      </div>
+
+                      {/* Report text */}
+                      <p class="text-sm text-zinc-300 leading-relaxed">{report.text.length > 500 ? report.text.slice(0, 500) + "..." : report.text}</p>
+
+                      {/* Tags + meta */}
+                      <div class="flex items-center flex-wrap gap-1.5">
+                        <For each={report.tags.filter((t) => TAG_COLORS[t])}>
+                          {(tag) => (
+                            <span class={`rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-wider font-medium ${TAG_COLORS[tag]}`}>
+                              {tag}
+                            </span>
+                          )}
+                        </For>
+                        <span class="rounded-full bg-white/[0.04] border border-white/[0.08] px-2 py-0.5 text-[9px] text-zinc-500 uppercase tracking-wider">
+                          {regionLabel(report.region)}
+                        </span>
+                        <Show when={parseViews(report.views) > 0}>
+                          <span class="inline-flex items-center gap-1 text-[10px] text-zinc-600">
+                            <Eye size={10} /> {formatNumber(parseViews(report.views))}
+                          </span>
+                        </Show>
+
+                        <Show when={report.link}>
+                          <a
+                            href={report.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="ml-auto inline-flex items-center gap-1 text-[10px] text-zinc-500 hover:text-cyan-400 transition"
+                          >
+                            View on Telegram <ExternalLink size={10} />
+                          </a>
+                        </Show>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            }}
+          </For>
+        </Show>
+
+        {/* Load more */}
+        <Show when={filteredFeed().length > showCount()}>
+          <button
+            type="button"
+            onClick={() => setShowCount((c) => c + 40)}
+            class="w-full surface-card p-3 text-sm text-zinc-400 hover:text-white hover:border-white/[0.12] transition text-center"
+          >
+            Show more ({filteredFeed().length - showCount()} remaining)
+          </button>
+        </Show>
       </div>
     </div>
+    </>
   );
 }

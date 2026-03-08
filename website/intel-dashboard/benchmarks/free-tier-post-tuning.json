@@ -1,0 +1,72 @@
+{
+  "timestamp": "2026-03-04T15:23:33.017Z",
+  "config": {
+    "edgeBase": "https://intel.pyro1121.com",
+    "backendBase": "https://intel-dashboard-backend.latham.workers.dev",
+    "requests": 20,
+    "concurrency": 4,
+    "timeoutMs": 20000
+  },
+  "results": [
+    {
+      "id": "edge_landing",
+      "method": "GET",
+      "url": "https://intel.pyro1121.com/",
+      "requests": 20,
+      "success": 20,
+      "errors": 0,
+      "statuses": {
+        "200": 20
+      },
+      "avgMs": 33.38151635,
+      "p50Ms": 14.506499999999988,
+      "p95Ms": 80.85090199999999,
+      "p99Ms": 167.18711000000002
+    },
+    {
+      "id": "edge_auth_me",
+      "method": "GET",
+      "url": "https://intel.pyro1121.com/api/auth/me",
+      "requests": 20,
+      "success": 20,
+      "errors": 0,
+      "statuses": {
+        "401": 20
+      },
+      "avgMs": 14.53148635,
+      "p50Ms": 14.413323999999989,
+      "p95Ms": 18.271237000000013,
+      "p99Ms": 21.59865499999998
+    },
+    {
+      "id": "edge_telegram_auth_gate",
+      "method": "GET",
+      "url": "https://intel.pyro1121.com/api/telegram",
+      "requests": 20,
+      "success": 20,
+      "errors": 0,
+      "statuses": {
+        "401": 20
+      },
+      "avgMs": 13.689895100000001,
+      "p50Ms": 13.07164899999998,
+      "p95Ms": 17.51277299999998,
+      "p99Ms": 18.14908600000001
+    },
+    {
+      "id": "backend_user_info_auth_gate",
+      "method": "POST",
+      "url": "https://intel-dashboard-backend.latham.workers.dev/api/intel-dashboard/user-info",
+      "requests": 20,
+      "success": 20,
+      "errors": 0,
+      "statuses": {
+        "401": 20
+      },
+      "avgMs": 32.849142699999994,
+      "p50Ms": 17.846883000000048,
+      "p95Ms": 92.952562,
+      "p99Ms": 95.57930299999998
+    }
+  ]
+}

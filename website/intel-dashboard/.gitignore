@@ -4,11 +4,14 @@ dist
 .vercel
 .netlify
 .vinxi
+output/e2e-browser/
 app.config.timestamp_*.js
 
 # Environment
 .env
 .env*.local
+.dev.vars
+.dev.vars.*
 
 # dependencies
 /node_modules

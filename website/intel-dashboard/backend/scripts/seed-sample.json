@@ -1,0 +1,44 @@
+[
+  {
+    "key": "intel-dashboard:usage:discover:1769799034727:1772391034727",
+    "value": {
+      "sessions": []
+    }
+  },
+  {
+    "key": "intel-dashboard:usage:cost-summary:1769799034727:1772391034727",
+    "value": {
+      "updatedAt": 1772391034727,
+      "days": 30,
+      "daily": [
+        {
+          "date": "2026-02-15",
+          "input": 1200,
+          "output": 900,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 2100,
+          "totalCost": 0.12,
+          "inputCost": 0.05,
+          "outputCost": 0.07,
+          "cacheReadCost": 0,
+          "cacheWriteCost": 0,
+          "missingCostEntries": 0
+        }
+      ],
+      "totals": {
+        "input": 1200,
+        "output": 900,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 2100,
+        "totalCost": 0.12,
+        "inputCost": 0.05,
+        "outputCost": 0.07,
+        "cacheReadCost": 0,
+        "cacheWriteCost": 0,
+        "missingCostEntries": 0
+      }
+    }
+  }
+]

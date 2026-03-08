@@ -42,7 +42,7 @@ bun run scripts/aggregate.ts | bun run scripts/analyze.ts
 bun run install-cron
 ```
 
-This installs a `*/10 * * * *` cron job that runs `bun run refresh` and appends logs to `state/refresh.log`.
+This installs a `* * * * *` cron job that runs `bun run refresh` and appends logs to `state/refresh.log`.
 
 ## Environment
 

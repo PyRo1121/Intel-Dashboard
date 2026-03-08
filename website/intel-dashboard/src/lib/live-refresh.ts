@@ -1,4 +1,4 @@
-import { createEffect, onCleanup } from "solid-js";
+import { createEffect, createSignal, onCleanup } from "solid-js";
 
 interface LiveRefreshOptions {
   onlyWhenVisible?: boolean;
@@ -95,4 +95,69 @@ export function useLiveRefresh(
       }
     });
   });
+}
+
+export function nextWallClockDelay(intervalMs: number, nowMs: number): number {
+  const delay = Math.max(250, Math.floor(intervalMs));
+  const remainder = ((Math.floor(nowMs) % delay) + delay) % delay;
+  return remainder === 0 ? delay : delay - remainder;
+}
+
+export function useWallClock(intervalMs = 1000) {
+  const [now, setNow] = createSignal(Date.now());
+
+  createEffect(() => {
+    if (typeof window === "undefined") return;
+    const delay = Math.max(250, intervalMs);
+    let timer: number | null = null;
+    let stopped = false;
+
+    const clearTimer = () => {
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        timer = null;
+      }
+    };
+
+    const schedule = () => {
+      clearTimer();
+      if (typeof document !== "undefined" && document.hidden) return;
+      timer = window.setTimeout(() => {
+        setNow(Date.now());
+        if (!stopped) schedule();
+      }, nextWallClockDelay(delay, Date.now()));
+    };
+
+    const syncNow = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      setNow(Date.now());
+      schedule();
+    };
+
+    const onVisibility = () => {
+      if (typeof document !== "undefined" && document.hidden) {
+        clearTimer();
+        return;
+      }
+      syncNow();
+    };
+
+    schedule();
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility);
+    }
+    window.addEventListener("focus", syncNow);
+
+    onCleanup(() => {
+      stopped = true;
+      clearTimer();
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility);
+      }
+      window.removeEventListener("focus", syncNow);
+    });
+  });
+
+  return now;
 }

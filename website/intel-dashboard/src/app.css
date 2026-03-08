@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&family=Inter:opsz,wght@14..32,300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -32,14 +32,38 @@
 * { box-sizing: border-box; }
 
 body {
-  background: var(--color-surface-body);
+  background:
+    radial-gradient(1100px 540px at 0% -10%, rgba(14, 165, 233, 0.14), transparent 68%),
+    radial-gradient(980px 480px at 100% 0%, rgba(16, 185, 129, 0.1), transparent 72%),
+    linear-gradient(180deg, #0a0d13 0%, #09090b 48%, #06070b 100%);
   color: var(--color-text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: 'Fira Sans', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  min-height: 100vh;
+  min-height: 100dvh;
   line-height: 1.6;
   letter-spacing: -0.011em;
+}
+
+.intel-app-bg {
+  position: relative;
+  min-height: 100dvh;
+  background:
+    radial-gradient(860px 430px at 8% 8%, rgba(14, 165, 233, 0.2), transparent 70%),
+    radial-gradient(780px 380px at 92% 88%, rgba(16, 185, 129, 0.12), transparent 72%),
+    linear-gradient(180deg, #0a0d13 0%, #09090b 52%, #06070b 100%);
+}
+
+.intel-app-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 36px 36px;
+  opacity: 0.35;
 }
 
 * {
@@ -61,6 +85,195 @@ body {
     0 0 0 0 transparent,
     0 1px 2px rgba(0, 0, 0, 0.3),
     0 0 40px -12px rgba(0, 0, 0, 0.4);
+}
+
+.intel-panel {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-2xl);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.intel-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(56, 189, 248, 0.32);
+  background: rgba(14, 165, 233, 0.12);
+  color: rgb(186 230 253);
+  padding: 0.28rem 0.75rem;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.intel-btn {
+  display: inline-flex;
+  min-height: 2.8rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.9rem;
+  border: 1px solid transparent;
+  padding: 0.6rem 1rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  transition: all 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.intel-btn:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.7);
+  outline-offset: 2px;
+}
+
+.intel-btn:hover {
+  transform: translateY(-1px);
+}
+
+.intel-btn-primary {
+  background: linear-gradient(135deg, #0ea5e9, #14b8a6);
+  color: white;
+  border-color: rgba(34, 211, 238, 0.35);
+  box-shadow: 0 10px 26px rgba(14, 165, 233, 0.25);
+}
+
+.intel-btn-primary:hover {
+  box-shadow: 0 14px 32px rgba(20, 184, 166, 0.3);
+}
+
+.intel-btn-secondary {
+  background: rgba(16, 185, 129, 0.14);
+  color: rgb(167 243 208);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.intel-btn-ghost {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: rgb(212 212 216);
+}
+
+.intel-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.intel-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  animation: fade-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.intel-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+@media (min-width: 640px) {
+  .intel-page-header {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+}
+
+.intel-heading {
+  margin: 0;
+  font-size: clamp(1.7rem, 1.3rem + 1.2vw, 2.08rem);
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.intel-subheading {
+  margin-top: 0.38rem;
+  color: rgba(161, 161, 170, 0.95);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.intel-kpi-strip {
+  display: inline-grid;
+  grid-auto-flow: column;
+  align-items: stretch;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.intel-kpi-segment {
+  padding: 0.45rem 0.82rem;
+  min-width: 4.5rem;
+  text-align: center;
+}
+
+.intel-kpi-segment + .intel-kpi-segment {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.intel-kpi-value {
+  font-family: "Fira Code", "JetBrains Mono", "SF Mono", monospace;
+  font-size: 1.02rem;
+  line-height: 1.1;
+  font-weight: 700;
+  color: #fafafa;
+}
+
+.intel-kpi-label {
+  margin-top: 0.22rem;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: rgba(113, 113, 122, 0.95);
+}
+
+.intel-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.3rem;
+}
+
+.intel-chip {
+  display: inline-flex;
+  min-height: 2.65rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.42rem 0.72rem;
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: rgba(161, 161, 170, 0.95);
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+.intel-chip:hover {
+  color: rgba(228, 228, 231, 0.98);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.intel-chip-active {
+  color: #e0f2fe;
+  background: rgba(14, 165, 233, 0.16);
+  border-color: rgba(56, 189, 248, 0.42);
 }
 
 .surface-card-hover {
@@ -224,7 +437,7 @@ body {
 .stagger-6 { animation-delay: 0.3s; animation-fill-mode: both; }
 
 .font-mono-data {
-  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
@@ -401,28 +614,50 @@ body {
 
 .telegram-tweet {
   position: relative;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  border-left: 2px solid rgba(96, 165, 250, 0.45);
-  border-radius: 0.9rem;
-  background: linear-gradient(180deg, rgba(11, 14, 20, 0.7), rgba(11, 14, 20, 0.45));
-  padding: 0.8rem 0.95rem;
-  transition: background 150ms ease, border-color 150ms ease;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0);
+  padding: 0.95rem 0.75rem;
+  transition: background 150ms ease;
 }
 
 .telegram-tweet:hover {
-  background: linear-gradient(180deg, rgba(17, 21, 30, 0.8), rgba(11, 14, 20, 0.55));
-  border-left-color: rgba(147, 197, 253, 0.85);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .telegram-tweet--focused {
-  border-left-color: rgba(34, 211, 238, 0.9);
-  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.25), 0 0 0 1px rgba(34, 211, 238, 0.2);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.telegram-tweet-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.72rem;
+}
+
+.telegram-tweet-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(15, 23, 42, 0.92);
+  text-transform: uppercase;
+}
+
+.telegram-tweet-content {
+  min-width: 0;
+  flex: 1;
 }
 
 .telegram-tweet-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
+  justify-content: flex-start;
   gap: 0.65rem;
   margin-bottom: 0.45rem;
 }
@@ -436,41 +671,44 @@ body {
 
 .telegram-tweet-author-name {
   margin: 0;
-  color: rgba(244, 244, 245, 0.96);
-  font-size: 0.79rem;
-  font-weight: 600;
+  color: rgba(250, 250, 250, 0.98);
+  font-size: 0.86rem;
+  font-weight: 700;
   line-height: 1.1;
-  max-width: 22rem;
+  max-width: 20rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.telegram-tweet-author-handle {
+  color: rgba(161, 161, 170, 0.95);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
 .telegram-tweet-time {
   display: inline-flex;
   align-items: center;
-  gap: 0.28rem;
   color: rgba(161, 161, 170, 0.95);
-  font-size: 0.68rem;
-  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.76rem;
   white-space: nowrap;
 }
 
 .telegram-tweet-text {
   white-space: pre-wrap;
-  font-size: 0.82rem;
-  line-height: 1.55;
-  color: rgba(228, 228, 231, 0.95);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: rgba(228, 228, 231, 0.98);
 }
 
 .telegram-tweet-actions {
-  margin-top: 0.7rem;
-  padding-top: 0.7rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-top: 0.6rem;
+  padding-top: 0.18rem;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 0.5rem;
 }
 
 .telegram-tweet-action-pill,
@@ -480,28 +718,27 @@ body {
   align-items: center;
   gap: 0.3rem;
   border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0);
   color: rgba(161, 161, 170, 0.95);
-  font-size: 0.66rem;
+  font-size: 0.72rem;
   font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   text-decoration: none;
-  padding: 0.28rem 0.5rem;
+  padding: 0.36rem 0.62rem;
+  transition: color 140ms ease, background-color 140ms ease;
 }
 
 .telegram-tweet-action-btn {
   cursor: pointer;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  justify-content: center;
 }
 
 .telegram-tweet-action-btn:hover,
 .telegram-tweet-action-link:hover {
-  color: rgba(191, 219, 254, 0.98);
-  border-color: rgba(96, 165, 250, 0.35);
-  background: rgba(59, 130, 246, 0.1);
-}
-
-.telegram-tweet-action-link {
-  margin-left: auto;
+  color: rgba(147, 197, 253, 0.98);
+  background: rgba(59, 130, 246, 0.18);
 }
 
 .telegram-photo-collage {
@@ -577,17 +814,29 @@ body {
 
 .telegram-photo-img {
   display: block;
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.44));
-  transition: transform 190ms cubic-bezier(0.2, 0, 0, 1);
+  transition: transform 190ms cubic-bezier(0.2, 0, 0, 1), opacity 200ms ease;
 }
 
 .telegram-photo-button:hover .telegram-photo-img {
   transform: scale(1.0175);
+}
+
+.telegram-photo-skeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, rgba(255,255,255,0.04) 8%, rgba(255,255,255,0.08) 18%, rgba(255,255,255,0.04) 33%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .telegram-photo-overflow {
@@ -636,6 +885,10 @@ body {
   max-height: calc(100vh - 4.5rem);
   object-fit: contain;
   background: radial-gradient(circle at top, rgba(255, 255, 255, 0.03), transparent 45%), rgba(0, 0, 0, 0.52);
+}
+
+.telegram-lightbox-frame {
+  touch-action: pinch-zoom;
 }
 
 .telegram-lightbox-close {
@@ -710,10 +963,6 @@ body {
     gap: 0.3rem;
   }
 
-  .telegram-tweet-action-link {
-    margin-left: 0;
-  }
-
   .telegram-photo-collage--triple {
     grid-template-columns: 1fr;
     grid-template-areas:
@@ -744,4 +993,73 @@ body {
 ::selection {
   background: rgba(34, 197, 94, 0.3);
   color: white;
+}
+
+/* ── Smooth scrolling ──────────────────────────────────────── */
+html { scroll-behavior: smooth; }
+
+/* ── Accessible reduced-motion ─────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Subtle emerald glow on live indicators / active nav ──── */
+.glow-emerald-text {
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.3), 0 0 30px rgba(34, 197, 94, 0.1);
+}
+
+.glow-emerald-dot {
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5), 0 0 16px rgba(34, 197, 94, 0.2);
+}
+
+/* ── Skeleton card placeholder for initial feed load ──────── */
+.telegram-skeleton-card {
+  display: flex;
+  gap: 0.72rem;
+  padding: 0.95rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.telegram-skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  background: linear-gradient(110deg, rgba(255,255,255,0.04) 8%, rgba(255,255,255,0.08) 18%, rgba(255,255,255,0.04) 33%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.telegram-skeleton-line {
+  height: 0.75rem;
+  border-radius: 0.375rem;
+  background: linear-gradient(110deg, rgba(255,255,255,0.04) 8%, rgba(255,255,255,0.08) 18%, rgba(255,255,255,0.04) 33%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+.telegram-skeleton-line--short { width: 45%; }
+.telegram-skeleton-line--medium { width: 70%; }
+.telegram-skeleton-line--long { width: 92%; }
+.telegram-skeleton-line--header { width: 55%; height: 0.6rem; }
+
+/* ── Touch target guarantee for action buttons (mobile) ────── */
+@media (max-width: 640px) {
+  .telegram-tweet-action-btn,
+  .telegram-tweet-action-pill,
+  .telegram-tweet-action-link {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+    justify-content: center;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .telegram-tweet-actions {
+    gap: 0.5rem;
+  }
 }

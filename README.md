@@ -1,4 +1,4 @@
-# OpenClaw Intel Stack Backup
+# Intel Dashboard Backup
 
 Private backup + restore runbook for:
 

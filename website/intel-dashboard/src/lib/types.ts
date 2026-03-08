@@ -1,5 +1,5 @@
 export type Severity = "critical" | "high" | "medium" | "low";
-export type IntelRegion = "middle_east" | "ukraine" | "europe" | "pacific" | "global" | "us";
+export type IntelRegion = "middle_east" | "ukraine" | "europe" | "pacific" | "africa" | "east_asia" | "central_america" | "military" | "global" | "us";
 export type IntelCategory = "news" | "conflict" | "notam" | "military_movement";
 
 export interface IntelItem {
@@ -25,6 +25,10 @@ export const REGION_LABELS: Record<IntelRegion, string> = {
   ukraine: "Ukraine",
   europe: "Europe",
   pacific: "Pacific",
+  africa: "Africa",
+  east_asia: "East Asia",
+  central_america: "Central America",
+  military: "Military",
   global: "Global",
   us: "United States",
 };

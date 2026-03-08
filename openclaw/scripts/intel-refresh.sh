@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run every 30 min via systemd timer. Bot reads these files instead of making API calls.
+# Run every 1 min via cron/systemd timer. Bot reads these files instead of making API calls.
 set -euo pipefail
 
 LOG_PREFIX="[intel-refresh]"
@@ -60,10 +60,13 @@ main() {
   local pid_osint=$!
   refresh_aviation &
   local pid_aviation=$!
+  refresh_telegram &
+  local pid_telegram=$!
 
   local failures=0
   wait $pid_osint    || ((failures++))
   wait $pid_aviation || ((failures++))
+  wait $pid_telegram || ((failures++))
 
   if [ "$failures" -gt 0 ]; then
     log "Completed with $failures failure(s)"

@@ -9,6 +9,12 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250124.0",
-    "wrangler": "^4.67.0"
+    "wrangler": "^4.70.0"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.5.3",
+    "better-auth": "^1.5.3",
+    "better-auth-cloudflare": "^0.2.9",
+    "drizzle-orm": "^0.44.7"
   }
 }

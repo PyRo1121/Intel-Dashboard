@@ -1,19 +1,90 @@
 import { For, Show, createMemo, createSignal, createResource } from "solid-js";
+import { Title, Meta, Link } from "@solidjs/meta";
 import SeverityBadge from "~/components/ui/SeverityBadge";
 import {
-  buildFreshnessStatus,
+  buildFreshnessStatusAt,
   freshnessBannerTone,
   freshnessPillTone,
   freshnessTooltip,
   maxIsoTimestamp,
   useFreshnessTransitionNotice,
 } from "~/lib/freshness";
-import { useLiveRefresh } from "~/lib/live-refresh";
+import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import type { IntelItem, Severity } from "~/lib/types";
-import { formatRelativeTime } from "~/lib/utils";
+import { formatAgeCompactFromMs, formatRelativeTimeAt } from "~/lib/utils";
 import { Radio, ExternalLink, Clock } from "lucide-solid";
+import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
+import { OSINT_DESCRIPTION, OSINT_TITLE } from "../../shared/route-meta.ts";
+import { siteUrl } from "../../shared/site-config.ts";
 
 const FILTERS: (Severity | "all")[] = ["all", "critical", "high", "medium", "low"];
+
+const NAMED_HTML_ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: "\"",
+  apos: "'",
+  nbsp: " ",
+};
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (_match, entity) => {
+      const normalized = String(entity).toLowerCase();
+      if (normalized.startsWith("#x")) {
+        const code = Number.parseInt(normalized.slice(2), 16);
+        return Number.isFinite(code) ? String.fromCodePoint(code) : "";
+      }
+      if (normalized.startsWith("#")) {
+        const code = Number.parseInt(normalized.slice(1), 10);
+        return Number.isFinite(code) ? String.fromCodePoint(code) : "";
+      }
+      return NAMED_HTML_ENTITIES[normalized] ?? `&${entity};`;
+    });
+}
+
+function sanitizeIntelText(value: string | undefined): string {
+  if (!value) return "";
+  let next = value;
+  for (let pass = 0; pass < 3; pass += 1) {
+    const decoded = decodeHtmlEntities(next);
+    if (decoded === next) break;
+    next = decoded;
+  }
+  return next
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function trimSmart(value: string, maxChars = 360): string {
+  if (value.length <= maxChars) return value;
+  const sliced = value.slice(0, maxChars);
+  const boundary = sliced.lastIndexOf(" ");
+  const base = boundary > Math.floor(maxChars * 0.65) ? sliced.slice(0, boundary) : sliced;
+  return `${base.trim()}...`;
+}
+
+function normalizeSummary(summaryRaw: string, title: string): string {
+  let summary = sanitizeIntelText(summaryRaw)
+    .replace(/\bThe post .*? appeared first on .*?\.?/gi, "")
+    .replace(/\bLatest Updates\b[\s\S]*$/i, "")
+    .replace(/\bFollow(?:ing)? .*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (title && summary.toLowerCase().startsWith(title.toLowerCase())) {
+    summary = summary.slice(title.length).replace(/^[-:;,.–—\s]+/, "").trim();
+  }
+  return trimSmart(summary || title, 340);
+}
+
+function normalizeIntelItem(item: IntelItem): IntelItem {
+  const title = trimSmart(sanitizeIntelText(item.title), 180);
+  const source = trimSmart(sanitizeIntelText(item.source), 64);
+  const summary = normalizeSummary(item.summary, title);
+  return { ...item, title, source, summary };
+}
 
 async function loadOsint(): Promise<IntelItem[]> {
   try {
@@ -23,7 +94,11 @@ async function loadOsint(): Promise<IntelItem[]> {
     });
     if (!res.ok) return [];
     const data = await res.json();
-    return Array.isArray(data) ? data : [];
+    return Array.isArray(data)
+      ? data
+        .filter((item): item is IntelItem => item && typeof item === "object")
+        .map((item) => normalizeIntelItem(item))
+      : [];
   } catch {
     return [];
   }
@@ -33,21 +108,31 @@ export default function OsintFeed() {
   const [filter, setFilter] = createSignal<Severity | "all">("all");
   const [osint, { refetch }] = createResource(loadOsint, { initialValue: [] as IntelItem[] });
   const feedThresholds = { liveMaxMinutes: 20, delayedMaxMinutes: 90 } as const;
+  const nowMs = useWallClock(1000);
 
   useLiveRefresh(() => {
     void refetch();
-  }, 30_000, { runImmediately: false });
+  }, 10_000, { runImmediately: true });
 
   const items = () => osint.latest ?? osint() ?? [];
   const loadingInitial = () => osint.state === "refreshing" && items().length === 0;
   const latestIntelTs = createMemo(() => maxIsoTimestamp(items().map((item) => item.timestamp)));
-  const feedFreshness = createMemo(() => buildFreshnessStatus(latestIntelTs(), feedThresholds));
+  const feedFreshness = createMemo(() => buildFreshnessStatusAt(nowMs(), latestIntelTs(), feedThresholds));
+  const latestFeedAgeMs = createMemo(() => {
+    const ts = latestIntelTs();
+    if (!ts) return null;
+    return Math.max(0, nowMs() - ts);
+  });
+  const latestFeedAgeLabel = createMemo(() => formatAgeCompactFromMs(latestFeedAgeMs()));
   const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "OSINT feed");
   const filtered = () => {
     const f = filter();
     if (f === "all") return items();
     return items().filter((item) => item.severity === f);
   };
+
+  const seoTitle = OSINT_TITLE;
+  const seoDesc = OSINT_DESCRIPTION;
 
   const severityCounts = () => {
     const all = items();
@@ -60,46 +145,51 @@ export default function OsintFeed() {
   };
 
   return (
-    <div class="space-y-6 animate-fade-in">
+    <>
+      <Title>{seoTitle}</Title>
+      <Meta name="description" content={seoDesc} />
+      <Link rel="canonical" href={siteUrl("/osint")} />
+      <Meta property="og:title" content={seoTitle} />
+      <Meta property="og:description" content={seoDesc} />
+      <Meta property="og:url" content={siteUrl("/osint")} />
+      <Meta name="twitter:title" content={seoTitle} />
+      <Meta name="twitter:description" content={seoDesc} />
+    <div class="intel-page max-w-full overflow-x-clip">
       {/* Header */}
-      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+      <header class="intel-page-header max-w-full">
         <div>
-          <div class="flex items-center gap-2 mb-2">
-            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20">
-              <div class="w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_6px_rgba(59,130,246,0.5)]" />
-              <span class="text-[11px] font-semibold text-blue-400 uppercase tracking-wider">Live Feed</span>
-            </div>
+          <div class="intel-badge mb-2">
+            <div class="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.5)]" />
+            Live Feed
           </div>
-          <h1 class="text-3xl font-bold text-white tracking-tight">OSINT Feed</h1>
-          <p class="text-sm text-zinc-500 mt-1.5">
+          <h1 class="intel-heading">OSINT Feed</h1>
+          <p class="intel-subheading">
             Open-source intelligence from GDELT, RSS, NOTAMs, and military aircraft tracking
           </p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex w-full xl:w-auto items-center justify-start xl:justify-end gap-2 flex-wrap xl:flex-nowrap">
           <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
             Feed: {feedFreshness().label}
-            <Show when={feedFreshness().minutes !== null}> ({feedFreshness().minutes}m)</Show>
+            <Show when={latestFeedAgeMs() !== null}> ({latestFeedAgeLabel()})</Show>
           </span>
           <Show when={items().length > 0}>
-            <div class="flex items-center gap-1 p-1 surface-card rounded-2xl">
+            <div class="grid grid-cols-3 w-full min-w-0 sm:w-auto sm:min-w-[285px] overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03]">
               <div class="px-3.5 py-2 text-center">
                 <p class="text-lg font-bold font-mono-data text-white">{items().length}</p>
                 <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Events</p>
               </div>
-              <div class="w-px h-8 bg-white/[0.06]" />
-              <div class="px-3.5 py-2 text-center">
+              <div class="px-3.5 py-2 text-center border-l border-white/[0.06]">
                 <p class="text-lg font-bold font-mono-data text-red-400">{severityCounts().critical}</p>
                 <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Critical</p>
               </div>
-              <div class="w-px h-8 bg-white/[0.06]" />
-              <div class="px-3.5 py-2 text-center">
+              <div class="px-3.5 py-2 text-center border-l border-white/[0.06]">
                 <p class="text-lg font-bold font-mono-data text-amber-400">{severityCounts().high}</p>
                 <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">High</p>
               </div>
             </div>
           </Show>
         </div>
-      </div>
+      </header>
 
       <Show when={freshnessNotice()}>
         {(notice) => (
@@ -113,21 +203,25 @@ export default function OsintFeed() {
         )}
       </Show>
 
+      <FeedAccessNotice surface="OSINT" />
+
       {/* Filter Pills */}
-      <div class="flex items-center gap-1 p-1 rounded-2xl bg-white/[0.02] border border-white/[0.04] w-fit">
+      <div class="intel-toolbar w-full sm:w-fit max-w-full" role="group" aria-label="OSINT severity filters">
         <For each={FILTERS}>
           {(f) => {
             const count = () => f === "all" ? items().length : severityCounts()[f as Severity];
             return (
               <button
+                type="button"
+                aria-pressed={filter() === f}
                 onClick={() => setFilter(f)}
-                class={`px-3.5 py-2 rounded-xl text-[12px] font-medium transition-all duration-300 ${
+                class={`intel-chip whitespace-nowrap ${
                   filter() === f
-                    ? f === "critical" ? "bg-red-500/15 text-red-300 shadow-sm" :
-                      f === "high" ? "bg-amber-500/15 text-amber-300 shadow-sm" :
-                      f === "medium" ? "bg-blue-500/15 text-blue-300 shadow-sm" :
-                      "bg-white/[0.08] text-white shadow-sm"
-                    : "text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.03]"
+                    ? f === "critical" ? "border-red-400/40 bg-red-500/15 text-red-200" :
+                      f === "high" ? "border-amber-400/40 bg-amber-500/15 text-amber-200" :
+                      f === "medium" ? "border-blue-400/40 bg-blue-500/15 text-blue-200" :
+                      "intel-chip-active"
+                    : ""
                 }`}
               >
                 {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
@@ -147,7 +241,7 @@ export default function OsintFeed() {
           <div class="space-y-2">
             <For each={[1, 2, 3, 4, 5]}>
               {() => (
-                <div class="surface-card p-5">
+                <div class="surface-card p-3">
                   <div class="flex items-center gap-2 mb-3">
                     <div class="h-6 w-20 bg-white/[0.04] rounded-lg animate-shimmer" />
                     <div class="h-4 w-16 bg-white/[0.04] rounded animate-shimmer" />
@@ -185,7 +279,7 @@ export default function OsintFeed() {
                   href={item.url || "#"}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="block surface-card surface-card-hover p-5 transition-all duration-200 group relative overflow-hidden no-underline cursor-pointer"
+                  class="block surface-card surface-card-hover p-3.5 transition-all duration-200 group relative overflow-hidden no-underline cursor-pointer"
                   style={idx() < 20 ? `animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: ${idx() * 25}ms` : undefined}
                 >
                   {/* Severity accent line */}
@@ -209,8 +303,8 @@ export default function OsintFeed() {
                           <span class="text-[11px] text-zinc-600 capitalize">{(item.category || "").replace("_", " ")}</span>
                         </Show>
                       </div>
-                      <h3 class="text-sm font-medium text-white leading-snug group-hover:text-blue-50 transition-colors">{item.title}</h3>
-                      <p class="text-[12px] text-zinc-500 mt-1.5 leading-relaxed line-clamp-2">{item.summary}</p>
+                      <h3 class="text-sm font-medium text-white leading-snug group-hover:text-blue-50 transition-colors [overflow-wrap:anywhere]">{item.title}</h3>
+                      <p class="text-[12px] text-zinc-500 mt-1.5 leading-relaxed line-clamp-2 break-words [overflow-wrap:anywhere]">{item.summary}</p>
                       <div class="inline-flex items-center gap-1 mt-2 text-[11px] text-zinc-600 group-hover:text-blue-400 transition-colors">
                         View source <ExternalLink size={10} />
                       </div>
@@ -218,8 +312,8 @@ export default function OsintFeed() {
                     <Show when={item.timestamp}>
                       <div class="flex items-center gap-1 flex-shrink-0">
                         <Clock size={11} class="text-zinc-700" />
-                        <span class="text-[11px] text-zinc-700 whitespace-nowrap font-mono-data">
-                          {formatRelativeTime(item.timestamp)}
+                        <span data-e2e="osint-item-age" class="text-[11px] text-zinc-700 whitespace-nowrap font-mono-data">
+                          {formatRelativeTimeAt(item.timestamp, nowMs())}
                         </span>
                       </div>
                     </Show>
@@ -231,5 +325,6 @@ export default function OsintFeed() {
         </Show>
       </Show>
     </div>
+    </>
   );
 }

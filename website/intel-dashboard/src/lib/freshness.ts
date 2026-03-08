@@ -1,4 +1,5 @@
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
+import { formatAgeCompactFromMs } from "./utils.ts";
 
 export type FreshnessState = "live" | "delayed" | "stale";
 
@@ -17,6 +18,7 @@ export interface FreshnessLabels {
 export interface FreshnessStatus {
   state: FreshnessState;
   minutes: number | null;
+  ageMs: number | null;
   label: string;
 }
 
@@ -56,24 +58,26 @@ export function freshnessTooltip(thresholds: FreshnessThresholds): string {
   return `Freshness thresholds: live <= ${thresholds.liveMaxMinutes}m, delayed <= ${thresholds.delayedMaxMinutes}m, stale > ${thresholds.delayedMaxMinutes}m.`;
 }
 
-export function buildFreshnessStatus(
+export function buildFreshnessStatusAt(
+  nowMs: number,
   latestTimestampMs: number,
   thresholds: FreshnessThresholds,
   labels?: FreshnessLabels,
 ): FreshnessStatus {
   const resolved = normalizeLabels(labels);
   if (!Number.isFinite(latestTimestampMs) || latestTimestampMs <= 0) {
-    return { state: "stale", minutes: null, label: resolved.noData };
+    return { state: "stale", minutes: null, ageMs: null, label: resolved.noData };
   }
 
-  const minutes = Math.max(0, Math.round((Date.now() - latestTimestampMs) / 60_000));
-  if (minutes <= thresholds.liveMaxMinutes) {
-    return { state: "live", minutes, label: resolved.live };
+  const ageMs = Math.max(0, nowMs - latestTimestampMs);
+  const minutes = Math.floor(ageMs / 60_000);
+  if (ageMs <= thresholds.liveMaxMinutes * 60_000) {
+    return { state: "live", minutes, ageMs, label: resolved.live };
   }
-  if (minutes <= thresholds.delayedMaxMinutes) {
-    return { state: "delayed", minutes, label: resolved.delayed };
+  if (ageMs <= thresholds.delayedMaxMinutes * 60_000) {
+    return { state: "delayed", minutes, ageMs, label: resolved.delayed };
   }
-  return { state: "stale", minutes, label: resolved.stale };
+  return { state: "stale", minutes, ageMs, label: resolved.stale };
 }
 
 export function freshnessPillTone(state: FreshnessState): string {
@@ -115,12 +119,13 @@ export function useFreshnessTransitionNotice(
     if (previousState === current.state) return;
 
     previousState = current.state;
+    const ageLabel = formatAgeCompactFromMs(current.ageMs);
     const message =
       current.state === "live"
-        ? `${subject} recovered to live (${current.minutes}m).`
+        ? `${subject} recovered to live (${ageLabel}).`
         : current.state === "delayed"
-          ? `${subject} moved to delayed (${current.minutes}m).`
-          : `${subject} became stale (${current.minutes}m).`;
+          ? `${subject} moved to delayed (${ageLabel}).`
+          : `${subject} became stale (${ageLabel}).`;
 
     setNotice({ state: current.state, message, phase: "enter" });
 

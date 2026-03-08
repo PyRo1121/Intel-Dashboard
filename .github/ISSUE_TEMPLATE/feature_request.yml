@@ -1,0 +1,30 @@
+name: Feature request
+description: Propose a product, platform, or repository improvement
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or opportunity
+      description: What user, maintainer, or operational problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the intended change at a behavior level.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: If relevant, explain what should not be done and why.
+  - type: textarea
+    id: success
+    attributes:
+      label: Success criteria
+      description: What would make this complete and correct?

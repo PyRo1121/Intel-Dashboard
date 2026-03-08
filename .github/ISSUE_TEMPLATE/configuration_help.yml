@@ -1,0 +1,33 @@
+name: Configuration or deployment help
+description: Ask for help with local setup, Cloudflare configuration, or operational workflows
+title: "[Config]: "
+labels:
+  - documentation
+  - support
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What are you trying to set up or change?
+    validations:
+      required: true
+  - type: textarea
+    id: current_state
+    attributes:
+      label: Current state
+      description: What have you already configured or tried?
+    validations:
+      required: true
+  - type: textarea
+    id: blocker
+    attributes:
+      label: Blocker
+      description: What is currently failing or unclear?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Relevant logs, screenshots, environment details, or config snippets.

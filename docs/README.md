@@ -4,6 +4,7 @@
 
 - [Production Architecture](architecture/production-architecture.md)
 - [Workspace Overview](reference/workspace-overview.md)
+- [Repository Standards](reference/repository-standards.md)
 - [Review Bot Policy](review-bots.md)
 
 ## Operations

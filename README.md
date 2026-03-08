@@ -9,6 +9,7 @@ Bun-workspace monorepo for the Cloudflare-hosted Intel Dashboard platform on `in
 - [Security Policy](SECURITY.md)
 - [Production Architecture](docs/architecture/production-architecture.md)
 - [Workspace Overview](docs/reference/workspace-overview.md)
+- [Repository Standards](docs/reference/repository-standards.md)
 
 ## Workspace Layout
 
@@ -46,6 +47,17 @@ bun run billing:stripe:setup -- --help
 - Pull requests are expected to pass:
   - `CI / validate`
   - `PR Guard / enforce-pr-policy`
+
+## Support Matrix
+
+- Public repository: documentation, issue templates, and advisory review bots
+- Merge authority: human maintainer plus required CI gates
+- Security reports: private disclosure only through GitHub Security Advisories
+
+## Professional Gaps
+
+- The repository still needs an explicit `LICENSE` file before it is truly open source in a legal sense.
+- That choice should be made intentionally rather than guessed.
 
 ## Review Stack
 

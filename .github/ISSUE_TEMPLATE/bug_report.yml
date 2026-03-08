@@ -1,0 +1,51 @@
+name: Bug report
+description: Report a reproducible bug in Intel Dashboard
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for product, repository, or deployment issues that can be reproduced.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken?
+      placeholder: Clear, direct description of the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps, commands, or URLs needed to reproduce the issue.
+      placeholder: |
+        1. Go to ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, OS, branch, commit, deployment target, or other relevant context.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, screenshots, or traces
+      description: Paste relevant output or attach screenshots.

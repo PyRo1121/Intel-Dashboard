@@ -1,8 +1,8 @@
 import { OSINT_SOURCE_CATALOG, type OsintSource } from "./osint-sources.js";
-import { buildAbsoluteAuthProviderUrl } from "../../shared/auth-flow.ts";
-import { FREE_FEED_DELAY_MINUTES, PREMIUM_PRICE_USD, TRIAL_DAYS, formatUsdMonthlyCompact, formatUsdMonthlySpaced } from "../../shared/access-offers.ts";
-import { BACKEND_LANDING_HERO, BACKEND_OPERATOR_CARDS, BACKEND_OPERATOR_PANEL, BACKEND_OPERATOR_PRICING } from "../../shared/landing-content.ts";
-import { INTERNAL_LANDING_TAGLINE, SITE_NAME } from "../../shared/site-config.ts";
+import { buildAbsoluteAuthProviderUrl } from "../../../packages/shared/auth-flow.ts";
+import { FREE_FEED_DELAY_MINUTES, PREMIUM_PRICE_USD, TRIAL_DAYS, formatUsdMonthlyCompact, formatUsdMonthlySpaced } from "../../../packages/shared/access-offers.ts";
+import { BACKEND_LANDING_HERO, BACKEND_OPERATOR_CARDS, BACKEND_OPERATOR_PANEL, BACKEND_OPERATOR_PRICING } from "../../../packages/shared/landing-content.ts";
+import { INTERNAL_LANDING_TAGLINE, SITE_NAME } from "../../../packages/shared/site-config.ts";
 import { matchesBearerToken } from "./token-auth.js";
 
 const DEFAULT_ENDPOINT_PATH = "/api/intel-dashboard/usage-data-source";

@@ -6,7 +6,7 @@ import {
   OVERVIEW_TITLE,
   PRODUCTION_HOME_TITLE,
   resolveDashboardShellTitle,
-} from "../../shared/route-meta.ts";
+} from "../../../packages/shared/route-meta.ts";
 
 test("dashboard shell route title resolution is shared with worker", () => {
   assert.equal(PRODUCTION_HOME_TITLE, "SentinelStream OSINT Dashboard | Real-Time Geopolitical Intelligence Platform");

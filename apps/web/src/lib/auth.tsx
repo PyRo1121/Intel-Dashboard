@@ -10,9 +10,9 @@ import {
 import { shouldFetchInitialSession } from "./auth-route";
 import { fetchAuthSessionState } from "./auth-session.ts";
 import { buildClientAuthHref, normalizeClientPostAuthPath } from "./auth-next.ts";
-import { buildAuthProviderHref } from "../../shared/auth-flow.ts";
-import { getAuthCopy } from "../../shared/auth-copy.ts";
-import { SITE_NAME, SITE_PLATFORM_LABEL } from "../../shared/site-config.ts";
+import { buildAuthProviderHref } from "../../../../packages/shared/auth-flow.ts";
+import { getAuthCopy } from "../../../../packages/shared/auth-copy.ts";
+import { SITE_NAME, SITE_PLATFORM_LABEL } from "../../../../packages/shared/site-config.ts";
 
 // ============================================================================
 // Types

@@ -11,8 +11,8 @@ import {
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import { formatAgeCompactFromMs } from "~/lib/utils";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
-import { TELEGRAM_DESCRIPTION, TELEGRAM_TITLE } from "../../shared/route-meta.ts";
-import { siteUrl } from "../../shared/site-config.ts";
+import { TELEGRAM_DESCRIPTION, TELEGRAM_TITLE } from "../../../../packages/shared/route-meta.ts";
+import { siteUrl } from "../../../../packages/shared/site-config.ts";
 
 interface TelegramMedia {
   type: "video" | "photo";

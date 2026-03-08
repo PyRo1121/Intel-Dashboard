@@ -1,4 +1,4 @@
-import { SITE_ORIGIN } from "../../shared/site-config.ts";
+import { SITE_ORIGIN } from "../../../packages/shared/site-config.ts";
 
 const BASE_URL = normalizeBaseUrl(process.env.OAUTH_HEALTH_BASE_URL ?? SITE_ORIGIN);
 

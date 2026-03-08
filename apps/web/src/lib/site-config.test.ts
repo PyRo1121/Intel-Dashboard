@@ -10,7 +10,7 @@ import {
   SITE_PLATFORM_LABEL,
   backendE2eUrl,
   siteUrl,
-} from "../../shared/site-config.ts";
+} from "../../../../packages/shared/site-config.ts";
 
 test("shared site config exposes canonical origin and metadata", () => {
   assert.equal(SITE_ORIGIN, "https://intel.pyro1121.com");

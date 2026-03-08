@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "./index.js";
 import { OSINT_SOURCE_CATALOG } from "./osint-sources.js";
-import { FREE_FEED_DELAY_MINUTES } from "../../shared/access-offers.ts";
-import { BACKEND_LANDING_HERO, BACKEND_OPERATOR_CARDS, BACKEND_OPERATOR_PANEL, BACKEND_OPERATOR_PRICING } from "../../shared/landing-content.ts";
+import { FREE_FEED_DELAY_MINUTES } from "../../../packages/shared/access-offers.ts";
+import { BACKEND_LANDING_HERO, BACKEND_OPERATOR_CARDS, BACKEND_OPERATOR_PANEL, BACKEND_OPERATOR_PRICING } from "../../../packages/shared/landing-content.ts";
 
 describe("intel-dashboard backend worker", () => {
   function expectSecurityHeaders(response: Response) {

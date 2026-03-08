@@ -15,8 +15,8 @@ import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import type { IntelItem } from "~/lib/types";
 import { formatAgeCompactFromMs, formatRelativeTimeAt } from "~/lib/utils";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
-import { FREE_FEED_DELAY_MINUTES, PREMIUM_PRICE_USD, TRIAL_DAYS } from "../../../shared/access-offers.ts";
-import { OVERVIEW_DESCRIPTION, OVERVIEW_OG_DESCRIPTION, OVERVIEW_TITLE, OVERVIEW_TWITTER_DESCRIPTION } from "../../../shared/route-meta.ts";
+import { FREE_FEED_DELAY_MINUTES, PREMIUM_PRICE_USD, TRIAL_DAYS } from "../../../../../packages/shared/access-offers.ts";
+import { OVERVIEW_DESCRIPTION, OVERVIEW_OG_DESCRIPTION, OVERVIEW_TITLE, OVERVIEW_TWITTER_DESCRIPTION } from "../../../../../packages/shared/route-meta.ts";
 
 async function loadIntel(): Promise<IntelItem[]> {
   try {

@@ -28,7 +28,7 @@ import {
   TELEGRAM_DESCRIPTION,
   TELEGRAM_TITLE,
   resolveDashboardShellTitle,
-} from "../../shared/route-meta.ts";
+} from "../../../../packages/shared/route-meta.ts";
 
 test("shared route titles stay aligned with dashboard shell resolution", () => {
   assert.equal(PRODUCTION_HOME_TITLE, "SentinelStream OSINT Dashboard | Real-Time Geopolitical Intelligence Platform");

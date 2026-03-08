@@ -1,5 +1,5 @@
-import { AUTH_NEXT_ROUTE_PREFIXES } from "../../shared/auth-next-routes.ts";
-import { SITE_ORIGIN } from "../../shared/site-config.ts";
+import { AUTH_NEXT_ROUTE_PREFIXES } from "../../../../packages/shared/auth-next-routes.ts";
+import { SITE_ORIGIN } from "../../../../packages/shared/site-config.ts";
 
 export function normalizeClientPostAuthPath(rawValue: string | null | undefined): string | null {
   const compact = (rawValue ?? "").trim();

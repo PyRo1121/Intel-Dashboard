@@ -1,7 +1,7 @@
 import { A } from "@solidjs/router";
 import { HttpStatusCode } from "@solidjs/start";
 import { Title, Meta } from "@solidjs/meta";
-import { NOT_FOUND_DESCRIPTION, NOT_FOUND_TITLE } from "../../shared/route-meta.ts";
+import { NOT_FOUND_DESCRIPTION, NOT_FOUND_TITLE } from "../../../../packages/shared/route-meta.ts";
 export default function NotFound() {
   return (
     <>

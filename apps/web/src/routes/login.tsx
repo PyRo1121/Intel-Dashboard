@@ -2,7 +2,7 @@ import { Meta, Title } from "@solidjs/meta";
 import { useLocation } from "@solidjs/router";
 import AuthAccessCard from "~/components/auth/AuthAccessCard";
 import { normalizeClientPostAuthPath } from "~/lib/auth-next";
-import { LOGIN_DESCRIPTION, LOGIN_TITLE } from "../../shared/route-meta.ts";
+import { LOGIN_DESCRIPTION, LOGIN_TITLE } from "../../../../packages/shared/route-meta.ts";
 
 export default function LoginRoute() {
   const location = useLocation();

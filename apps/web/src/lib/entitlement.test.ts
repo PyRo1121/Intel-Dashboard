@@ -5,7 +5,7 @@ import {
   formatEntitlementTier,
   formatSubscriptionStatus,
   isEntitledRole,
-} from "../../shared/entitlement.ts";
+} from "../../../../packages/shared/entitlement.ts";
 
 test("shared entitlement helpers normalize tier labels and entitlement roles", () => {
   assert.equal(formatEntitlementTier("owner"), "Owner");

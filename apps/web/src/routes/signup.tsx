@@ -2,7 +2,7 @@ import { Meta, Title } from "@solidjs/meta";
 import { useLocation } from "@solidjs/router";
 import AuthAccessCard from "~/components/auth/AuthAccessCard";
 import { normalizeClientPostAuthPath } from "~/lib/auth-next";
-import { SIGNUP_DESCRIPTION, SIGNUP_TITLE } from "../../shared/route-meta.ts";
+import { SIGNUP_DESCRIPTION, SIGNUP_TITLE } from "../../../../packages/shared/route-meta.ts";
 
 export default function SignupRoute() {
   const location = useLocation();

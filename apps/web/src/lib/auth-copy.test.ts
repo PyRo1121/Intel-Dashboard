@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getAuthCopy } from "../../shared/auth-copy.ts";
+import { getAuthCopy } from "../../../../packages/shared/auth-copy.ts";
 
 test("getAuthCopy returns login copy", () => {
   assert.deepEqual(getAuthCopy("login"), {

@@ -1,8 +1,8 @@
 import { For } from "solid-js";
 import { A } from "@solidjs/router";
 import { Meta, Title } from "@solidjs/meta";
-import { DASHBOARD_HOME_PATH } from "../../shared/auth-next-routes.ts";
-import { FREE_FEED_DELAY_MINUTES, formatDelayMinutesLong } from "../../shared/access-offers.ts";
+import { DASHBOARD_HOME_PATH } from "../../../../packages/shared/auth-next-routes.ts";
+import { FREE_FEED_DELAY_MINUTES, formatDelayMinutesLong } from "../../../../packages/shared/access-offers.ts";
 import {
   LANDING_CAPABILITIES,
   LANDING_CAPABILITIES_SECTION,
@@ -15,8 +15,8 @@ import {
   LANDING_SUPPORTING_STATS_COPY,
   LANDING_TESTIMONIALS,
   LANDING_TESTIMONIALS_SECTION,
-} from "../../shared/landing-content.ts";
-import { APP_LANDING_DESCRIPTION, APP_LANDING_TITLE } from "../../shared/route-meta.ts";
+} from "../../../../packages/shared/landing-content.ts";
+import { APP_LANDING_DESCRIPTION, APP_LANDING_TITLE } from "../../../../packages/shared/route-meta.ts";
 
 export default function LandingRoute() {
   return (

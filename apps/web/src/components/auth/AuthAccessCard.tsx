@@ -1,9 +1,9 @@
 import {
   buildAuthModeSwitchHref,
   buildAuthProviderHref,
-} from "../../../shared/auth-flow.ts";
-import { getAuthCopy } from "../../../shared/auth-copy.ts";
-import { SITE_NAME } from "../../../shared/site-config.ts";
+} from "../../../../../packages/shared/auth-flow.ts";
+import { getAuthCopy } from "../../../../../packages/shared/auth-copy.ts";
+import { SITE_NAME } from "../../../../../packages/shared/site-config.ts";
 
 type AuthAccessCardProps = {
   mode: "login" | "signup";

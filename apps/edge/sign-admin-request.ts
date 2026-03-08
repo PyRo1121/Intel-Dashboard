@@ -1,5 +1,5 @@
 import { signAdminRequest } from "./src/security-guards.ts";
-import { SITE_ORIGIN } from "../shared/site-config.ts";
+import { SITE_ORIGIN } from "../../packages/shared/site-config.ts";
 
 type OutputFormat = "headers" | "json" | "curl";
 

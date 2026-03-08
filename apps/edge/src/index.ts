@@ -17,9 +17,9 @@ import { normalizeSafeAuthRedirectLocation } from "./auth-redirect";
 import { summarizeCrmDataQuality } from "./crm-quality";
 import { getDashboardAppRoutePrefixes, normalizeSafePostAuthPath } from "./post-auth-path";
 import { createTurnstileGateToken, type TurnstileMode, verifyTurnstileGateToken } from "./turnstile";
-import { DASHBOARD_HOME_PATH, DEFAULT_POST_AUTH_PATH } from "../../shared/auth-next-routes.ts";
-import { buildAuthModeSwitchHref, buildAuthPageHref, buildAuthProviderHref } from "../../shared/auth-flow.ts";
-import { getAuthCopy } from "../../shared/auth-copy.ts";
+import { DASHBOARD_HOME_PATH, DEFAULT_POST_AUTH_PATH } from "../../../packages/shared/auth-next-routes.ts";
+import { buildAuthModeSwitchHref, buildAuthPageHref, buildAuthProviderHref } from "../../../packages/shared/auth-flow.ts";
+import { getAuthCopy } from "../../../packages/shared/auth-copy.ts";
 import {
   FREE_FEED_DELAY_MINUTES,
   FREE_PLAN_NAME,
@@ -31,7 +31,7 @@ import {
   formatTrialDaysLabel,
   formatUsdMonthlyCompact,
   formatUsdMonthlySpaced,
-} from "../../shared/access-offers.ts";
+} from "../../../packages/shared/access-offers.ts";
 import {
   LANDING_CAPABILITIES,
   LANDING_CAPABILITIES_SECTION,
@@ -47,7 +47,7 @@ import {
   LANDING_SUPPORTING_STATS_COPY,
   LANDING_WORKFLOW_STEPS,
   LANDING_TESTIMONIALS_SECTION,
-} from "../../shared/landing-content.ts";
+} from "../../../packages/shared/landing-content.ts";
 import {
   LOGIN_DESCRIPTION,
   PRODUCTION_HOME_DESCRIPTION,
@@ -56,9 +56,9 @@ import {
   PRODUCTION_HOME_TWITTER_DESCRIPTION,
   SIGNUP_DESCRIPTION,
   resolveDashboardShellTitle,
-} from "../../shared/route-meta.ts";
-import { buildRobotsTxt, buildSitemapXml } from "../../shared/seo-assets.ts";
-import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, siteUrl } from "../../shared/site-config.ts";
+} from "../../../packages/shared/route-meta.ts";
+import { buildRobotsTxt, buildSitemapXml } from "../../../packages/shared/seo-assets.ts";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, siteUrl } from "../../../packages/shared/site-config.ts";
 
 export { IntelCacheDO, TelegramScraperDO };
 

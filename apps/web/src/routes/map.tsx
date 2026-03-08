@@ -14,8 +14,8 @@ import SeverityBadge from "~/components/ui/SeverityBadge";
 import { formatAgeCompactFromMs, formatRelativeTimeAt } from "~/lib/utils";
 import { Globe, X as XIcon, MapPin } from "lucide-solid";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
-import { MAP_DESCRIPTION, MAP_TITLE } from "../../shared/route-meta.ts";
-import { siteUrl } from "../../shared/site-config.ts";
+import { MAP_DESCRIPTION, MAP_TITLE } from "../../../../packages/shared/route-meta.ts";
+import { siteUrl } from "../../../../packages/shared/site-config.ts";
 import "leaflet/dist/leaflet.css";
 
 /* ── Types ─────────────────────────────────────────────────────────── */

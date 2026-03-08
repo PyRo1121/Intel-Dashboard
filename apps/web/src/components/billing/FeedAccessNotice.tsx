@@ -1,8 +1,8 @@
 import { A } from "@solidjs/router";
 import { Show } from "solid-js";
 import { useAuth } from "~/lib/auth";
-import { formatDelayMinutesShortLabel, UPGRADE_INSTANT_FEED_LABEL } from "../../../shared/access-offers.ts";
-import { formatEntitlementTier, isEntitledRole } from "../../../shared/entitlement.ts";
+import { formatDelayMinutesShortLabel, UPGRADE_INSTANT_FEED_LABEL } from "../../../../../packages/shared/access-offers.ts";
+import { formatEntitlementTier, isEntitledRole } from "../../../../../packages/shared/entitlement.ts";
 
 function formatLimit(raw: number | null | undefined): string {
   if (raw === null || raw === undefined) return "Unlimited";

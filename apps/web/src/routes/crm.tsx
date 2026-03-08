@@ -1,7 +1,7 @@
 import { Meta, Title } from "@solidjs/meta";
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
 import { useAuth } from "~/lib/auth";
-import { CRM_DESCRIPTION, CRM_TITLE } from "../../shared/route-meta.ts";
+import { CRM_DESCRIPTION, CRM_TITLE } from "../../../../packages/shared/route-meta.ts";
 
 type CrmUser = {
   id: string;

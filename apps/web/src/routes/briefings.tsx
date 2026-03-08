@@ -13,8 +13,8 @@ import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import { formatAgeCompactFromMs } from "~/lib/utils";
 import { FileText, ChevronDown, Clock, Send } from "lucide-solid";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
-import { BRIEFINGS_DESCRIPTION, BRIEFINGS_TITLE } from "../../shared/route-meta.ts";
-import { siteUrl } from "../../shared/site-config.ts";
+import { BRIEFINGS_DESCRIPTION, BRIEFINGS_TITLE } from "../../../../packages/shared/route-meta.ts";
+import { siteUrl } from "../../../../packages/shared/site-config.ts";
 
 async function loadBriefings(): Promise<Briefing[]> {
   try {

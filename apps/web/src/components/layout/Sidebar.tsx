@@ -26,10 +26,10 @@ import {
   Users,
 } from "lucide-solid";
 import { useAuth } from "~/lib/auth";
-import { DASHBOARD_HOME_PATH } from "../../../shared/auth-next-routes.ts";
-import { formatDelayMinutesShortLabel, UPGRADE_INSTANT_FEED_LABEL } from "../../../shared/access-offers.ts";
-import { entitlementTierTone, formatEntitlementTier, isEntitledRole } from "../../../shared/entitlement.ts";
-import { SITE_NAME, SITE_OPERATIONS_LABEL } from "../../../shared/site-config.ts";
+import { DASHBOARD_HOME_PATH } from "../../../../../packages/shared/auth-next-routes.ts";
+import { formatDelayMinutesShortLabel, UPGRADE_INSTANT_FEED_LABEL } from "../../../../../packages/shared/access-offers.ts";
+import { entitlementTierTone, formatEntitlementTier, isEntitledRole } from "../../../../../packages/shared/entitlement.ts";
+import { SITE_NAME, SITE_OPERATIONS_LABEL } from "../../../../../packages/shared/site-config.ts";
 
 // ============================================================================
 // Types

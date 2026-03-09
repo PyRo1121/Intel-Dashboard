@@ -2921,9 +2921,10 @@ async function buildPublicBriefings(args: {
     }
     const severitySummary = buildBriefingSeveritySummary(bucketItems);
     let content = buildFallbackBriefingContent(bucketItems, bucketStart, windowHours);
+    const useCachedWindows = args.allowBackgroundRefresh !== false;
     if (index < aiWindows) {
       const sourceHash = await buildBriefingSourceHash(bucketItems);
-      const cached = await loadCachedBriefingWindow(args.env, bucketStart);
+      const cached = useCachedWindows ? await loadCachedBriefingWindow(args.env, bucketStart) : null;
       if (cached) {
         content = cached.content;
       }
@@ -2948,7 +2949,7 @@ async function buildPublicBriefings(args: {
         }
       }
     } else {
-      const cached = await loadCachedBriefingWindow(args.env, bucketStart);
+      const cached = useCachedWindows ? await loadCachedBriefingWindow(args.env, bucketStart) : null;
       if (cached) {
         content = cached.content;
       }

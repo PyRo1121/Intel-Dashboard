@@ -1810,6 +1810,49 @@ describe("intel-dashboard backend worker", () => {
     );
   });
 
+  it("does not reuse default cached briefing windows for filtered briefing requests", async () => {
+    const briefingWindowStart = 1_699_992_000_000;
+    const kv = createKvMapBinding({
+      "intel-dashboard:usage:news:feed": [
+        {
+          id: "brief-1",
+          title: "Drone strike near critical infrastructure",
+          url: "https://example.com/drone",
+          summary: "Infrastructure strike and emergency response underway.",
+          source: "Example Desk",
+          publishedAtMs: briefingWindowStart + 10_000,
+          severity: "critical",
+          region: "middle_east",
+          category: "conflict",
+        },
+      ],
+      [`intel-dashboard:usage:briefing:${briefingWindowStart}`]: {
+        windowStartMs: briefingWindowStart,
+        windowHours: 4,
+        content: "Cached default briefing",
+        severitySummary: { critical: 1, high: 0, medium: 0, low: 0 },
+        eventCount: 1,
+        generatedAtMs: briefingWindowStart + 20_000,
+        mode: "ai",
+        sourceHash: "cfe42430d6292117fae50ac5979166d0422af6271ad291d4d961c216050f12de",
+      },
+    });
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/briefings?severity=critical", { method: "GET" }),
+      {
+        USAGE_KV: kv.binding,
+        BRIEFING_AI_WINDOWS: "1",
+        PUBLIC_FEED_ROUTES_ENABLED: "true",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as Array<{ content: string }>;
+    expect(payload[0]?.content).not.toBe("Cached default briefing");
+    expect(payload[0]?.content).toContain("INTELLIGENCE BRIEFING");
+  });
+
   it("keeps /api/briefings alive when refresh enqueue fails and does not persist a pending marker", async () => {
     const briefingWindowStart = 1_699_992_000_000;
     const kv = createKvMapBinding({

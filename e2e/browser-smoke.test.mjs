@@ -422,9 +422,11 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
         timeout: 45_000,
       });
 
-      await page.waitForSelector("text=Customer 360", { timeout: 30_000 });
+      await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
+      await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
+      await page.getByTestId("crm-summary-mrr").waitFor({ state: "visible", timeout: 30_000 });
 
-      const search = page.locator('input[type="search"]').first();
+      const search = page.getByTestId("crm-user-search");
       await search.fill("PyRo1121");
 
       const matchingRow = page.locator("tbody tr").filter({ hasText: /PyRo1121/i }).first();
@@ -432,11 +434,11 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
 
       const statusText = ((await matchingRow.locator("td").nth(3).textContent()) || "none").trim().toLowerCase();
       const statusValue = ["active", "trialing", "canceled", "expired", "none"].includes(statusText) ? statusText : "none";
-      await page.locator("select").first().selectOption(statusValue);
+      await page.getByTestId("crm-status-filter").selectOption(statusValue);
       await matchingRow.waitFor({ state: "visible", timeout: 30_000 });
 
       const downloadPromise = page.waitForEvent("download");
-      await page.getByRole("button", { name: "Export CRM CSV" }).click();
+      await page.getByTestId("crm-export-csv").click();
       const download = await downloadPromise;
       assert.match(
         download.suggestedFilename(),
@@ -450,8 +452,8 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
       assert.match(csv, /PyRo1121/i, "CRM export should include the owner record");
 
       await matchingRow.getByRole("button", { name: /Manage /i }).click();
-      await page.waitForSelector("text=Selected User", { timeout: 30_000 });
-      assert.match((await page.textContent("body")) || "", /PyRo1121/i, "CRM selected-user panel should render the owner record");
+      await page.getByTestId("crm-selected-user-panel").waitFor({ state: "visible", timeout: 30_000 });
+      assert.match((await page.getByTestId("crm-selected-user-panel").textContent()) || "", /PyRo1121/i, "CRM selected-user panel should render the owner record");
       await page.waitForFunction(() => {
         const text = document.body.textContent || "";
         return /Billing account not found for target user\.|Target user has no Stripe customer id yet\./i.test(text);
@@ -465,9 +467,10 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
       const refundAmount = page.locator('input[placeholder="Amount USD \\(blank=full\\)"]').first();
       await refundAmount.fill("0");
       await page.getByRole("button", { name: "Refund Latest" }).click();
-      await page.waitForSelector("text=Refund amount must be a positive number.", { timeout: 10_000 });
+      await page.getByTestId("crm-ops-error").waitFor({ state: "visible", timeout: 10_000 });
+      assert.match((await page.getByTestId("crm-ops-error").textContent()) || "", /Refund amount must be a positive number\./i);
 
-      await page.getByRole("button", { name: "15m" }).click();
+      await page.getByTestId("crm-ai-window-15m").click();
       await page.getByTestId("crm-ai-refresh").click();
       await page.getByTestId("crm-ai-surface").waitFor({ state: "visible", timeout: 30_000 });
       await page.waitForFunction(() => {
@@ -1174,7 +1177,7 @@ test("browser-authenticated CRM and sidebar support keyboard-only navigation", a
         timeout: 45_000,
       });
 
-      const crmSearch = page.getByLabel("CRM user search");
+      const crmSearch = page.getByTestId("crm-user-search");
       await crmSearch.focus();
       await page.keyboard.type("PyRo1121");
 
@@ -1184,9 +1187,9 @@ test("browser-authenticated CRM and sidebar support keyboard-only navigation", a
       const manageOwner = ownerRow.getByRole("button", { name: "Manage PyRo1121" });
       await manageOwner.focus();
       await manageOwner.press("Enter");
-      await page.waitForSelector("text=Selected User", { timeout: 30_000 });
+      await page.getByTestId("crm-selected-user-panel").waitFor({ state: "visible", timeout: 30_000 });
 
-      const refreshCustomer = page.getByRole("button", { name: /Refresh customer/i });
+      const refreshCustomer = page.getByTestId("crm-refresh-customer");
       await refreshCustomer.focus();
       await refreshCustomer.press("Enter");
       await page.waitForFunction(() => {

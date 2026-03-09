@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   isAuthUserOwner,
+  isAuthUserSignalSubscriber,
   resolveAuthUserDisplay,
   resolveAuthUserEntitlementView,
   resolveAuthUserFeedSurfaceLimit,
@@ -20,6 +21,13 @@ test("isAuthUserOwner derives owner status from resolved auth role", () => {
   assert.equal(isAuthUserOwner({ entitlement: { tier: "owner" } }), true);
   assert.equal(isAuthUserOwner({ entitlement: { role: "subscriber" } }), false);
   assert.equal(isAuthUserOwner(undefined), false);
+});
+
+test("isAuthUserSignalSubscriber enables the premium Telegram experience only for subscriber roles", () => {
+  assert.equal(isAuthUserSignalSubscriber({ entitlement: { role: "owner" } }), true);
+  assert.equal(isAuthUserSignalSubscriber({ entitlement: { tier: "subscriber" } }), true);
+  assert.equal(isAuthUserSignalSubscriber({ entitlement: { tier: "trial" } }), false);
+  assert.equal(isAuthUserSignalSubscriber(undefined), false);
 });
 
 test("resolveAuthUserEntitlementView reuses the shared entitlement view contract", () => {

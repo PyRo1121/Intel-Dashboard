@@ -24,6 +24,15 @@ export const OWNER_BILLING_TRIAL_NOTICE_PATTERN = /Owner account detected. Trial
 export const OWNER_BILLING_CHECKOUT_NOTICE_PATTERN = /Owner account detected. Checkout bypass is active./i;
 export const OWNER_BILLING_PORTAL_NOTICE_PATTERN = /Owner account detected. Stripe portal is not required./i;
 export const PUBLIC_ACCESS_SURFACE_PATTERN = /Start 7-Day Trial|Sign in to Intel Dashboard|Create your Intel Dashboard account/i;
+export const CLOUDFLARE_CHALLENGE_TITLE_PATTERN = /^Just a moment/i;
+export const CLOUDFLARE_CHALLENGE_BODY_PATTERN = /Performing security verification|Enable JavaScript and cookies to continue|This website uses a security service to protect against malicious bots/i;
+
+export class CloudflareChallengeError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "CloudflareChallengeError";
+  }
+}
 
 export function buildCloudflareAccessHeaders(clientId = ACCESS_CLIENT_ID, clientSecret = ACCESS_CLIENT_SECRET) {
   if (!trim(clientId) || !trim(clientSecret)) return undefined;
@@ -31,6 +40,32 @@ export function buildCloudflareAccessHeaders(clientId = ACCESS_CLIENT_ID, client
     "CF-Access-Client-Id": trim(clientId),
     "CF-Access-Client-Secret": trim(clientSecret),
   };
+}
+
+export function isEdgeOriginRequestUrl(url, edgeBaseUrl = EDGE_BASE_URL) {
+  try {
+    return new URL(url).origin === new URL(edgeBaseUrl).origin;
+  } catch {
+    return false;
+  }
+}
+
+export async function installSameOriginAccessHeaders(context, accessHeaders = buildCloudflareAccessHeaders()) {
+  if (!accessHeaders) return;
+  await context.route("**/*", async (route) => {
+    const request = route.request();
+    if (!isEdgeOriginRequestUrl(request.url())) {
+      await route.continue();
+      return;
+    }
+
+    await route.continue({
+      headers: {
+        ...request.headers(),
+        ...accessHeaders,
+      },
+    });
+  });
 }
 
 export function isIgnorableConsoleError(text) {
@@ -225,9 +260,8 @@ export async function createBrowserContextWithCookie(t, cookieHeaderValue, missi
     return null;
   }
 
-  const extraHTTPHeaders = buildCloudflareAccessHeaders();
-
-  const context = await browser.newContext({ acceptDownloads: true, extraHTTPHeaders, ...options });
+  const context = await browser.newContext({ acceptDownloads: true, ...options });
+  await installSameOriginAccessHeaders(context);
   await context.addCookies([
     {
       name: parsedCookie.name,
@@ -264,9 +298,9 @@ export async function createPublicBrowserContext(t, options = {}) {
 
   const context = await browser.newContext({
     acceptDownloads: true,
-    extraHTTPHeaders: buildCloudflareAccessHeaders(),
     ...options,
   });
+  await installSameOriginAccessHeaders(context);
   return { browser, context };
 }
 
@@ -331,12 +365,14 @@ export async function openAndAssertPublicAuthEntry(page, options) {
     throw new Error(`Unsupported auth entry mode: ${mode}`);
   }
 
-  await openPublicPage(page, `${route}?next=${encodeURIComponent(nextPath)}`);
+  const response = await openPublicPage(page, `${route}?next=${encodeURIComponent(nextPath)}`);
+  await assertNoCloudflareChallengePage(page, response, `Cloudflare challenged ${route} for the synthetic browser client`);
   await assertPublicAuthEntrySurface(page, { mode, nextPath });
 }
 
 export async function openAndAssertPublicAuthRoute(page, route) {
   const response = await openPublicPage(page, route.path);
+  await assertNoCloudflareChallengePage(page, response, `Cloudflare challenged ${route.path} for the synthetic browser client`);
   assert.ok(response, `${route.path} should return a response`);
   assert.equal(response.status(), 200, `${route.path} should render successfully`);
 
@@ -409,6 +445,7 @@ export async function assertLandingCtaDestination(page, options) {
   await openPublicPage(page, "/");
   await page.getByRole("link", { name: ctaName }).first().click();
   await page.waitForURL(expectedUrl, { timeout: 30_000 });
+  await assertNoCloudflareChallengePage(page, undefined, `Cloudflare challenged ${expectedUrl} for the synthetic browser client`);
 
   if (protectedNextPath) {
     await waitForProtectedLoginOverlay(page, { nextPath: protectedNextPath });
@@ -460,12 +497,16 @@ export async function openAndAssertRouteMetadata(page, expectation, options = {}
     includeCanonical = true,
     expectedStatus,
     maxStatusExclusive,
+    challengeMessage,
   } = options;
 
   const response = await openPage(page, expectation.path, {
     waitUntil,
     timeout,
   });
+  if (challengeMessage) {
+    await assertNoCloudflareChallengePage(page, response, challengeMessage);
+  }
 
   assert.ok(response, `${expectation.path} should return a response`);
   if (typeof expectedStatus === "number") {
@@ -485,6 +526,14 @@ export async function openAndAssertRouteMetadata(page, expectation, options = {}
 }
 
 export async function waitForCrmDashboard(page) {
+  const sessionUnavailable = page.getByRole("heading", { name: "Session Check Unavailable" }).first();
+  if (await sessionUnavailable.isVisible().catch(() => false)) {
+    const retryButton = page.getByRole("button", { name: "Retry Session Check" }).first();
+    if (await retryButton.isVisible().catch(() => false)) {
+      await retryButton.click();
+    }
+  }
+
   await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("crm-summary-mrr").waitFor({ state: "visible", timeout: 30_000 });
@@ -518,6 +567,25 @@ export async function openPublicPage(page, path) {
     waitUntil: "domcontentloaded",
     timeout: 30_000,
   });
+}
+
+export async function isCloudflareChallengePage(page, response) {
+  const title = await page.title().catch(() => "");
+  const body = (await page.textContent("body").catch(() => "")) || "";
+  const challengeByContent =
+    CLOUDFLARE_CHALLENGE_TITLE_PATTERN.test(title) ||
+    CLOUDFLARE_CHALLENGE_BODY_PATTERN.test(body);
+  if (challengeByContent) {
+    return true;
+  }
+  const headers = typeof response?.headers === "function" ? response.headers() : {};
+  return (headers["cf-mitigated"] || "").toLowerCase() === "challenge";
+}
+
+export async function assertNoCloudflareChallengePage(page, response, message) {
+  if (await isCloudflareChallengePage(page, response)) {
+    throw new CloudflareChallengeError(message);
+  }
 }
 
 export async function activateByKeyboard(control) {
@@ -614,11 +682,18 @@ export async function openOwnerCrmPanelByKeyboard(page, crmSearch) {
   return selectedPanel;
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export async function assertSidebarRouteNavigation(page, checks) {
   for (const check of checks) {
     await page.getByRole("link", { name: check.label }).first().click();
     await page.waitForURL(new RegExp(`${check.path}$`), { timeout: 30_000 });
-    assert.match((await page.textContent("body")) || "", new RegExp(check.heading, "i"), `${check.label} should render ${check.heading}`);
+    await page.getByRole("heading", { name: new RegExp(escapeRegExp(check.heading), "i") }).first().waitFor({
+      state: "visible",
+      timeout: 30_000,
+    });
   }
 }
 

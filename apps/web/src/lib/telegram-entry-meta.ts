@@ -18,7 +18,11 @@ export type TelegramEntryLike = {
     sourceCount?: number;
     sourceLabels?: string[];
     sourceSignatures?: string[];
+    subscriberValueScore?: number;
     freshnessTier?: "breaking" | "fresh" | "watch";
+    firstReporterLabel?: string;
+    firstReporterChannel?: string;
+    firstReportedAt?: string;
     domainTags?: string[];
     categorySet?: string[];
     sources?: unknown[];
@@ -111,6 +115,15 @@ export function getTelegramSourceLabels(entry: TelegramEntryLike, limit?: number
 
 export function getTelegramSourceLabelsTitle(entry: TelegramEntryLike): string {
   return getTelegramSourceLabels(entry).join(", ");
+}
+
+export function getTelegramFirstReporterLabel(entry: TelegramEntryLike): string | null {
+  const label = entry.dedupe?.firstReporterLabel?.trim();
+  if (label) {
+    return label;
+  }
+  const channel = entry.dedupe?.firstReporterChannel?.trim();
+  return channel || null;
 }
 
 export function getTelegramDomainTags(entry: TelegramEntryLike, limit = 6): string[] {

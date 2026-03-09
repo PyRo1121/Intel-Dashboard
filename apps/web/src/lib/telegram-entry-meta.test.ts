@@ -7,6 +7,7 @@ import {
   getTelegramDomainTags,
   getTelegramEntryKey,
   getTelegramMessageFallbackKey,
+  getTelegramFirstReporterLabel,
   getTelegramEntrySourceSignatures,
   getTelegramRankReasons,
   getTelegramSources,
@@ -32,7 +33,11 @@ const entry = {
     sourceCount: 2,
     sourceSignatures: [" sig-1 ", "", "sig-2"],
     sourceLabels: ["Alpha", "Beta"],
+    subscriberValueScore: 88,
     freshnessTier: "breaking" as const,
+    firstReporterLabel: "Alpha",
+    firstReporterChannel: "alpha_channel",
+    firstReportedAt: "2026-03-09T11:58:00.000Z",
     domainTags: ["strategic"],
     categorySet: ["ru_milblog", "naval"],
     sources: [{ label: "Channel" }, { label: "Mirror" }],
@@ -46,6 +51,7 @@ test("telegram entry meta helpers normalize keys, signatures, and safe ids", () 
   assert.deepEqual(getTelegramSourceLabels(entry), ["Alpha", "Beta"]);
   assert.deepEqual(getTelegramSourceLabels(entry, 1), ["Alpha"]);
   assert.equal(getTelegramSourceLabelsTitle(entry), "Alpha, Beta");
+  assert.equal(getTelegramFirstReporterLabel(entry), "Alpha");
   assert.deepEqual(getTelegramDomainTags(entry), ["strategic"]);
   assert.deepEqual(getTelegramSources(entry), [{ label: "Channel" }, { label: "Mirror" }]);
   assert.equal(toTelegramSafeDomId("msg:focus/1?"), "msg_focus_1_");

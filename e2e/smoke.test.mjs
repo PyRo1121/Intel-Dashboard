@@ -390,16 +390,23 @@ test("edge public auth pages render Intel Dashboard surfaces without legacy bran
   assert.doesNotMatch(signupBody, /PyRoBOT|PyRo1121Bot/i, "signup should not expose legacy branding");
 });
 
-test("edge auth pages preserve safe next routes in oauth actions and mode switch links", async () => {
+test("edge auth pages preserve safe next routes in oauth actions and mode switch links", async (t) => {
   const [login, signup] = await Promise.all([
     fetchWithRetry(`${EDGE_BASE_URL}/login?next=${encodeURIComponent("/crm")}`),
     fetchWithRetry(`${EDGE_BASE_URL}/signup?next=${encodeURIComponent("/briefings")}`),
   ]);
 
+  const [loginBody, signupBody] = await Promise.all([login.text(), signup.text()]);
+  if (
+    isCloudflareChallengeResponse(login, loginBody) ||
+    isCloudflareChallengeResponse(signup, signupBody)
+  ) {
+    t.skip("Cloudflare Bot Fight challenged login/signup next-route checks for the synthetic client");
+    return;
+  }
+
   assert.equal(login.status, 200, "login page with next should be reachable");
   assert.equal(signup.status, 200, "signup page with next should be reachable");
-
-  const [loginBody, signupBody] = await Promise.all([login.text(), signup.text()]);
   assert.match(loginBody, /\/auth\/login\?next=%2Fcrm/i, "login page should preserve next on GitHub auth action");
   assert.match(loginBody, /\/auth\/x\/login\?next=%2Fcrm/i, "login page should preserve next on X auth action");
   assert.match(loginBody, /\/signup\?next=%2Fcrm/i, "login page should preserve next on mode switch");
@@ -484,7 +491,7 @@ test("edge active OAuth entrypoints redirect to providers or enforce the turnsti
   }
 });
 
-test("edge auth start routes preserve safe next paths through the turnstile gate", async () => {
+test("edge auth start routes preserve safe next paths through the turnstile gate", async (t) => {
   const response = await fetchWithRetry(`${EDGE_BASE_URL}/auth/login?next=${encodeURIComponent("/crm")}`, {
     method: "GET",
     redirect: "manual",
@@ -492,6 +499,13 @@ test("edge auth start routes preserve safe next paths through the turnstile gate
       "user-agent": "Intel Dashboard-E2E/1.0",
     },
   });
+  if (response.status === 403) {
+    const body = await response.text();
+    if (isCloudflareChallengeResponse(response, body)) {
+      t.skip("Cloudflare Bot Fight challenged /auth/login for the synthetic client");
+      return;
+    }
+  }
 
   assert.equal(response.status, 302, "/auth/login with next should redirect");
   const location = new URL(response.headers.get("location") || "", EDGE_BASE_URL);

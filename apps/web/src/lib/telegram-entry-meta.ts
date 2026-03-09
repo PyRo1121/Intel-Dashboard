@@ -118,8 +118,8 @@ export function doesTelegramGroupMatchEntry<TEntry extends TelegramEntryLike>(
 ): boolean {
   if (group.id === "all") return true;
   if (group.predicate?.(entry)) return true;
-  const categorySet = new Set(group.categories ?? []);
-  if (categorySet.size === 0) return false;
-  if (categorySet.has(entry.category)) return true;
-  return entry.dedupe?.categorySet?.some((category) => categorySet.has(category)) ?? false;
+  const categories = group.categories ?? [];
+  if (categories.length === 0) return false;
+  if (categories.includes(entry.category)) return true;
+  return entry.dedupe?.categorySet?.some((category) => categories.includes(category)) ?? false;
 }

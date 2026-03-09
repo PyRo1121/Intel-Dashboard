@@ -2,7 +2,11 @@ import { A } from "@solidjs/router";
 import { Show } from "solid-js";
 import { useAuth } from "~/lib/auth";
 import { formatDelayMinutesShortLabel, UPGRADE_INSTANT_FEED_LABEL } from "@intel-dashboard/shared/access-offers.ts";
-import { formatEntitlementLimit, resolveEntitlementView } from "@intel-dashboard/shared/entitlement.ts";
+import {
+  formatEntitlementLimit,
+  resolveEntitlementView,
+  resolveFeedSurfaceLimit,
+} from "@intel-dashboard/shared/entitlement.ts";
 
 export default function FeedAccessNotice(props: { surface: string }) {
   let auth: ReturnType<typeof useAuth>;
@@ -16,13 +20,7 @@ export default function FeedAccessNotice(props: { surface: string }) {
   const entitlement = () => user()?.entitlement;
   const entitlementView = () => resolveEntitlementView(entitlement());
   const limits = () => entitlement()?.limits;
-  const primaryCap = () => {
-    const scope = props.surface.toLowerCase();
-    if (scope === "telegram") return limits()?.telegramTotalMessagesMax;
-    if (scope === "briefings") return limits()?.briefingsMaxItems;
-    if (scope === "air-sea") return limits()?.airSeaMaxItems;
-    return limits()?.intelMaxItems;
-  };
+  const primaryCap = () => resolveFeedSurfaceLimit(props.surface, limits());
 
   return (
     <Show when={!entitlementView().entitled}>

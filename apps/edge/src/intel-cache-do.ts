@@ -227,12 +227,9 @@ export class IntelCacheDO extends DurableObject<Env> {
         return this.cachedJsonResponse(cached, "durable-object-stale-if-error", Date.now() - cached.timestamp);
       }
 
-      return new Response(
-        JSON.stringify({ error: "Data not yet available. First refresh in progress." }),
-        {
-          status: 503,
-          headers: { "Content-Type": "application/json" },
-        },
+      return jsonResponse(
+        { error: "Data not yet available. First refresh in progress." },
+        { status: 503 },
       );
     }
 

@@ -2,6 +2,7 @@ import { For, Show, createMemo, createSignal, createResource } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
 import { fetchIntelFeed } from "~/lib/intel-feed";
 import { formatTitleLabel } from "~/lib/event-label";
+import { normalizeIntelItem } from "~/lib/intel-text";
 import { readLatestArray } from "~/lib/resource-latest";
 import SeverityBadge from "~/components/ui/SeverityBadge";
 import {
@@ -21,73 +22,6 @@ import { OSINT_DESCRIPTION, OSINT_TITLE } from "@intel-dashboard/shared/route-me
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 
 const FILTERS: (Severity | "all")[] = ["all", "critical", "high", "medium", "low"];
-
-const NAMED_HTML_ENTITIES: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: "\"",
-  apos: "'",
-  nbsp: " ",
-};
-
-function decodeHtmlEntities(value: string): string {
-  return value
-    .replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (_match, entity) => {
-      const normalized = String(entity).toLowerCase();
-      if (normalized.startsWith("#x")) {
-        const code = Number.parseInt(normalized.slice(2), 16);
-        return Number.isFinite(code) ? String.fromCodePoint(code) : "";
-      }
-      if (normalized.startsWith("#")) {
-        const code = Number.parseInt(normalized.slice(1), 10);
-        return Number.isFinite(code) ? String.fromCodePoint(code) : "";
-      }
-      return NAMED_HTML_ENTITIES[normalized] ?? `&${entity};`;
-    });
-}
-
-function sanitizeIntelText(value: string | undefined): string {
-  if (!value) return "";
-  let next = value;
-  for (let pass = 0; pass < 3; pass += 1) {
-    const decoded = decodeHtmlEntities(next);
-    if (decoded === next) break;
-    next = decoded;
-  }
-  return next
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function trimSmart(value: string, maxChars = 360): string {
-  if (value.length <= maxChars) return value;
-  const sliced = value.slice(0, maxChars);
-  const boundary = sliced.lastIndexOf(" ");
-  const base = boundary > Math.floor(maxChars * 0.65) ? sliced.slice(0, boundary) : sliced;
-  return `${base.trim()}...`;
-}
-
-function normalizeSummary(summaryRaw: string, title: string): string {
-  let summary = sanitizeIntelText(summaryRaw)
-    .replace(/\bThe post .*? appeared first on .*?\.?/gi, "")
-    .replace(/\bLatest Updates\b[\s\S]*$/i, "")
-    .replace(/\bFollow(?:ing)? .*$/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (title && summary.toLowerCase().startsWith(title.toLowerCase())) {
-    summary = summary.slice(title.length).replace(/^[-:;,.–—\s]+/, "").trim();
-  }
-  return trimSmart(summary || title, 340);
-}
-
-function normalizeIntelItem(item: IntelItem): IntelItem {
-  const title = trimSmart(sanitizeIntelText(item.title), 180);
-  const source = trimSmart(sanitizeIntelText(item.source), 64);
-  const summary = normalizeSummary(item.summary, title);
-  return { ...item, title, source, summary };
-}
 
 async function loadOsint(): Promise<IntelItem[]> {
   const data = await fetchIntelFeed();

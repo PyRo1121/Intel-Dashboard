@@ -5,9 +5,12 @@ import {
   formatAgeAgoAt,
   formatDateTime,
   formatLongDateTime,
+  parseCompactNumber,
   parseTimestampMs,
   formatPercent,
   formatShortDateTime,
+  severityDot,
+  severityHexColor,
   formatUsd,
   formatWholeNumber,
   isInitialResourceLoading,
@@ -17,6 +20,15 @@ test("formatWholeNumber clamps and formats integer counts", () => {
   assert.equal(formatWholeNumber(12345.9), "12,345");
   assert.equal(formatWholeNumber(-10), "0");
   assert.equal(formatWholeNumber(undefined), "0");
+});
+
+test("parseCompactNumber handles plain, comma, and compact suffix values", () => {
+  assert.equal(parseCompactNumber("42"), 42);
+  assert.equal(parseCompactNumber("1,234"), 1234);
+  assert.equal(parseCompactNumber("1.2K"), 1200);
+  assert.equal(parseCompactNumber("2.5M"), 2_500_000);
+  assert.equal(parseCompactNumber("3B"), 3_000_000_000);
+  assert.equal(parseCompactNumber("views: 789"), 789);
 });
 
 test("formatUsd formats safe whole-dollar values", () => {
@@ -73,4 +85,13 @@ test("countBySeverity aggregates per-severity totals", () => {
       low: 1,
     },
   );
+});
+
+test("severity visual helpers stay aligned with the shared severity scale", () => {
+  assert.match(severityDot("critical"), /red/);
+  assert.match(severityDot("high"), /amber/);
+  assert.equal(severityHexColor("medium"), "#3b82f6");
+  assert.equal(severityHexColor("low"), "#71717a");
+  assert.equal(severityDot("unknown" as never), "bg-zinc-500");
+  assert.equal(severityHexColor("unknown" as never), "#71717a");
 });

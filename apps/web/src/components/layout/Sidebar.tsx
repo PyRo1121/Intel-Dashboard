@@ -8,7 +8,7 @@ import {
   onCleanup,
   type JSX,
 } from "solid-js";
-import { resolveAuthUserRole } from "~/lib/auth-user";
+import { resolveAuthUserDisplay, resolveAuthUserRole } from "~/lib/auth-user";
 import {
   LayoutDashboard,
   Radio,
@@ -256,21 +256,9 @@ export default function Sidebar() {
                   <div class={`flex items-center gap-2.5 ${compact() ? "justify-center" : ""}`}>
                     {(() => {
                       const [avatarFailed, setAvatarFailed] = createSignal(false);
-                      const login = () => (currentUser().login || "").trim();
-                      const name = () => (currentUser().name || "").trim();
-                      const avatarUrl = () => (currentUser().avatar_url || "").trim();
-                      const displayName = () => {
-                        return name() || login() || "User";
-                      };
-                      const displayLogin = () => {
-                        const value = login();
-                        if (!value) return "";
-                        return value.includes("@") ? value : `@${value}`;
-                      };
-                      const avatarLetter = () => displayName().slice(0, 1).toUpperCase();
+                      const userDisplay = () => resolveAuthUserDisplay(currentUser());
                       const entitlement = () => currentUser().entitlement;
                       const entitlementView = () => resolveEntitlementView(entitlement());
-                      const role = () => entitlementView().role;
                       const entitled = () => entitlementView().entitled;
                       const delayMinutes = () => entitlementView().delayMinutes;
                       const planLabel = () => entitlementView().planLabel;
@@ -279,16 +267,16 @@ export default function Sidebar() {
                       return (
                         <>
                           <Show
-                            when={avatarUrl().length > 0 && !avatarFailed()}
+                            when={userDisplay().avatarUrl.length > 0 && !avatarFailed()}
                             fallback={
                               <div class="w-7 h-7 rounded-xl flex-shrink-0 ring-1 ring-white/[0.06] bg-zinc-800 text-zinc-300 flex items-center justify-center text-[11px] font-semibold uppercase">
-                                {avatarLetter()}
+                                {userDisplay().avatarLetter}
                               </div>
                             }
                           >
                             <img
-                              src={avatarUrl()}
-                              alt={displayName()}
+                              src={userDisplay().avatarUrl}
+                              alt={userDisplay().displayName}
                               class="w-7 h-7 rounded-xl flex-shrink-0 ring-1 ring-white/[0.06]"
                               referrerpolicy="no-referrer"
                               onError={() => setAvatarFailed(true)}
@@ -297,10 +285,10 @@ export default function Sidebar() {
                           <Show when={!compact()}>
                             <div class="flex-1 min-w-0">
                               <p class="text-[12px] font-medium text-zinc-300 truncate leading-tight">
-                                {displayName()}
+                                {userDisplay().displayName}
                               </p>
                               <p class="text-[10px] text-zinc-600 truncate leading-tight">
-                                {displayLogin()}
+                                {userDisplay().displayLogin}
                               </p>
                               <p class={`text-[10px] truncate leading-tight ${planTone()}`}>
                                 <span>{planLabel()}</span>

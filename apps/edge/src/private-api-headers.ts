@@ -1,4 +1,5 @@
 import { applyDefaultSecurityHeaders, buildCorsHeaders, DEFAULT_APP_ORIGIN } from "./security-guards.ts";
+import { jsonResponse } from "./json-response.ts";
 
 export function mergeVary(existing: string | null, values: string[]): string {
   const set = new Set<string>();
@@ -26,7 +27,6 @@ export function corsJson(
   extraHeaders?: HeadersInit,
 ): Response {
   const headers = new Headers({
-    "Content-Type": "application/json",
     ...corsHeaders(origin),
   });
   if (extraHeaders) {
@@ -35,7 +35,7 @@ export function corsJson(
       headers.set(key, value);
     }
   }
-  return new Response(JSON.stringify(payload), {
+  return jsonResponse(payload, {
     status,
     headers,
   });
@@ -43,7 +43,6 @@ export function corsJson(
 
 export function privateApiHeaders(origin: string | null, existingVary: string | null = null): Headers {
   const headers = new Headers({
-    "Content-Type": "application/json",
     "Cache-Control": "private, no-store, no-cache, must-revalidate",
     "CDN-Cache-Control": "no-store",
     ...corsHeaders(origin),
@@ -69,7 +68,7 @@ export function privateApiJson(
       headers.set(key, value);
     }
   }
-  const response = new Response(JSON.stringify(payload), {
+  const response = jsonResponse(payload, {
     status,
     headers,
   });

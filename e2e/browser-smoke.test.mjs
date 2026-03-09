@@ -16,6 +16,7 @@ import {
   openOwnerCrmPanelByKeyboard,
   openCrmSelectedUserPanel,
   assertOwnerBillingBypassNotices,
+  collectBrowserDiagnostics,
   CRM_AI_WINDOWS,
   MISSING_BILLING_STATE_PATTERN,
   waitForBillingDashboard,
@@ -33,14 +34,10 @@ import {
 
 const SIGNOUT_SESSION_COOKIE = trim(process.env.E2E_SIGNOUT_SESSION_COOKIE);
 
-function isIgnorableConsoleError(text) {
-  return (
-    /^%c%d font-size:0;color:transparent NaN$/.test(text) ||
-    /Note that 'script-src' was not explicitly set, so 'default-src' is used as a fallback\./i.test(text) ||
-    /Failed to load resource: the server responded with a status of 401 \(\)/i.test(text) ||
-    /Failed to load resource: the server responded with a status of 404 \(\)/i.test(text)
-  );
-}
+const SMOKE_IGNORED_CONSOLE_PATTERNS = [
+  /Failed to load resource: the server responded with a status of 401 \(\)/i,
+  /Failed to load resource: the server responded with a status of 404 \(\)/i,
+];
 
 function parseTrailingCount(text) {
   const match = trim(text).match(/\((\d+)\)\s*$/);
@@ -130,42 +127,6 @@ function createAirSeaFixture(timestamp) {
   };
 }
 
-function collectBrowserDiagnostics(page, baseUrl) {
-  const pageErrors = [];
-  const consoleErrors = [];
-  const requestFailures = [];
-  const baseOrigin = new URL(baseUrl).origin;
-
-  page.on("pageerror", (error) => {
-    pageErrors.push(error.message);
-  });
-
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      const text = message.text();
-      if (!isIgnorableConsoleError(text)) {
-        consoleErrors.push(text);
-      }
-    }
-  });
-
-  page.on("requestfailed", (request) => {
-    try {
-      const requestUrl = new URL(request.url());
-      const errorText = request.failure()?.errorText || "request_failed";
-      if (requestUrl.origin === baseOrigin) {
-        if (/ERR_ABORTED/i.test(errorText)) {
-          return;
-        }
-        requestFailures.push(`${request.method()} ${request.url()} ${errorText}`);
-      }
-    } catch {
-      // ignore malformed request urls
-    }
-  });
-
-  return { pageErrors, consoleErrors, requestFailures };
-}
 
 test("browser-authenticated dashboard routes render primary headings without auth bounce", async (t) => {
   const runtime = await createBrowserContext(t);
@@ -767,7 +728,9 @@ test("browser-authenticated live feeds stay healthy during refresh dwell", async
     for (const check of checks) {
       const page = await context.newPage();
       try {
-        const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL);
+        const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL, {
+          extraIgnoredConsolePatterns: SMOKE_IGNORED_CONSOLE_PATTERNS,
+        });
 
         await page.goto(`${EDGE_BASE_URL}${check.path}`, {
           waitUntil: "networkidle",
@@ -1199,7 +1162,9 @@ test("browser-authenticated app pages stay free of uncaught, console, and same-o
   try {
     const page = await context.newPage();
     try {
-      const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL);
+      const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL, {
+        extraIgnoredConsolePatterns: SMOKE_IGNORED_CONSOLE_PATTERNS,
+      });
 
       for (const route of AUTHENTICATED_BROWSER_NOERROR_ROUTES) {
         await page.goto(`${EDGE_BASE_URL}${route}`, {
@@ -1656,7 +1621,9 @@ test("browser public pages stay free of uncaught, console, and same-origin reque
   try {
     const page = await context.newPage();
     try {
-      const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL);
+      const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL, {
+        extraIgnoredConsolePatterns: SMOKE_IGNORED_CONSOLE_PATTERNS,
+      });
 
       for (const route of PUBLIC_BROWSER_ROUTES) {
         await page.goto(`${EDGE_BASE_URL}${route}`, {

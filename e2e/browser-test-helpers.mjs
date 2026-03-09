@@ -311,11 +311,14 @@ export async function openOwnerCrmPanelByKeyboard(page, crmSearch) {
   return selectedPanel;
 }
 
-export function collectBrowserDiagnostics(page, baseUrl) {
+export function collectBrowserDiagnostics(page, baseUrl, options = {}) {
   const pageErrors = [];
   const consoleErrors = [];
   const requestFailures = [];
   const baseOrigin = new URL(baseUrl).origin;
+  const extraIgnoredConsolePatterns = Array.isArray(options.extraIgnoredConsolePatterns)
+    ? options.extraIgnoredConsolePatterns
+    : [];
 
   page.on("pageerror", (error) => {
     pageErrors.push(error.message);
@@ -324,7 +327,8 @@ export function collectBrowserDiagnostics(page, baseUrl) {
   page.on("console", (message) => {
     if (message.type() === "error") {
       const text = message.text();
-      if (!isIgnorableConsoleError(text)) {
+      const ignoredByOverride = extraIgnoredConsolePatterns.some((pattern) => pattern.test(text));
+      if (!ignoredByOverride && !isIgnorableConsoleError(text)) {
         consoleErrors.push(text);
       }
     }

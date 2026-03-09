@@ -312,6 +312,13 @@ type CrmStatusCounts = {
   none: number;
 };
 
+type CrmSummaryDegradedState = {
+  partial: boolean;
+  accountsTruncated: boolean;
+  activityTruncated: boolean;
+  reasons: string[];
+};
+
 type CrmSummarySnapshot = {
   generatedAtMs: number;
   billing: {
@@ -323,6 +330,8 @@ type CrmSummarySnapshot = {
   };
   telemetry: CrmTelemetrySummary;
   latestEvents: BillingActivityEvent[];
+  degraded: CrmSummaryDegradedState;
+  telemetryKindCounts7d?: Record<string, number>;
 };
 
 type CrmCustomerStripeSnapshot = {
@@ -583,6 +592,12 @@ type AiBatchStateMeta = {
   outputFileId?: string;
   results?: AiBatchJobResult[];
   error?: string;
+};
+
+type AiBatchPendingState = {
+  id: string;
+  status: AiBatchStatus;
+  updatedAtMs: number;
 };
 
 type AiJobRequest =
@@ -4027,7 +4042,7 @@ async function saveBillingAccount(env: WorkerEnv, account: BillingAccount): Prom
   }
   await kv.put(buildBillingKey(env, account.userId), JSON.stringify(account));
   await Promise.all([
-    deleteCachedCrmSummary(env),
+    refreshCachedCrmSummaryForBillingAccount({ env, next: account }),
     deleteCachedStripeCrmSummary(env),
     deleteCachedCrmCustomerStripeSnapshot(env, account.userId),
   ]);
@@ -4149,6 +4164,64 @@ function createEmptyCrmStatusCounts(): CrmStatusCounts {
   };
 }
 
+function createCrmSummaryDegradedState(args?: {
+  accountsTruncated?: boolean;
+  activityTruncated?: boolean;
+}): CrmSummaryDegradedState {
+  const accountsTruncated = Boolean(args?.accountsTruncated);
+  const activityTruncated = Boolean(args?.activityTruncated);
+  const reasons: string[] = [];
+  if (accountsTruncated) {
+    reasons.push("billing_accounts_truncated");
+  }
+  if (activityTruncated) {
+    reasons.push("billing_activity_truncated");
+  }
+  return {
+    partial: accountsTruncated || activityTruncated,
+    accountsTruncated,
+    activityTruncated,
+    reasons,
+  };
+}
+
+function summarizeCrmAccounts(accounts: CrmAccountSnapshot[]): {
+  trackedUsers: number;
+  statuses: CrmStatusCounts;
+  mrrActiveUsd: number;
+  arrActiveUsd: number;
+} {
+  const statuses = createEmptyCrmStatusCounts();
+  let mrrActiveUsd = 0;
+  for (const account of accounts) {
+    if (account.status === "active") {
+      statuses.active += 1;
+      mrrActiveUsd += account.monthlyPriceUsd;
+      continue;
+    }
+    if (account.status === "trialing") {
+      statuses.trialing += 1;
+      continue;
+    }
+    if (account.status === "canceled") {
+      statuses.canceled += 1;
+      continue;
+    }
+    if (account.status === "expired") {
+      statuses.expired += 1;
+      continue;
+    }
+    statuses.none += 1;
+  }
+  const normalizedMrr = Number(mrrActiveUsd.toFixed(2));
+  return {
+    trackedUsers: accounts.length,
+    statuses,
+    mrrActiveUsd: normalizedMrr,
+    arrActiveUsd: Number((normalizedMrr * 12).toFixed(2)),
+  };
+}
+
 function normalizeCrmSummarySnapshot(value: unknown): CrmSummarySnapshot | null {
   if (!isRecord(value) || !isRecord(value.billing) || !isRecord(value.telemetry) || !Array.isArray(value.latestEvents)) {
     return null;
@@ -4219,6 +4292,19 @@ function normalizeCrmSummarySnapshot(value: unknown): CrmSummarySnapshot | null 
     .sort((left, right) => right.atMs - left.atMs)
     .slice(0, 60);
 
+  const telemetryKindCounts7d = isRecord(value.telemetryKindCounts7d)
+    ? Object.fromEntries(
+        Object.entries(value.telemetryKindCounts7d)
+          .map(
+            ([kind, count]): [string, number] => [
+              normalizeBillingActivityKind(kind),
+              Math.max(0, Math.floor(parseFiniteNumber(count) ?? 0)),
+            ],
+          )
+          .filter(([, count]) => count > 0),
+      )
+    : undefined;
+
   return {
     generatedAtMs: Math.max(0, Math.floor(generatedAtMs)),
     billing: {
@@ -4230,6 +4316,15 @@ function normalizeCrmSummarySnapshot(value: unknown): CrmSummarySnapshot | null 
     },
     telemetry,
     latestEvents,
+    degraded: createCrmSummaryDegradedState(
+      isRecord(value.degraded)
+        ? {
+            accountsTruncated: normalizeBoolean(value.degraded.accountsTruncated, false),
+            activityTruncated: normalizeBoolean(value.degraded.activityTruncated, false),
+          }
+        : undefined,
+    ),
+    ...(telemetryKindCounts7d ? { telemetryKindCounts7d } : {}),
   };
 }
 
@@ -4258,6 +4353,28 @@ async function saveCachedCrmSummary(env: WorkerEnv, summary: CrmSummarySnapshot)
   await kv.put(buildCrmSummaryKey(env), JSON.stringify(summary), {
     expirationTtl: ttlSeconds > 0 ? ttlSeconds * 3 : undefined,
   });
+}
+
+async function refreshCachedCrmSummaryForBillingAccount(args: {
+  env: WorkerEnv;
+  next: BillingAccount;
+}): Promise<void> {
+  void args.next;
+  await deleteCachedCrmSummary(args.env);
+}
+
+async function refreshCachedCrmSummaryForActivityEvent(args: {
+  env: WorkerEnv;
+  userId: string;
+  previousEvents: BillingActivityEvent[];
+  nextEvents: BillingActivityEvent[];
+  event: BillingActivityEvent;
+}): Promise<void> {
+  void args.userId;
+  void args.previousEvents;
+  void args.nextEvents;
+  void args.event;
+  await deleteCachedCrmSummary(args.env);
 }
 
 async function deleteCachedStripeCrmSummary(env: WorkerEnv): Promise<void> {
@@ -4420,17 +4537,20 @@ async function loadBillingActivityEvents(env: WorkerEnv, userId: string): Promis
 async function listKvKeyNamesByPrefix(args: {
   kv: KvLike;
   prefix: string;
-  maxKeys: number;
-}): Promise<string[]> {
+  maxKeys?: number;
+}): Promise<{ keys: string[]; truncated: boolean }> {
   if (typeof args.kv.list !== "function") {
-    return [];
+    return { keys: [], truncated: true };
   }
 
   const collected: string[] = [];
+  const maxKeys = args.maxKeys === undefined ? Number.POSITIVE_INFINITY : args.maxKeys;
   let cursor: string | undefined;
+  let truncated = false;
   for (;;) {
-    const remaining = args.maxKeys - collected.length;
+    const remaining = maxKeys - collected.length;
     if (remaining <= 0) {
+      truncated = true;
       break;
     }
     const page = await args.kv.list({
@@ -4450,23 +4570,31 @@ async function listKvKeyNamesByPrefix(args: {
     cursor = page.cursor;
   }
 
-  return collected;
+  return { keys: collected, truncated };
 }
 
-async function loadCrmAccountSnapshots(env: WorkerEnv): Promise<CrmAccountSnapshot[]> {
+async function loadCrmAccountSnapshots(env: WorkerEnv): Promise<{
+  accounts: CrmAccountSnapshot[];
+  truncated: boolean;
+}> {
   const kv = env.USAGE_KV;
   if (!kv || typeof kv.get !== "function") {
-    return [];
+    return {
+      accounts: [],
+      truncated: true,
+    };
   }
 
   const prefix = `${normalizeBillingNamespacePrefix(env.BILLING_NAMESPACE_PREFIX)}:account:`;
-  const keys = await listKvKeyNamesByPrefix({
+  const { keys, truncated } = await listKvKeyNamesByPrefix({
     kv,
     prefix,
-    maxKeys: 2500,
   });
   if (keys.length === 0) {
-    return [];
+    return {
+      accounts: [],
+      truncated,
+    };
   }
 
   const snapshots = await Promise.all(keys.map(async (keyName) => {
@@ -4496,14 +4624,19 @@ async function loadCrmAccountSnapshots(env: WorkerEnv): Promise<CrmAccountSnapsh
     }
   }));
 
-  return snapshots
-    .filter((snapshot): snapshot is CrmAccountSnapshot => snapshot !== null)
-    .sort((left, right) => right.updatedAtMs - left.updatedAtMs);
+  return {
+    accounts: snapshots
+      .filter((snapshot): snapshot is CrmAccountSnapshot => snapshot !== null)
+      .sort((left, right) => right.updatedAtMs - left.updatedAtMs),
+    truncated,
+  };
 }
 
 async function summarizeCrmTelemetry(env: WorkerEnv): Promise<{
   telemetry: CrmTelemetrySummary;
   latestEvents: BillingActivityEvent[];
+  truncated: boolean;
+  kindCounts7d: Record<string, number>;
 }> {
   const kv = env.USAGE_KV;
   if (!kv || typeof kv.get !== "function") {
@@ -4520,14 +4653,15 @@ async function summarizeCrmTelemetry(env: WorkerEnv): Promise<{
         topKinds7d: [],
       },
       latestEvents: [],
+      truncated: true,
+      kindCounts7d: {},
     };
   }
 
   const prefix = `${normalizeBillingNamespacePrefix(env.BILLING_NAMESPACE_PREFIX)}:activity:`;
-  const keys = await listKvKeyNamesByPrefix({
+  const { keys, truncated } = await listKvKeyNamesByPrefix({
     kv,
     prefix,
-    maxKeys: 2500,
   });
 
   const nowMs = Date.now();
@@ -4601,55 +4735,35 @@ async function summarizeCrmTelemetry(env: WorkerEnv): Promise<{
       topKinds7d,
     },
     latestEvents: latestEvents.slice(0, 60),
+    truncated,
+    kindCounts7d: Object.fromEntries(kindCounts7d.entries()),
   };
 }
 
 async function buildCrmSummarySnapshot(env: WorkerEnv): Promise<CrmSummarySnapshot> {
-  const accounts = await loadCrmAccountSnapshots(env);
-  const statuses = createEmptyCrmStatusCounts();
-  let mrrActiveUsd = 0;
-  for (const account of accounts) {
-    if (account.status === "active") {
-      statuses.active += 1;
-      mrrActiveUsd += account.monthlyPriceUsd;
-      continue;
-    }
-    if (account.status === "trialing") {
-      statuses.trialing += 1;
-      continue;
-    }
-    if (account.status === "canceled") {
-      statuses.canceled += 1;
-      continue;
-    }
-    if (account.status === "expired") {
-      statuses.expired += 1;
-      continue;
-    }
-    statuses.none += 1;
-  }
-
-  const { telemetry, latestEvents } = await summarizeCrmTelemetry(env);
-  const normalizedMrr = Number(mrrActiveUsd.toFixed(2));
+  const { accounts, truncated: accountsTruncated } = await loadCrmAccountSnapshots(env);
+  const billing = summarizeCrmAccounts(accounts);
+  const { telemetry, latestEvents, truncated: activityTruncated, kindCounts7d } = await summarizeCrmTelemetry(env);
 
   return {
     generatedAtMs: Date.now(),
     billing: {
-      trackedUsers: accounts.length,
-      statuses,
-      mrrActiveUsd: normalizedMrr,
-      arrActiveUsd: Number((normalizedMrr * 12).toFixed(2)),
+      ...billing,
       accounts,
     },
     telemetry,
     latestEvents,
+    degraded: createCrmSummaryDegradedState({
+      accountsTruncated,
+      activityTruncated,
+    }),
+    telemetryKindCounts7d: kindCounts7d,
   };
 }
 
 async function resolveCrmSummarySnapshot(env: WorkerEnv): Promise<CrmSummarySnapshot> {
-  const ttlMs = normalizeCrmSummaryCacheTtlSeconds(env.CRM_SUMMARY_CACHE_TTL_SECONDS) * 1000;
   const cached = await loadCachedCrmSummary(env);
-  if (cached && (ttlMs <= 0 || Date.now() - cached.generatedAtMs <= ttlMs)) {
+  if (cached) {
     return cached;
   }
   const built = await buildCrmSummarySnapshot(env);
@@ -5710,7 +5824,13 @@ async function appendBillingActivityEvent(args: {
       .sort((left, right) => right.atMs - left.atMs)
       .slice(0, maxEvents);
     await kv.put(activityKey, JSON.stringify(next));
-    await deleteCachedCrmSummary(args.env);
+    await refreshCachedCrmSummaryForActivityEvent({
+      env: args.env,
+      userId: args.userId,
+      previousEvents: existing,
+      nextEvents: next,
+      event,
+    });
   } catch {
     // billing activity writes are best-effort and should not block entitlements
   }
@@ -7141,6 +7261,7 @@ async function handleAdminCrmSummary(args: {
     ok: true,
     result: {
       generatedAtMs: summarySnapshot.generatedAtMs,
+      degraded: summarySnapshot.degraded,
       billing: {
         trackedUsers: summarySnapshot.billing.trackedUsers,
         statuses: statusCounts,
@@ -7995,6 +8116,31 @@ function normalizeAiBatchStateMeta(value: unknown, batchId: string): AiBatchStat
   };
 }
 
+function normalizeAiBatchPendingState(value: unknown, batchId: string): AiBatchPendingState | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const statusRaw = trimString(value.status);
+  const status =
+    statusRaw === "queued" ||
+    statusRaw === "running" ||
+    statusRaw === "submitted" ||
+    statusRaw === "polling" ||
+    statusRaw === "completed" ||
+    statusRaw === "failed"
+      ? (statusRaw as AiBatchStatus)
+      : null;
+  const updatedAtMs = parseFiniteNumber(value.updatedAtMs);
+  if (!status || updatedAtMs === undefined) {
+    return null;
+  }
+  return {
+    id: trimString(value.id) ?? batchId,
+    status,
+    updatedAtMs: Math.floor(updatedAtMs),
+  };
+}
+
 async function loadAiBatchStateMeta(env: WorkerEnv, batchId: string): Promise<AiBatchStateMeta | null> {
   const kv = getAiBatchKv(env);
   if (!kv) {
@@ -8006,6 +8152,22 @@ async function loadAiBatchStateMeta(env: WorkerEnv, batchId: string): Promise<Ai
   }
   try {
     return normalizeAiBatchStateMeta(JSON.parse(raw) as unknown, batchId);
+  } catch {
+    return null;
+  }
+}
+
+async function loadAiBatchPendingState(args: {
+  kv: KvLike;
+  key: string;
+  batchId: string;
+}): Promise<AiBatchPendingState | null> {
+  const raw = await args.kv.get(args.key);
+  if (!raw) {
+    return null;
+  }
+  try {
+    return normalizeAiBatchPendingState(JSON.parse(raw) as unknown, args.batchId);
   } catch {
     return null;
   }
@@ -8054,6 +8216,18 @@ async function saveAiBatchState(env: WorkerEnv, state: AiBatchState): Promise<vo
   await Promise.all(writes);
 }
 
+async function deleteAiBatchState(env: WorkerEnv, batchId: string): Promise<void> {
+  const kv = getAiBatchKv(env);
+  if (!kv || typeof kv.delete !== "function") {
+    return;
+  }
+  await Promise.all([
+    kv.delete(resolveAiBatchStateKey(env, batchId)),
+    kv.delete(resolveAiBatchMetaKey(env, batchId)),
+    kv.delete(resolveAiBatchPendingKey(env, batchId)),
+  ]);
+}
+
 async function loadAiBatchIdempotency(env: WorkerEnv, idempotencyKey: string): Promise<string | null> {
   const kv = getAiBatchKv(env);
   if (!kv) {
@@ -8069,6 +8243,14 @@ async function saveAiBatchIdempotency(env: WorkerEnv, idempotencyKey: string, ba
   }
   const ttl = normalizeAiBatchStatusTtlSeconds(env.AI_BATCH_STATUS_TTL_SECONDS);
   await kv.put(resolveAiBatchIdempotencyKey(env, idempotencyKey), batchId, { expirationTtl: ttl });
+}
+
+async function deleteAiBatchIdempotency(env: WorkerEnv, idempotencyKey: string): Promise<void> {
+  const kv = getAiBatchKv(env);
+  if (!kv || typeof kv.delete !== "function") {
+    return;
+  }
+  await kv.delete(resolveAiBatchIdempotencyKey(env, idempotencyKey));
 }
 
 function aiBatchStateResponse(state: AiBatchState): Record<string, unknown> {
@@ -8569,6 +8751,26 @@ async function processAiBatchRun(args: {
   });
 }
 
+async function processAiBatchRunWithoutQueueRecovery(args: {
+  env: WorkerEnv;
+  batchId: string;
+}): Promise<void> {
+  try {
+    await processAiBatchRun(args);
+  } catch (error) {
+    const state = await loadAiBatchState(args.env, args.batchId);
+    if (state && state.status !== "completed" && state.status !== "failed") {
+      await saveAiBatchState(args.env, {
+        ...state,
+        status: "failed",
+        updatedAtMs: Date.now(),
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
+  }
+}
+
 async function processAiBatchPoll(args: {
   env: WorkerEnv;
   batchId: string;
@@ -8669,6 +8871,7 @@ async function recoverStaleAiBatches(args: {
   if (!kv || typeof kv.list !== "function") {
     return 0;
   }
+  const hasQueue = Boolean(args.env.AI_JOB_QUEUE && typeof args.env.AI_JOB_QUEUE.send === "function");
 
   const staleMs = Math.max(
     DEFAULT_AI_BATCH_RECOVERY_STALE_SECONDS * 1000,
@@ -8695,12 +8898,66 @@ async function recoverStaleAiBatches(args: {
         continue;
       }
 
+      const pending = await loadAiBatchPendingState({
+        kv,
+        key: name,
+        batchId,
+      });
+      if (!pending) {
+        continue;
+      }
+      if (pending.status === "completed" || pending.status === "failed") {
+        if (typeof kv.delete === "function") {
+          await kv.delete(name);
+        }
+        continue;
+      }
+      if (args.nowMs - pending.updatedAtMs < staleMs) {
+        continue;
+      }
+
       const state = await loadAiBatchState(args.env, batchId);
       if (!state || state.status === "completed" || state.status === "failed") {
         continue;
       }
 
       if (args.nowMs - state.updatedAtMs < staleMs) {
+        continue;
+      }
+
+      if (!hasQueue) {
+        if (state.provider !== "internal") {
+          await saveAiBatchState(args.env, {
+            ...state,
+            status: "failed",
+            updatedAtMs: args.nowMs,
+            error: "AI_JOB_QUEUE binding is required for async AI batch recovery.",
+          });
+          recovered += 1;
+          continue;
+        }
+
+        const replayableState =
+          state.status === "running"
+            ? {
+                ...state,
+                status: "queued" as const,
+                updatedAtMs: args.nowMs,
+              }
+            : state;
+        if (replayableState !== state) {
+          await saveAiBatchState(args.env, replayableState);
+        }
+
+        try {
+          await processAiBatchRunWithoutQueueRecovery({
+            env: args.env,
+            batchId: replayableState.id,
+          });
+        } catch {
+          // Failure state is persisted in processAiBatchRunWithoutQueueRecovery.
+        }
+        recovered += 1;
         continue;
       }
 
@@ -8854,24 +9111,42 @@ async function handleAiJobs(args: {
     pollAttempts: 0,
   };
   await saveAiBatchState(args.env, queuedState);
-  if (idempotencyKey) {
-    await saveAiBatchIdempotency(args.env, idempotencyKey, batchId);
+  try {
+    if (idempotencyKey) {
+      await saveAiBatchIdempotency(args.env, idempotencyKey, batchId);
+    }
+  } catch (error) {
+    await Promise.allSettled([
+      deleteAiBatchState(args.env, batchId),
+      ...(idempotencyKey ? [deleteAiBatchIdempotency(args.env, idempotencyKey)] : []),
+    ]);
+    return errorJson(500, `Failed to persist AI batch idempotency state: ${String(error)}`);
   }
 
   if (hasQueue) {
-    await enqueueAiBatchMessage({
-      env: args.env,
-      body: {
-        kind: "ai-batch-run",
-        batchId,
-      },
-    });
-  } else {
-    if (args.ctx) {
-      args.ctx.waitUntil(processAiBatchRun({ env: args.env, batchId }));
-    } else {
-      await processAiBatchRun({ env: args.env, batchId });
+    try {
+      await enqueueAiBatchMessage({
+        env: args.env,
+        body: {
+          kind: "ai-batch-run",
+          batchId,
+        },
+      });
+    } catch (error) {
+      await Promise.allSettled([
+        deleteAiBatchState(args.env, batchId),
+        ...(idempotencyKey ? [deleteAiBatchIdempotency(args.env, idempotencyKey)] : []),
+      ]);
+      return errorJson(503, `Failed to enqueue AI batch run: ${String(error)}`);
     }
+  } else if (args.ctx) {
+    args.ctx.waitUntil(
+      processAiBatchRunWithoutQueueRecovery({ env: args.env, batchId }).catch(() => {
+        // Failure state is persisted in processAiBatchRunWithoutQueueRecovery.
+      }),
+    );
+  } else {
+    await processAiBatchRunWithoutQueueRecovery({ env: args.env, batchId });
   }
 
   const currentState = (await loadAiBatchStateMeta(args.env, batchId)) ?? {
@@ -11651,13 +11926,7 @@ const worker = {
     const endpointPath = normalizePath(env.USAGE_ENDPOINT_PATH, DEFAULT_ENDPOINT_PATH);
     const cacheNamespace = trimString(env.USAGE_CACHE_NAMESPACE) ?? "default";
 
-    if (
-      env.AI_JOB_QUEUE &&
-      typeof env.AI_JOB_QUEUE.send === "function" &&
-      env.USAGE_KV &&
-      typeof env.USAGE_KV.get === "function" &&
-      typeof env.USAGE_KV.list === "function"
-    ) {
+    if (env.USAGE_KV && typeof env.USAGE_KV.get === "function" && typeof env.USAGE_KV.list === "function") {
       const recoveryStartedAt = Date.now();
       try {
         const recovered = await recoverStaleAiBatches({
@@ -11719,11 +11988,40 @@ const worker = {
       });
     }
 
-    if (isCrmStripeLiveEnabled(env) && trimString(env.STRIPE_SECRET_KEY)) {
-      const crmStartedAt = Date.now();
+    if (env.USAGE_KV && typeof env.USAGE_KV.get === "function" && typeof env.USAGE_KV.list === "function") {
+      const crmSummaryStartedAt = Date.now();
       try {
         const crmSummary = await buildCrmSummarySnapshot(env);
         await saveCachedCrmSummary(env, crmSummary);
+        writeUsageAnalytics({
+          env,
+          path: endpointPath,
+          method: "SCHEDULED",
+          rpcMethod: "crmSummaryWarm",
+          mode: "kv",
+          cacheHit: false,
+          status: 200,
+          durationMs: Date.now() - crmSummaryStartedAt,
+          outcome: "crm-summary-cached",
+        });
+      } catch {
+        writeUsageAnalytics({
+          env,
+          path: endpointPath,
+          method: "SCHEDULED",
+          rpcMethod: "crmSummaryWarm",
+          mode: "kv",
+          cacheHit: false,
+          status: 500,
+          durationMs: Date.now() - crmSummaryStartedAt,
+          outcome: "crm-summary-failed",
+        });
+      }
+    }
+
+    if (isCrmStripeLiveEnabled(env) && trimString(env.STRIPE_SECRET_KEY)) {
+      const crmStripeStartedAt = Date.now();
+      try {
         const stripeResult = await fetchStripeLiveCrmSummary(env);
         if (stripeResult.ok) {
           await saveCachedStripeCrmSummary(env, stripeResult.summary);
@@ -11736,7 +12034,7 @@ const worker = {
           mode: "kv",
           cacheHit: false,
           status: stripeResult.ok ? 200 : 502,
-          durationMs: Date.now() - crmStartedAt,
+          durationMs: Date.now() - crmStripeStartedAt,
           outcome: stripeResult.ok ? "crm-stripe-cached" : "crm-stripe-failed",
         });
       } catch {
@@ -11748,7 +12046,7 @@ const worker = {
           mode: "kv",
           cacheHit: false,
           status: 500,
-          durationMs: Date.now() - crmStartedAt,
+          durationMs: Date.now() - crmStripeStartedAt,
           outcome: "crm-stripe-failed",
         });
       }

@@ -391,14 +391,24 @@ test("browser-authenticated billing actions surface owner bypass notices", async
         timeout: 45_000,
       });
 
-      await page.getByRole("button", { name: "Start Trial" }).click();
-      await page.waitForSelector("text=Owner account detected. Trial activation is not required.", { timeout: 30_000 });
+      await page.getByTestId("billing-status-surface").waitFor({ state: "visible", timeout: 30_000 });
+      await page.getByTestId("billing-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
+      await page.getByTestId("billing-summary-plan").waitFor({ state: "visible", timeout: 30_000 });
+      const notice = page.getByTestId("billing-notice");
 
-      await page.getByRole("button", { name: "Open Checkout" }).click();
-      await page.waitForSelector("text=Owner account detected. Checkout bypass is active.", { timeout: 30_000 });
+      await page.getByTestId("billing-start-trial").click();
+      await notice.waitFor({ state: "visible", timeout: 30_000 });
+      assert.match((await notice.textContent()) || "", /Owner account detected. Trial activation is not required./i);
 
-      await page.getByRole("button", { name: "Manage Subscription" }).click();
-      await page.waitForSelector("text=Owner account detected. Stripe portal is not required.", { timeout: 30_000 });
+      await page.getByTestId("billing-open-checkout").click();
+      await notice.waitFor({ state: "visible", timeout: 30_000 });
+      assert.match((await notice.textContent()) || "", /Owner account detected. Checkout bypass is active./i);
+
+      await page.getByTestId("billing-manage-subscription").click();
+      await notice.waitFor({ state: "visible", timeout: 30_000 });
+      assert.match((await notice.textContent()) || "", /Owner account detected. Stripe portal is not required./i);
+      const activitySurface = page.getByTestId("billing-activity-surface");
+      await activitySurface.waitFor({ state: "visible", timeout: 30_000 });
     } catch (error) {
       await captureBrowserArtifacts(page, "authenticated-billing-actions", error);
       throw error;

@@ -25,6 +25,7 @@ import { corsHeaders, corsJson, mergeVary, privateApiHeaders, privateApiJson, pr
 import { getDashboardAppRoutePrefixes, normalizeSafePostAuthPath } from "./post-auth-path";
 import { createTurnstileGateToken, type TurnstileMode, verifyTurnstileGateToken } from "./turnstile";
 import { isRecord } from "./type-guards";
+import { normalizeNumber, normalizeString } from "./value-normalization";
 import { DASHBOARD_HOME_PATH, DEFAULT_POST_AUTH_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
 import { buildAuthModeSwitchHref, buildAuthPageHref, buildAuthProviderHref } from "@intel-dashboard/shared/auth-flow.ts";
 import { getAuthCopy } from "@intel-dashboard/shared/auth-copy.ts";
@@ -1021,23 +1022,6 @@ function fromBase64Url(s: string): Uint8Array {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
-}
-
-function normalizeString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-
-function normalizeNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string" && value.trim().length > 0) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-  return null;
 }
 
 function resolveTurnstileSiteKey(env: Env): string {
@@ -2309,16 +2293,12 @@ async function fetchOwnerCrmBackendSummary(params: {
   });
 }
 
-type OwnerCrmAiTelemetryFetchResult =
-  | { ok: true; payload: Record<string, unknown> }
-  | { ok: false; status: number; error: string };
-
 async function fetchOwnerCrmAiTelemetry(params: {
   env: Env;
   user: VerifiedSession;
   window: string;
-}): Promise<OwnerCrmAiTelemetryFetchResult> {
-  return postOwnerBackendJson({
+}): Promise<import("./owner-backend-json").BackendJsonResult<Record<string, unknown>>> {
+  return postOwnerBackendJson<Record<string, unknown>>({
     backendToken: resolveBackendApiToken(params.env),
     url: resolveBackendEndpointUrl(params.env, "/api/intel-dashboard/admin/crm/ai-telemetry"),
     userId: resolveUserId(params.user),
@@ -5457,22 +5437,10 @@ export default {
         backendUrl = new URL(resolveBackendEndpointUrl(env, path));
         backendUrl.search = url.search;
       } catch (error) {
-        return withDefaultSecurityHeaders(new Response(
-          JSON.stringify({
-            error: "Backend binding unavailable",
-            detail: error instanceof Error ? error.message : "unknown_error",
-          }),
-          {
-            status: 503,
-            headers: {
-              "Content-Type": "application/json",
-              "Cache-Control": "private, no-store, no-cache, must-revalidate",
-              "CDN-Cache-Control": "no-store",
-              "Vary": mergeVary(null, ["Origin", "Cookie", "Authorization"]),
-              ...corsHeaders(origin),
-            },
-          },
-        ));
+        return privateApiJson(origin, 503, {
+          error: "Backend binding unavailable",
+          detail: error instanceof Error ? error.message : "unknown_error",
+        });
       }
 
       const useServiceBinding = usesBackendServiceBinding(env);
@@ -5511,43 +5479,19 @@ export default {
         } catch (err) {
           lastErr = err;
           if (attempt === maxAttempts - 1) {
-            return new Response(
-              JSON.stringify({
-                error: "Backend unavailable",
-                detail: err instanceof Error ? err.message : "unknown_error",
-              }),
-              {
-                status: 502,
-                headers: {
-                  "Content-Type": "application/json",
-                  "Cache-Control": "private, no-store, no-cache, must-revalidate",
-                  "CDN-Cache-Control": "no-store",
-                  "Vary": mergeVary(null, ["Origin", "Cookie", "Authorization"]),
-                  ...corsHeaders(origin),
-                },
-              },
-            );
+            return privateApiJson(origin, 502, {
+              error: "Backend unavailable",
+              detail: err instanceof Error ? err.message : "unknown_error",
+            });
           }
         }
       }
 
       if (!backendRes) {
-        return new Response(
-          JSON.stringify({
-            error: "Backend unavailable",
-            detail: lastErr instanceof Error ? lastErr.message : "unknown_error",
-          }),
-          {
-            status: 502,
-            headers: {
-              "Content-Type": "application/json",
-              "Cache-Control": "private, no-store, no-cache, must-revalidate",
-              "CDN-Cache-Control": "no-store",
-              "Vary": mergeVary(null, ["Origin", "Cookie", "Authorization"]),
-              ...corsHeaders(origin),
-            },
-          },
-        );
+        return privateApiJson(origin, 502, {
+          error: "Backend unavailable",
+          detail: lastErr instanceof Error ? lastErr.message : "unknown_error",
+        });
       }
       const response = new Response(backendRes.body, {
         status: backendRes.status,
@@ -5560,19 +5504,7 @@ export default {
     }
 
     if (path.startsWith("/api/")) {
-      return new Response(
-        JSON.stringify({ error: "Not Found" }),
-        {
-          status: 404,
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "private, no-store, no-cache, must-revalidate",
-            "CDN-Cache-Control": "no-store",
-            "Vary": mergeVary(null, ["Origin", "Cookie", "Authorization"]),
-            ...corsHeaders(origin),
-          },
-        },
-      );
+      return privateApiJson(origin, 404, { error: "Not Found" });
     }
 
     // Serve frontend bundle from Worker static assets.

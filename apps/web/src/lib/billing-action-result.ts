@@ -1,4 +1,5 @@
-import type { BillingActionPayload } from "./billing-client.ts";
+import { isOwnerRole } from "@intel-dashboard/shared/entitlement.ts";
+import type { BillingActionPayload, BillingStatusPayload } from "./billing-client.ts";
 
 export function getBillingTrialNotice(result: BillingActionPayload["result"] | undefined): string {
   if (result?.owner === true) {
@@ -19,4 +20,18 @@ export function getBillingCheckoutBypassNotice(): string {
 
 export function getBillingPortalBypassNotice(): string {
   return "Owner account detected. Stripe portal is not required.";
+}
+
+export function getBillingPortalState(result: BillingStatusPayload["result"] | undefined): {
+  ownerBypass: boolean;
+  portalAvailable: boolean;
+  portalReady: boolean;
+} {
+  const ownerBypass = isOwnerRole(result?.role);
+  const portalAvailable = result?.subscription?.portalAvailable === true;
+  return {
+    ownerBypass,
+    portalAvailable,
+    portalReady: ownerBypass || portalAvailable,
+  };
 }

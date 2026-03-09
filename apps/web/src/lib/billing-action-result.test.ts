@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   getBillingCheckoutBypassNotice,
+  getBillingPortalState,
   getBillingPortalBypassNotice,
   getBillingTrialNotice,
 } from "./billing-action-result.ts";
@@ -30,5 +31,17 @@ test("billing action result helpers return stable operator notices", () => {
   assert.equal(
     getBillingPortalBypassNotice(),
     "Owner account detected. Stripe portal is not required.",
+  );
+  assert.deepEqual(
+    getBillingPortalState({ role: "owner", subscription: { portalAvailable: false } }),
+    { ownerBypass: true, portalAvailable: false, portalReady: true },
+  );
+  assert.deepEqual(
+    getBillingPortalState({ role: "subscriber", subscription: { portalAvailable: true } }),
+    { ownerBypass: false, portalAvailable: true, portalReady: true },
+  );
+  assert.deepEqual(
+    getBillingPortalState({ role: "trial", subscription: { portalAvailable: false } }),
+    { ownerBypass: false, portalAvailable: false, portalReady: false },
   );
 });

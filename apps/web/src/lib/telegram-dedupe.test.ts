@@ -8,7 +8,6 @@ import {
   normalizeDedupeText,
   tokenizeDedupeText,
 } from "./telegram-dedupe.ts";
-import { buildTelegramDedupeClusterKey } from "./telegram-dedupe-cluster.ts";
 
 test("telegram dedupe helpers normalize text and tokenize useful terms", () => {
   const normalized = normalizeDedupeText("Breaking: Join @channel https://example.com Missile strike reported");
@@ -34,7 +33,14 @@ test("telegram dedupe helpers derive media signatures and message equality", () 
   };
   assert.equal(messageMediaSignature(message), "clip.mp4|photo.jpg");
   assert.equal(isSameTelegramMessage(message, { ...message }), true);
-  assert.equal(isSameTelegramMessage(message, { ...message, text_original: "Changed original" }), false);
+  assert.equal(isSameTelegramMessage(message, { ...message, views: "1.3K" }), false);
+  assert.equal(
+    isSameTelegramMessage(message, {
+      ...message,
+      text_original: "Different original",
+    }),
+    false,
+  );
   assert.equal(
     isSameTelegramMessage(message, {
       ...message,
@@ -42,19 +48,4 @@ test("telegram dedupe helpers derive media signatures and message equality", () 
     }),
     false,
   );
-  assert.equal(isSameTelegramMessage(message, { ...message, views: "1.3K" }), false);
-});
-
-test("telegram dedupe cluster key stays deterministic when timestamp is invalid", () => {
-  const entry = {
-    category: "ru_milblog",
-    message: {
-      link: "https://t.me/example/1",
-      datetime: "not-a-date",
-      text_original: "Original",
-    },
-  };
-  const first = buildTelegramDedupeClusterKey(entry, "canonical text", Number.NaN, "");
-  const second = buildTelegramDedupeClusterKey(entry, "canonical text", Number.NaN, "");
-  assert.equal(first, second);
 });

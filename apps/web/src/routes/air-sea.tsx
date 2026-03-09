@@ -1,16 +1,22 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
 import { Plane, Ship, ExternalLink, Clock, Eye, Navigation, Search, Radio, ChevronUp, ChevronDown, MapPin } from "lucide-solid";
+import {
+  EMPTY_AIR_SEA_PAYLOAD,
+  fetchAirSeaPayload,
+  type AirSeaIntelReport as IntelReport,
+  type Aircraft,
+} from "~/lib/air-sea-client";
 import { getAviationSourceLabel, getAviationSourceNote } from "~/lib/air-sea-aviation";
 import { formatTitleLabel } from "~/lib/event-label";
 import { getIntelCategoryStyle } from "~/lib/intel-category-style";
+import { getIntelTagStyle } from "~/lib/intel-tag-style";
 import {
   freshnessPillTone,
   freshnessTooltip,
   freshnessBannerTone,
   useFeedFreshness,
 } from "~/lib/freshness";
-import { fetchPublicJson } from "~/lib/client-json";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import {
   formatAgeCompactFromMs,
@@ -28,100 +34,8 @@ import { AIR_SEA_DESCRIPTION, AIR_SEA_SOCIAL_DESCRIPTION, AIR_SEA_TITLE } from "
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 import "leaflet/dist/leaflet.css";
 
-/* ── Types (matches api/air-sea.ts response) ───────────────────────── */
-
-interface Aircraft {
-  icao24: string;
-  callsign: string;
-  type: string;
-  country: string;
-  region: string;
-  squawk: string;
-  latitude: number;
-  longitude: number;
-  altitudeFt: number;
-  speedKts: number;
-  heading: number;
-  verticalRateFpm: number;
-  onGround: boolean;
-  severity: Severity;
-  tags: string[];
-  description: string;
-  links: { adsbexchange?: string; flightradar24?: string };
-}
-
-interface IntelReport {
-  id: string;
-  domain: "air" | "sea";
-  category: string;
-  channel: string;
-  channelUsername: string;
-  text: string;
-  datetime: string;
-  link: string;
-  views: string;
-  severity: Severity;
-  region: string;
-  tags: string[];
-  media: Array<{ type: string; url: string; thumbnail?: string }>;
-}
-
-interface AirSeaPayload {
-  timestamp: string;
-  aviation: {
-    timestamp: string;
-    source: string;
-    fetchedAtMs: number;
-    emergencies: number;
-    aircraft: Aircraft[];
-  };
-  intelFeed: IntelReport[];
-  stats: {
-    aircraftCount: number;
-    airIntelCount: number;
-    seaIntelCount: number;
-    totalIntel: number;
-    critical: number;
-    high: number;
-  };
-}
-
-const EMPTY: AirSeaPayload = {
-  timestamp: "",
-  aviation: { timestamp: "", source: "", fetchedAtMs: 0, emergencies: 0, aircraft: [] },
-  intelFeed: [],
-  stats: { aircraftCount: 0, airIntelCount: 0, seaIntelCount: 0, totalIntel: 0, critical: 0, high: 0 },
-};
-
-/* ── Category styling (matches telegram.tsx) ───────────────────────── */
-
-function catStyle(cat: string) { return getIntelCategoryStyle(cat); }
-
-/* ── Tag styling ───────────────────────────────────────────────────── */
-
-const TAG_COLORS: Record<string, string> = {
-  drone: "bg-amber-500/15 text-amber-300 border-amber-500/25",
-  missile: "bg-red-500/15 text-red-300 border-red-500/25",
-  "air-defense": "bg-purple-500/15 text-purple-300 border-purple-500/25",
-  "naval-major": "bg-indigo-500/15 text-indigo-300 border-indigo-500/25",
-  strike: "bg-orange-500/15 text-orange-300 border-orange-500/25",
-};
-
-/* ── Severity helpers ──────────────────────────────────────────────── */
-
-function regionLabel(r: string): string { return formatTitleLabel(r, "—"); }
-
-/* ── Data loader ───────────────────────────────────────────────────── */
-
-async function loadAirSea(): Promise<AirSeaPayload> {
-  const result = await fetchPublicJson<AirSeaPayload>("/api/air-sea");
-  return result.ok ? result.data : EMPTY;
-}
-
-/* ── Component ─────────────────────────────────────────────────────── */
-
 export default function AirSeaOps() {
-  const [payload, { refetch }] = createResource(loadAirSea, { initialValue: EMPTY });
+  const [payload, { refetch }] = createResource(fetchAirSeaPayload, { initialValue: EMPTY_AIR_SEA_PAYLOAD });
   const feedThresholds = { liveMaxMinutes: 15, delayedMaxMinutes: 60 } as const;
 
   const [domainFilter, setDomainFilter] = createSignal<"all" | "air" | "sea">("all");
@@ -140,11 +54,9 @@ export default function AirSeaOps() {
 
   useLiveRefresh(() => void refetch(), 35_000, { runImmediately: true });
 
-  const data = () => payload.latest ?? payload() ?? EMPTY;
-  const aircraft = () => data().aviation.aircraft;
-  const stats = () => data().stats;
+  const airSea = () => payload.latest ?? payload() ?? EMPTY_AIR_SEA_PAYLOAD;
 
-  const latestFeedTs = createMemo(() => parseTimestampMs(data().timestamp || ""));
+  const latestFeedTs = createMemo(() => parseTimestampMs(airSea().timestamp || ""));
   const freshness = useFeedFreshness({
     nowMs,
     latestTimestampMs: latestFeedTs,
@@ -153,7 +65,7 @@ export default function AirSeaOps() {
     labels: { noData: "Unknown" },
   });
   const aviationSnapshotAgeMs = createMemo(() => {
-    const fetchedAtMs = data().aviation.fetchedAtMs;
+    const fetchedAtMs = airSea().aviation.fetchedAtMs;
     if (!Number.isFinite(fetchedAtMs) || fetchedAtMs <= 0) return null;
     return Math.max(0, nowMs() - fetchedAtMs);
   });
@@ -162,7 +74,7 @@ export default function AirSeaOps() {
   // Filtered intel feed
   const filteredFeed = createMemo(() => {
     const q = query().trim().toLowerCase();
-    return data().intelFeed.filter((r) => {
+    return airSea().intelFeed.filter((r) => {
       if (domainFilter() !== "all" && r.domain !== domainFilter()) return false;
       if (sevFilter() !== "all" && r.severity !== sevFilter()) return false;
       if (q && !r.text.toLowerCase().includes(q) && !r.channel.toLowerCase().includes(q) && !r.tags.some((t) => t.includes(q))) return false;
@@ -213,7 +125,7 @@ export default function AirSeaOps() {
     markerLayer.clearLayers();
     map.invalidateSize();
 
-    const acList = aircraft();
+    const acList = airSea().aviation.aircraft;
     if (acList.length === 0) return;
 
     for (const ac of acList) {
@@ -302,26 +214,26 @@ export default function AirSeaOps() {
           <p class="intel-subheading">Military aircraft tracking plus air/sea milblogger intelligence from a broad Telegram source network.</p>
         </div>
 
-        <Show when={stats().totalIntel > 0 || stats().aircraftCount > 0}>
+        <Show when={airSea().stats.totalIntel > 0 || airSea().stats.aircraftCount > 0}>
           <div class="intel-kpi-strip">
             <div class="intel-kpi-segment">
-              <p class="intel-kpi-value text-cyan-300">{stats().aircraftCount}</p>
+              <p class="intel-kpi-value text-cyan-300">{airSea().stats.aircraftCount}</p>
               <p class="intel-kpi-label">Aircraft</p>
             </div>
             <div class="intel-kpi-segment">
-              <p class="intel-kpi-value text-blue-300">{stats().airIntelCount}</p>
+              <p class="intel-kpi-value text-blue-300">{airSea().stats.airIntelCount}</p>
               <p class="intel-kpi-label">Air Intel</p>
             </div>
             <div class="intel-kpi-segment">
-              <p class="intel-kpi-value text-emerald-300">{stats().seaIntelCount}</p>
+              <p class="intel-kpi-value text-emerald-300">{airSea().stats.seaIntelCount}</p>
               <p class="intel-kpi-label">Sea Intel</p>
             </div>
             <div class="intel-kpi-segment">
-              <p class="intel-kpi-value text-red-400">{stats().critical}</p>
+              <p class="intel-kpi-value text-red-400">{airSea().stats.critical}</p>
               <p class="intel-kpi-label">Critical</p>
             </div>
             <div class="intel-kpi-segment">
-              <p class="intel-kpi-value text-amber-400">{stats().high}</p>
+              <p class="intel-kpi-value text-amber-400">{airSea().stats.high}</p>
               <p class="intel-kpi-label">High</p>
             </div>
           </div>
@@ -349,10 +261,10 @@ export default function AirSeaOps() {
           <Plane size={15} class="text-cyan-400" />
           <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Military Aircraft Tracker</h2>
           <span class="ml-auto text-[10px] text-zinc-600 font-mono-data">
-            Source: {getAviationSourceLabel(data().aviation.source)}
+            Source: {getAviationSourceLabel(airSea().aviation.source)}
             <Show when={aviationSnapshotAgeMs() !== null}> &bull; snapshot age {aviationSnapshotAgeLabel()}</Show>
             {" • "}
-            {data().aviation.timestamp || "n/a"}
+            {airSea().aviation.timestamp || "n/a"}
           </span>
         </div>
 
@@ -361,11 +273,11 @@ export default function AirSeaOps() {
           <div class="relative">
             <div ref={mapEl} class="h-[350px] w-full" />
             <div class="pointer-events-none absolute bottom-3 left-3 z-[500] rounded-lg border border-white/10 bg-black/70 backdrop-blur-sm px-2.5 py-1.5 text-[10px] text-zinc-400 font-mono-data">
-              {aircraft().length} aircraft &bull; real ADS-B positions
+                {airSea().aviation.aircraft.length} aircraft &bull; real ADS-B positions
             </div>
-            <Show when={data().aviation.emergencies > 0}>
+            <Show when={airSea().aviation.emergencies > 0}>
               <div class="pointer-events-none absolute top-3 right-3 z-[500] rounded-lg border border-red-500/30 bg-red-500/15 px-2.5 py-1.5 text-[11px] text-red-300 font-semibold animate-pulse">
-                {data().aviation.emergencies} EMERGENCY SQUAWK
+                {airSea().aviation.emergencies} EMERGENCY SQUAWK
               </div>
             </Show>
           </div>
@@ -373,16 +285,16 @@ export default function AirSeaOps() {
           {/* Aircraft list */}
           <div class="border-l border-white/[0.06] max-h-[350px] overflow-y-auto">
             <Show
-              when={aircraft().length > 0}
+              when={airSea().aviation.aircraft.length > 0}
               fallback={
                 <div class="flex flex-col items-center justify-center h-full p-8 text-center">
                   <Plane size={28} class="text-zinc-700 mb-2" />
                   <p class="text-sm text-zinc-500">No military aircraft currently tracked</p>
-                  <p class="text-xs text-zinc-700 mt-1">{getAviationSourceNote(data().aviation.source)}</p>
+                  <p class="text-xs text-zinc-700 mt-1">{getAviationSourceNote(airSea().aviation.source)}</p>
                 </div>
               }
             >
-              <For each={aircraft()}>
+              <For each={airSea().aviation.aircraft}>
                 {(ac) => (
                   <button
                     type="button"
@@ -423,7 +335,7 @@ export default function AirSeaOps() {
                           </span>
                         </Show>
                       </Show>
-                      <span class="ml-auto">{ac.country} &bull; {regionLabel(ac.region)}</span>
+                      <span class="ml-auto">{ac.country} &bull; {formatTitleLabel(ac.region, "—")}</span>
                     </div>
                   </button>
                 )}
@@ -481,7 +393,7 @@ export default function AirSeaOps() {
         >
           <For each={visibleFeed()}>
             {(report) => {
-              const cs = catStyle(report.category);
+              const cs = getIntelCategoryStyle(report.category);
               return (
                 <div class="surface-card p-4 hover:border-white/[0.12] transition-colors">
                   <div class="flex items-start gap-3">
@@ -510,15 +422,15 @@ export default function AirSeaOps() {
 
                       {/* Tags + meta */}
                       <div class="flex items-center flex-wrap gap-1.5">
-                        <For each={report.tags.filter((t) => TAG_COLORS[t])}>
+                        <For each={report.tags.filter((tag) => getIntelTagStyle(tag))}>
                           {(tag) => (
-                            <span class={`rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-wider font-medium ${TAG_COLORS[tag]}`}>
+                            <span class={`rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-wider font-medium ${getIntelTagStyle(tag)}`}>
                               {tag}
                             </span>
                           )}
                         </For>
                         <span class="rounded-full bg-white/[0.04] border border-white/[0.08] px-2 py-0.5 text-[9px] text-zinc-500 uppercase tracking-wider">
-                          {regionLabel(report.region)}
+                          {formatTitleLabel(report.region, "—")}
                         </span>
                         <Show when={parseCompactNumber(report.views) > 0}>
                           <span class="inline-flex items-center gap-1 text-[10px] text-zinc-600">

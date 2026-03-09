@@ -9,6 +9,7 @@ import {
   selectStableTwitterFallbackIdentity,
   type StableTwitterFallbackRow,
 } from "./auth-fallback-utils";
+import { normalizeString } from "./value-normalization";
 import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 
 const ORIGIN = SITE_ORIGIN;
@@ -51,10 +52,6 @@ type XResolvedProfile = {
   profileImageUrl: string | null;
   confirmedEmail: string | null;
 };
-
-function normalizeString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
 
 function normalizeXAvatar(value: unknown): string | null {
   const raw = normalizeString(value);

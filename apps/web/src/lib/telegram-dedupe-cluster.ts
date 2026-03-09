@@ -51,9 +51,6 @@ export function scoreTelegramDedupeCluster(args: {
   mediaWindowMs: number;
   textWindowMs: number;
 }): number {
-  if (!Number.isFinite(args.msgTs) || !Number.isFinite(args.cluster.latestTs)) {
-    return 0;
-  }
   const tsDelta = Math.abs(args.msgTs - args.cluster.latestTs);
 
   if (

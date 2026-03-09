@@ -1722,6 +1722,181 @@ describe("intel-dashboard backend worker", () => {
     expect(payload[0]?.severity_summary.critical).toBeGreaterThanOrEqual(1);
   });
 
+  it("serves cached AI briefings without requiring synchronous AI generation", async () => {
+    const briefingWindowStart = 1_699_992_000_000;
+    const kv = createKvMapBinding({
+      "intel-dashboard:usage:news:feed": [
+        {
+          id: "brief-1",
+          title: "Drone strike near critical infrastructure",
+          url: "https://example.com/drone",
+          summary: "Infrastructure strike and emergency response underway.",
+          source: "Example Desk",
+          publishedAtMs: briefingWindowStart + 10_000,
+          severity: "critical",
+          region: "middle_east",
+          category: "conflict",
+        },
+      ],
+      [`intel-dashboard:usage:briefing:${briefingWindowStart}`]: {
+        windowStartMs: briefingWindowStart,
+        windowHours: 4,
+        content: "Cached AI briefing",
+        severitySummary: { critical: 1, high: 0, medium: 0, low: 0 },
+        eventCount: 1,
+        generatedAtMs: briefingWindowStart + 20_000,
+        mode: "ai",
+        sourceHash: "cfe42430d6292117fae50ac5979166d0422af6271ad291d4d961c216050f12de",
+      },
+    });
+    const send = vi.fn(async () => undefined);
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/briefings", { method: "GET" }),
+      {
+        USAGE_KV: kv.binding,
+        AI_JOB_QUEUE: { send },
+        BRIEFING_AI_WINDOWS: "1",
+        PUBLIC_FEED_ROUTES_ENABLED: "true",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as Array<{ content: string }>;
+    expect(payload[0]?.content).toBe("Cached AI briefing");
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("returns fallback briefing content immediately and enqueues background refresh when the AI window is uncached", async () => {
+    const briefingWindowStart = 1_699_992_000_000;
+    const kv = createKvMapBinding({
+      "intel-dashboard:usage:news:feed": [
+        {
+          id: "brief-1",
+          title: "Drone strike near critical infrastructure",
+          url: "https://example.com/drone",
+          summary: "Infrastructure strike and emergency response underway.",
+          source: "Example Desk",
+          publishedAtMs: briefingWindowStart + 10_000,
+          severity: "critical",
+          region: "middle_east",
+          category: "conflict",
+        },
+      ],
+    });
+    const send = vi.fn(async () => undefined);
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/briefings", { method: "GET" }),
+      {
+        USAGE_KV: kv.binding,
+        AI_JOB_QUEUE: { send },
+        BRIEFING_AI_WINDOWS: "1",
+        PUBLIC_FEED_ROUTES_ENABLED: "true",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as Array<{ content: string }>;
+    expect(payload[0]?.content).toContain("INTELLIGENCE BRIEFING");
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "briefing-refresh",
+        windowStartMs: briefingWindowStart,
+        windowHours: 4,
+      }),
+      undefined,
+    );
+  });
+
+  it("processes queued briefing refresh jobs and persists cached AI content", async () => {
+    const briefingWindowStart = 1_699_992_000_000;
+    const kv = createKvMapBinding({
+      "intel-dashboard:usage:news:feed": [
+        {
+          id: "brief-1",
+          title: "Drone strike near critical infrastructure",
+          url: "https://example.com/drone",
+          summary: "Infrastructure strike and emergency response underway.",
+          source: "Example Desk",
+          publishedAtMs: briefingWindowStart + 10_000,
+          severity: "critical",
+          region: "middle_east",
+          category: "conflict",
+        },
+      ],
+      [`intel-dashboard:usage:briefing:pending:${briefingWindowStart}`]: {
+        windowStartMs: briefingWindowStart,
+        windowHours: 4,
+        sourceHash: "pending-hash",
+        updatedAtMs: briefingWindowStart + 30_000,
+      },
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (!url.includes("/compat/chat/completions")) {
+          throw new Error(`unexpected fetch ${url}`);
+        }
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: "AI briefing content",
+                },
+              },
+            ],
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 20,
+              total_tokens: 30,
+            },
+          }),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "cf-aig-cache-status": "MISS",
+            },
+          },
+        );
+      }),
+    );
+
+    await worker.queue(
+      {
+        messages: [
+          {
+            body: {
+              kind: "briefing-refresh",
+              windowStartMs: briefingWindowStart,
+              windowHours: 4,
+              sourceHash: "pending-hash",
+            },
+            ack: vi.fn(),
+            retry: vi.fn(),
+          },
+        ],
+      },
+      {
+        USAGE_KV: kv.binding,
+        AI_GATEWAY_URL: "https://gateway.example.com/compat/chat/completions",
+        AI_GATEWAY_TOKEN: "test-token",
+      } as never,
+    );
+
+    const persistedRaw = kv.data.get(`intel-dashboard:usage:briefing:${briefingWindowStart}`);
+    expect(persistedRaw).toBeTruthy();
+    const persisted = JSON.parse(persistedRaw ?? "{}") as { content?: string; mode?: string };
+    expect(persisted.content).toBe("AI briefing content");
+    expect(persisted.mode).toBe("ai");
+    expect(kv.data.has(`intel-dashboard:usage:briefing:pending:${briefingWindowStart}`)).toBe(false);
+  });
+
   it("keeps public feed routes disabled by default", async () => {
     const intel = await worker.fetch(
       new Request("https://backend.example.com/api/intel", {

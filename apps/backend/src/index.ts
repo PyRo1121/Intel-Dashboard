@@ -162,6 +162,10 @@ const DEFAULT_BRIEFING_MAX_WINDOWS = 6;
 const MAX_BRIEFING_MAX_WINDOWS = 12;
 const DEFAULT_BRIEFING_AI_WINDOWS = 1;
 const MAX_BRIEFING_AI_WINDOWS = 3;
+const DEFAULT_BRIEFING_REFRESH_INTERVAL_SECONDS = 30 * 60;
+const MAX_BRIEFING_REFRESH_INTERVAL_SECONDS = 24 * 60 * 60;
+const DEFAULT_BRIEFING_CACHE_TTL_SECONDS = 7 * 24 * 60 * 60;
+const MAX_BRIEFING_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60;
 const DEFAULT_NEWS_RSS_INGEST_ENABLED = true;
 const DEFAULT_NEWS_RSS_SOURCES_PER_RUN = 12;
 const MAX_NEWS_RSS_SOURCES_PER_RUN = 36;
@@ -466,6 +470,17 @@ type PublicBriefing = {
   };
 };
 
+type CachedBriefingWindow = {
+  windowStartMs: number;
+  windowHours: number;
+  content: string;
+  severitySummary: PublicBriefing["severity_summary"];
+  eventCount: number;
+  generatedAtMs: number;
+  mode: "ai" | "fallback";
+  sourceHash: string;
+};
+
 type PublicAirSeaIntelReport = {
   id: string;
   domain: "air" | "sea";
@@ -733,6 +748,8 @@ export type WorkerEnv = {
   BRIEFING_WINDOW_HOURS?: string;
   BRIEFING_MAX_WINDOWS?: string;
   BRIEFING_AI_WINDOWS?: string;
+  BRIEFING_REFRESH_INTERVAL_SECONDS?: string;
+  BRIEFING_CACHE_TTL_SECONDS?: string;
   NEWS_RSS_INGEST_ENABLED?: string;
   NEWS_RSS_SOURCES_PER_RUN?: string;
   NEWS_RSS_ITEMS_PER_SOURCE?: string;
@@ -1363,6 +1380,22 @@ function normalizeBriefingAiWindows(rawValue: string | undefined): number {
   return clamp(Math.floor(parsed), 0, MAX_BRIEFING_AI_WINDOWS);
 }
 
+function normalizeBriefingRefreshIntervalSeconds(rawValue: string | undefined): number {
+  const parsed = parseFiniteNumber(rawValue);
+  if (parsed === undefined) {
+    return DEFAULT_BRIEFING_REFRESH_INTERVAL_SECONDS;
+  }
+  return clamp(Math.floor(parsed), 60, MAX_BRIEFING_REFRESH_INTERVAL_SECONDS);
+}
+
+function normalizeBriefingCacheTtlSeconds(rawValue: string | undefined): number {
+  const parsed = parseFiniteNumber(rawValue);
+  if (parsed === undefined) {
+    return DEFAULT_BRIEFING_CACHE_TTL_SECONDS;
+  }
+  return clamp(Math.floor(parsed), 60, MAX_BRIEFING_CACHE_TTL_SECONDS);
+}
+
 function normalizeNewsRssSourcesPerRun(rawValue: string | undefined): number {
   const parsed = parseFiniteNumber(rawValue);
   if (parsed === undefined) {
@@ -1592,6 +1625,14 @@ function resolveAiBatchPendingKey(env: WorkerEnv, batchId: string): string {
 
 function resolveAiBatchIdempotencyKey(env: WorkerEnv, idempotencyKey: string): string {
   return `${normalizeAiBatchNamespacePrefix(env.AI_BATCH_NAMESPACE_PREFIX)}:idempotency:${idempotencyKey}`;
+}
+
+function buildBriefingCacheKey(env: WorkerEnv, windowStartMs: number): string {
+  return `${normalizeKvPrefix(env.USAGE_KV_PREFIX)}:briefing:${windowStartMs}`;
+}
+
+function buildBriefingPendingKey(env: WorkerEnv, windowStartMs: number): string {
+  return `${normalizeKvPrefix(env.USAGE_KV_PREFIX)}:briefing:pending:${windowStartMs}`;
 }
 
 function buildBillingKey(env: WorkerEnv, userId: string): string {
@@ -2517,6 +2558,246 @@ function buildBriefingSeveritySummary(items: NewsItem[]): PublicBriefing["severi
   return summary;
 }
 
+function buildBriefingPayloadItems(items: NewsItem[]): Array<{
+  title: string;
+  summary: string;
+  source: string;
+  severity: string;
+  region: string;
+  category: string;
+  timestamp: string;
+}> {
+  return items
+    .map((item) => applyHeuristicEnrichment(item))
+    .sort((left, right) => {
+      const leftScore = normalizePriorityScore(left.priorityScore) ?? 0;
+      const rightScore = normalizePriorityScore(right.priorityScore) ?? 0;
+      if (leftScore !== rightScore) return rightScore - leftScore;
+      return right.publishedAtMs - left.publishedAtMs;
+    })
+    .slice(0, 20)
+    .map((item) => ({
+      title: item.title,
+      summary: item.summary ?? item.title,
+      source: item.source ?? "OSINT Desk",
+      severity: item.severity ?? "low",
+      region: item.region ?? "global",
+      category: item.category ?? "news",
+      timestamp: new Date(item.publishedAtMs).toISOString(),
+    }));
+}
+
+async function buildBriefingSourceHash(items: NewsItem[]): Promise<string> {
+  return sha256Hex(JSON.stringify(buildBriefingPayloadItems(items)));
+}
+
+function normalizeCachedBriefingWindow(value: unknown): CachedBriefingWindow | null {
+  if (!isRecord(value) || !isRecord(value.severitySummary)) {
+    return null;
+  }
+  const windowStartMs = parseFiniteNumber(value.windowStartMs);
+  const windowHours = parseFiniteNumber(value.windowHours);
+  const generatedAtMs = parseFiniteNumber(value.generatedAtMs);
+  const content = trimString(value.content);
+  const sourceHash = trimString(value.sourceHash);
+  const mode = trimString(value.mode);
+  const eventCount = parseFiniteNumber(value.eventCount);
+  if (
+    windowStartMs === undefined ||
+    windowHours === undefined ||
+    generatedAtMs === undefined ||
+    !content ||
+    !sourceHash ||
+    eventCount === undefined ||
+    (mode !== "ai" && mode !== "fallback")
+  ) {
+    return null;
+  }
+  return {
+    windowStartMs: Math.max(0, Math.floor(windowStartMs)),
+    windowHours: Math.max(1, Math.floor(windowHours)),
+    content,
+    severitySummary: {
+      critical: Math.max(0, Math.floor(parseFiniteNumber(value.severitySummary.critical) ?? 0)),
+      high: Math.max(0, Math.floor(parseFiniteNumber(value.severitySummary.high) ?? 0)),
+      medium: Math.max(0, Math.floor(parseFiniteNumber(value.severitySummary.medium) ?? 0)),
+      low: Math.max(0, Math.floor(parseFiniteNumber(value.severitySummary.low) ?? 0)),
+    },
+    eventCount: Math.max(0, Math.floor(eventCount)),
+    generatedAtMs: Math.max(0, Math.floor(generatedAtMs)),
+    mode: mode as "ai" | "fallback",
+    sourceHash,
+  };
+}
+
+async function loadCachedBriefingWindow(env: WorkerEnv, windowStartMs: number): Promise<CachedBriefingWindow | null> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.get !== "function") {
+    return null;
+  }
+  const raw = await kv.get(buildBriefingCacheKey(env, windowStartMs));
+  if (!raw) {
+    return null;
+  }
+  try {
+    return normalizeCachedBriefingWindow(JSON.parse(raw) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+async function saveCachedBriefingWindow(env: WorkerEnv, briefing: CachedBriefingWindow): Promise<void> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.put !== "function") {
+    return;
+  }
+  const ttlSeconds = normalizeBriefingCacheTtlSeconds(env.BRIEFING_CACHE_TTL_SECONDS);
+  await kv.put(buildBriefingCacheKey(env, briefing.windowStartMs), JSON.stringify(briefing), {
+    expirationTtl: ttlSeconds,
+  });
+}
+
+async function clearPendingBriefingRefresh(env: WorkerEnv, windowStartMs: number): Promise<void> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.delete !== "function") {
+    return;
+  }
+  await kv.delete(buildBriefingPendingKey(env, windowStartMs));
+}
+
+async function shouldEnqueueBriefingRefresh(args: {
+  env: WorkerEnv;
+  windowStartMs: number;
+  sourceHash: string;
+  nowMs: number;
+}): Promise<boolean> {
+  const kv = args.env.USAGE_KV;
+  if (!kv || typeof kv.get !== "function") {
+    return false;
+  }
+  const raw = await kv.get(buildBriefingPendingKey(args.env, args.windowStartMs));
+  if (!raw) {
+    return true;
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRecord(parsed)) {
+      return true;
+    }
+    const pendingHash = trimString(parsed.sourceHash);
+    const updatedAtMs = parseFiniteNumber(parsed.updatedAtMs);
+    const refreshIntervalMs = normalizeBriefingRefreshIntervalSeconds(args.env.BRIEFING_REFRESH_INTERVAL_SECONDS) * 1000;
+    if (!pendingHash || updatedAtMs === undefined) {
+      return true;
+    }
+    if (pendingHash !== args.sourceHash) {
+      return args.nowMs - updatedAtMs >= refreshIntervalMs;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+async function enqueueBriefingRefresh(args: {
+  env: WorkerEnv;
+  windowStartMs: number;
+  windowHours: number;
+  sourceHash: string;
+}): Promise<boolean> {
+  const kv = args.env.USAGE_KV;
+  if (!kv || typeof kv.put !== "function") {
+    return false;
+  }
+  const nowMs = Date.now();
+  if (!(await shouldEnqueueBriefingRefresh({
+    env: args.env,
+    windowStartMs: args.windowStartMs,
+    sourceHash: args.sourceHash,
+    nowMs,
+  }))) {
+    return false;
+  }
+
+  const ttlSeconds = normalizeBriefingCacheTtlSeconds(args.env.BRIEFING_CACHE_TTL_SECONDS);
+  await kv.put(
+    buildBriefingPendingKey(args.env, args.windowStartMs),
+    JSON.stringify({
+      windowStartMs: args.windowStartMs,
+      windowHours: args.windowHours,
+      sourceHash: args.sourceHash,
+      updatedAtMs: nowMs,
+    }),
+    { expirationTtl: ttlSeconds },
+  );
+
+  if (args.env.AI_JOB_QUEUE && typeof args.env.AI_JOB_QUEUE.send === "function") {
+    await enqueueAiBatchMessage({
+      env: args.env,
+      body: {
+        kind: "briefing-refresh",
+        windowStartMs: args.windowStartMs,
+        windowHours: args.windowHours,
+        sourceHash: args.sourceHash,
+      },
+    });
+    return true;
+  }
+
+  return false;
+}
+
+async function processBriefingRefresh(args: {
+  env: WorkerEnv;
+  windowStartMs: number;
+  windowHours: number;
+  sourceHash?: string;
+}): Promise<void> {
+  const items = await readNewsFeed(args.env);
+  const maxItems = Math.max(normalizePublicIntelLimit(args.env.PUBLIC_INTEL_LIMIT), 150);
+  const filtered = filterAndRankNewsForPublicIntel({
+    items,
+    searchParams: new URLSearchParams(),
+    env: args.env,
+  }).slice(0, maxItems);
+  const windowMs = args.windowHours * 60 * 60 * 1000;
+  const bucketItems = filtered
+    .filter((item) => Math.floor(item.publishedAtMs / windowMs) * windowMs === args.windowStartMs)
+    .map((item) => applyHeuristicEnrichment(item))
+    .sort((left, right) => right.publishedAtMs - left.publishedAtMs);
+
+  const severitySummary = buildBriefingSeveritySummary(bucketItems);
+  const fallbackContent = buildFallbackBriefingContent(bucketItems, args.windowStartMs, args.windowHours);
+  const sourceHash = args.sourceHash ?? await buildBriefingSourceHash(bucketItems);
+  let content = fallbackContent;
+  let mode: "ai" | "fallback" = "fallback";
+
+  if (bucketItems.length > 0) {
+    const aiContent = await buildAiBriefingContent({
+      env: args.env,
+      items: bucketItems,
+      windowStartMs: args.windowStartMs,
+      windowHours: args.windowHours,
+    });
+    if (aiContent) {
+      content = aiContent;
+      mode = "ai";
+    }
+  }
+
+  await saveCachedBriefingWindow(args.env, {
+    windowStartMs: args.windowStartMs,
+    windowHours: args.windowHours,
+    content,
+    severitySummary,
+    eventCount: bucketItems.length,
+    generatedAtMs: Date.now(),
+    mode,
+    sourceHash,
+  });
+  await clearPendingBriefingRefresh(args.env, args.windowStartMs);
+}
+
 function buildFallbackBriefingContent(items: NewsItem[], windowStartMs: number, windowHours: number): string {
   const severitySummary = buildBriefingSeveritySummary(items);
   const topItems = items
@@ -2569,24 +2850,7 @@ async function buildAiBriefingContent(args: {
   windowStartMs: number;
   windowHours: number;
 }): Promise<string | null> {
-  const payloadItems = args.items
-    .map((item) => applyHeuristicEnrichment(item))
-    .sort((left, right) => {
-      const leftScore = normalizePriorityScore(left.priorityScore) ?? 0;
-      const rightScore = normalizePriorityScore(right.priorityScore) ?? 0;
-      if (leftScore !== rightScore) return rightScore - leftScore;
-      return right.publishedAtMs - left.publishedAtMs;
-    })
-    .slice(0, 20)
-    .map((item) => ({
-      title: item.title,
-      summary: item.summary ?? item.title,
-      source: item.source ?? "OSINT Desk",
-      severity: item.severity ?? "low",
-      region: item.region ?? "global",
-      category: item.category ?? "news",
-      timestamp: new Date(item.publishedAtMs).toISOString(),
-    }));
+  const payloadItems = buildBriefingPayloadItems(args.items);
 
   const ai = await invokeAiGateway({
     env: args.env,
@@ -2625,10 +2889,12 @@ async function buildAiBriefingContent(args: {
 async function buildPublicBriefings(args: {
   env: WorkerEnv;
   items: NewsItem[];
+  allowBackgroundRefresh?: boolean;
 }): Promise<PublicBriefing[]> {
   const windowHours = normalizeBriefingWindowHours(args.env.BRIEFING_WINDOW_HOURS);
   const maxWindows = normalizeBriefingMaxWindows(args.env.BRIEFING_MAX_WINDOWS);
   const aiWindows = normalizeBriefingAiWindows(args.env.BRIEFING_AI_WINDOWS);
+  const refreshIntervalMs = normalizeBriefingRefreshIntervalSeconds(args.env.BRIEFING_REFRESH_INTERVAL_SECONDS) * 1000;
   const windowMs = windowHours * 60 * 60 * 1000;
 
   const buckets = new Map<number, NewsItem[]>();
@@ -2655,14 +2921,31 @@ async function buildPublicBriefings(args: {
     const severitySummary = buildBriefingSeveritySummary(bucketItems);
     let content = buildFallbackBriefingContent(bucketItems, bucketStart, windowHours);
     if (index < aiWindows) {
-      const aiContent = await buildAiBriefingContent({
-        env: args.env,
-        items: bucketItems,
-        windowStartMs: bucketStart,
-        windowHours,
-      });
-      if (aiContent) {
-        content = aiContent;
+      const sourceHash = await buildBriefingSourceHash(bucketItems);
+      const cached = await loadCachedBriefingWindow(args.env, bucketStart);
+      if (cached) {
+        content = cached.content;
+      }
+
+      const shouldRefresh =
+        !cached ||
+        (
+          cached.sourceHash !== sourceHash &&
+          Date.now() - cached.generatedAtMs >= refreshIntervalMs
+        );
+
+      if (args.allowBackgroundRefresh !== false && shouldRefresh) {
+        await enqueueBriefingRefresh({
+          env: args.env,
+          windowStartMs: bucketStart,
+          windowHours,
+          sourceHash,
+        });
+      }
+    } else {
+      const cached = await loadCachedBriefingWindow(args.env, bucketStart);
+      if (cached) {
+        content = cached.content;
       }
     }
     briefings.push({
@@ -9573,6 +9856,7 @@ async function handlePublicBriefings(args: {
   const briefings = await buildPublicBriefings({
     env: args.env,
     items: filtered,
+    allowBackgroundRefresh: args.url.searchParams.toString().length === 0,
   });
   return new Response(JSON.stringify(briefings), {
     status: 200,
@@ -12052,6 +12336,45 @@ const worker = {
       }
     }
 
+    const briefingWarmStartedAt = Date.now();
+    try {
+      const items = await readNewsFeed(env);
+      const maxItems = Math.max(normalizePublicIntelLimit(env.PUBLIC_INTEL_LIMIT), 150);
+      const filtered = filterAndRankNewsForPublicIntel({
+        items,
+        searchParams: new URLSearchParams(),
+        env,
+      }).slice(0, maxItems);
+      await buildPublicBriefings({
+        env,
+        items: filtered,
+        allowBackgroundRefresh: true,
+      });
+      writeUsageAnalytics({
+        env,
+        path: endpointPath,
+        method: "SCHEDULED",
+        rpcMethod: "briefingWarm",
+        mode: "kv",
+        cacheHit: false,
+        status: 200,
+        durationMs: Date.now() - briefingWarmStartedAt,
+        outcome: "briefing-refresh-enqueued",
+      });
+    } catch {
+      writeUsageAnalytics({
+        env,
+        path: endpointPath,
+        method: "SCHEDULED",
+        rpcMethod: "briefingWarm",
+        mode: "kv",
+        cacheHit: false,
+        status: 500,
+        durationMs: Date.now() - briefingWarmStartedAt,
+        outcome: "briefing-refresh-failed",
+      });
+    }
+
     if (
       !normalizeBoolean(env.USAGE_CACHE_WARM_ENABLED, DEFAULT_CACHE_WARM_ENABLED) ||
       normalizeStorageMode(env.USAGE_STORAGE_MODE) !== "kv"
@@ -12147,6 +12470,34 @@ const worker = {
         }
         try {
           await processAiBatchPoll({ env, batchId });
+          if (typeof message.ack === "function") {
+            message.ack();
+          }
+        } catch {
+          if (typeof message.retry === "function") {
+            message.retry();
+          }
+        }
+        continue;
+      }
+
+      if (isRecord(body) && trimString(body.kind) === "briefing-refresh") {
+        const windowStartMs = parseFiniteNumber(body.windowStartMs);
+        const windowHours = parseFiniteNumber(body.windowHours);
+        const sourceHash = trimString(body.sourceHash) ?? undefined;
+        if (windowStartMs === undefined || windowHours === undefined) {
+          if (typeof message.ack === "function") {
+            message.ack();
+          }
+          continue;
+        }
+        try {
+          await processBriefingRefresh({
+            env,
+            windowStartMs: Math.floor(windowStartMs),
+            windowHours: Math.max(1, Math.floor(windowHours)),
+            ...(sourceHash ? { sourceHash } : {}),
+          });
           if (typeof message.ack === "function") {
             message.ack();
           }

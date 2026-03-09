@@ -208,10 +208,29 @@ export async function waitForCrmDashboard(page) {
   return crmSearch;
 }
 
-export async function openDashboardPage(page, path) {
+export async function openPage(page, path, options = {}) {
+  const {
+    waitUntil = "networkidle",
+    timeout = 45_000,
+  } = options;
+
   await page.goto(`${EDGE_BASE_URL}${path}`, {
+    waitUntil,
+    timeout,
+  });
+}
+
+export async function openDashboardPage(page, path) {
+  await openPage(page, path, {
     waitUntil: "networkidle",
     timeout: 45_000,
+  });
+}
+
+export async function openPublicPage(page, path) {
+  await openPage(page, path, {
+    waitUntil: "domcontentloaded",
+    timeout: 30_000,
   });
 }
 

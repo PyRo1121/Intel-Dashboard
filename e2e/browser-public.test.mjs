@@ -6,6 +6,7 @@ import {
   collectBrowserDiagnostics,
   createPublicBrowserContext,
   EDGE_BASE_URL,
+  openPublicPage,
 } from "./browser-test-helpers.mjs";
 
 test("public auth entry pages render the current Intel Dashboard access contract", async (t) => {
@@ -16,10 +17,7 @@ test("public auth entry pages render the current Intel Dashboard access contract
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/login?next=${encodeURIComponent("/crm")}`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
+      await openPublicPage(page, `/login?next=${encodeURIComponent("/crm")}`);
       await page.waitForSelector('[data-testid="auth-access-login"]', { timeout: 30_000 });
       const loginBody = (await page.textContent('[data-testid="auth-access-login"]')) || "";
       assert.match(loginBody, /Continue with X/i);
@@ -28,10 +26,7 @@ test("public auth entry pages render the current Intel Dashboard access contract
       assert.equal(await page.getAttribute('[data-testid="auth-access-login-github"]', "href"), "/auth/login?next=%2Fcrm");
       assert.equal(await page.getAttribute('[data-testid="auth-access-login-switch"]', "href"), "/signup?next=%2Fcrm");
 
-      await page.goto(`${EDGE_BASE_URL}/signup?next=${encodeURIComponent("/briefings")}`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
+      await openPublicPage(page, `/signup?next=${encodeURIComponent("/briefings")}`);
       await page.waitForSelector('[data-testid="auth-access-signup"]', { timeout: 30_000 });
       const signupBody = (await page.textContent('[data-testid="auth-access-signup"]')) || "";
       assert.match(signupBody, /Create Account with X/i);
@@ -53,10 +48,7 @@ test("public auth entry pages render the current Intel Dashboard access contract
     for (const expectation of publicAuthMetadata) {
       const page = await context.newPage();
       try {
-        const response = await page.goto(`${EDGE_BASE_URL}${expectation.path}`, {
-          waitUntil: "domcontentloaded",
-          timeout: 30_000,
-        });
+        const response = await openPublicPage(page, expectation.path);
         assert.ok(response);
         assert.equal(response.status(), 200);
         await page.waitForTimeout(500);
@@ -71,10 +63,7 @@ test("public auth entry pages render the current Intel Dashboard access contract
 
     const notFoundPage = await context.newPage();
     try {
-      const response = await notFoundPage.goto(`${EDGE_BASE_URL}/this-page-should-not-exist-xyz`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
+      const response = await openPublicPage(notFoundPage, "/this-page-should-not-exist-xyz");
       assert.ok(response);
       assert.equal(response.status(), 404);
       assert.match((await notFoundPage.textContent("body")) || "", /404|not found/i);
@@ -100,7 +89,7 @@ test("public auth entry pages stay free of same-origin browser failures", async 
     try {
       const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL);
       for (const route of ["/login", "/signup"]) {
-        await page.goto(`${EDGE_BASE_URL}${route}`, { waitUntil: "domcontentloaded", timeout: 30_000 });
+        await openPublicPage(page, route);
         await page.waitForTimeout(500);
       }
       assert.deepEqual(pageErrors, []);

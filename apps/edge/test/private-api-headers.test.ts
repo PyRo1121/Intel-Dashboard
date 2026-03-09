@@ -6,7 +6,7 @@ test("applyCorsHeaders mutates response headers with allowed origin values", () 
   const headers = new Headers();
   applyCorsHeaders(headers, "https://intel.pyro1121.com");
 
-  assert.match(headers.get("Access-Control-Allow-Origin") || "", /intel\.pyro1121\.com/);
+  assert.equal(headers.get("Access-Control-Allow-Origin"), "https://intel.pyro1121.com");
   assert.equal(headers.get("Access-Control-Allow-Credentials"), "true");
 });
 
@@ -19,7 +19,7 @@ test("corsJson applies JSON content type and origin headers", async () => {
   assert.deepEqual(await response.json(), { error: "Bad Request" });
   assert.equal(response.headers.get("Content-Type"), "application/json");
   assert.equal(response.headers.get("Allow"), "POST");
-  assert.match(response.headers.get("Access-Control-Allow-Origin") || "", /intel\.pyro1121\.com/);
+  assert.equal(response.headers.get("Access-Control-Allow-Origin"), "https://intel.pyro1121.com");
 });
 
 test("privateApiJson applies private no-store JSON headers", async () => {

@@ -1,0 +1,25 @@
+apps/web/src/routes/osint/index.tsx
+  fbdbb1d68cb02f36 1-251
+apps/web/src/routes/telegram/index.tsx
+  fbdbb1d68cb02f36 1-963
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.8",
+  "base_commit_sha": "79717fe27c4281600da1f9cd32e95ab0de7e0cf5",
+  "prompts": {
+    "fbdbb1d68cb02f36": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd0d9-c76f-7c23-b348-713dec4ebf33",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 1214,
+      "total_deletions": 0,
+      "accepted_lines": 1214,
+      "overriden_lines": 0
+    }
+  }
+}

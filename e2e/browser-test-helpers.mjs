@@ -23,6 +23,7 @@ export const MISSING_BILLING_STATE_PATTERN = /Billing account not found for targ
 export const OWNER_BILLING_TRIAL_NOTICE_PATTERN = /Owner account detected. Trial activation is not required./i;
 export const OWNER_BILLING_CHECKOUT_NOTICE_PATTERN = /Owner account detected. Checkout bypass is active./i;
 export const OWNER_BILLING_PORTAL_NOTICE_PATTERN = /Owner account detected. Stripe portal is not required./i;
+export const PUBLIC_ACCESS_SURFACE_PATTERN = /Start 7-Day Trial|Sign in to Intel Dashboard|Create your Intel Dashboard account/i;
 
 export function buildCloudflareAccessHeaders(clientId = ACCESS_CLIENT_ID, clientSecret = ACCESS_CLIENT_SECRET) {
   if (!trim(clientId) || !trim(clientSecret)) return undefined;
@@ -370,6 +371,17 @@ export function assertResponseStatus(response, expectedStatus) {
 
 export async function assertNotFoundPage(page) {
   assert.match((await page.textContent("body")) || "", /404|not found/i);
+}
+
+export async function assertPublicLandingSurface(page) {
+  const bodyText = (await page.textContent("body")) || "";
+  assert.match(bodyText, /Intel Dashboard/i, "landing should render Intel Dashboard branding");
+  assert.match(bodyText, /Start 7-Day Trial/i, "landing should render trial CTA");
+  assert.doesNotMatch(bodyText, /PyRoBOT|PyRo1121Bot/i, "landing should not render legacy branding");
+}
+
+export async function assertPublicAccessSurface(page, message = "expected a public access surface") {
+  assert.match((await page.textContent("body")) || "", PUBLIC_ACCESS_SURFACE_PATTERN, message);
 }
 
 export async function assertRouteMetadata(page, expectation, options = {}) {

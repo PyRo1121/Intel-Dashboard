@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   advanceMockClock,
   assertNoBrowserDiagnostics,
+  assertPublicAccessSurface,
+  assertPublicLandingSurface,
   assertSidebarRouteNavigation,
   openAndAssertPublicAuthRoute,
   assertRouteMetadata,
@@ -1188,10 +1190,7 @@ test("browser public landing and 404 surfaces render expected production content
       const landingResponse = await openPublicPage(page, "/");
       assert.ok(landingResponse, "landing page should return a response");
       assert.equal(landingResponse.status(), 200, "landing page should render successfully");
-      const landingText = (await page.textContent("body")) || "";
-      assert.match(landingText, /Intel Dashboard/i, "landing should render Intel Dashboard branding");
-      assert.match(landingText, /Start 7-Day Trial/i, "landing should render trial CTA");
-      assert.doesNotMatch(landingText, /PyRoBOT|PyRo1121Bot/i, "landing should not render legacy branding");
+      await assertPublicLandingSurface(page);
 
       const notFoundResponse = await openPublicPage(page, "/this-page-should-not-exist-xyz");
       assert.ok(notFoundResponse, "404 page should return a response");
@@ -1225,12 +1224,12 @@ test("browser public landing CTAs navigate to the intended auth surfaces", async
     await openPublicPage(page, "/");
     await page.getByRole("link", { name: "Login" }).first().click();
     await page.waitForURL(`${EDGE_BASE_URL}/login`, { timeout: 30_000 });
-    assert.match((await page.textContent("body")) || "", /Sign in to Intel Dashboard/i);
+    await assertPublicAccessSurface(page, "login CTA should land on a public auth surface");
 
     await openPublicPage(page, "/");
     await page.getByRole("link", { name: /Start 7-Day Trial|Start Trial with OAuth/i }).first().click();
     await page.waitForURL(`${EDGE_BASE_URL}/signup`, { timeout: 30_000 });
-    assert.match((await page.textContent("body")) || "", /Create your Intel Dashboard account/i);
+    await assertPublicAccessSurface(page, "trial CTA should land on a public auth surface");
 
     await openPublicPage(page, "/");
     await page.getByRole("link", { name: /Open Live Dashboard|Open Dashboard/i }).first().click();
@@ -1445,12 +1444,7 @@ test("browser-authenticated sign out clears access and forces re-auth on protect
         return pathname === "/" || pathname === "/login";
       }, { timeout: 30_000 });
 
-      const afterLogoutBody = (await page.textContent("body")) || "";
-      assert.match(
-        afterLogoutBody,
-        /Start 7-Day Trial|Sign in to Intel Dashboard|Create your Intel Dashboard account/i,
-        "sign out should land on a public access surface",
-      );
+      await assertPublicAccessSurface(page, "sign out should land on a public access surface");
 
       await openDashboardPage(page, "/osint");
 

@@ -92,4 +92,6 @@ test("severity visual helpers stay aligned with the shared severity scale", () =
   assert.match(severityDot("high"), /amber/);
   assert.equal(severityHexColor("medium"), "#3b82f6");
   assert.equal(severityHexColor("low"), "#71717a");
+  assert.equal(severityDot("unknown" as never), "bg-zinc-500");
+  assert.equal(severityHexColor("unknown" as never), "#71717a");
 });

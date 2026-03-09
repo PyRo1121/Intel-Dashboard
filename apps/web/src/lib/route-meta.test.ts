@@ -18,6 +18,7 @@ import {
   NOT_FOUND_DESCRIPTION,
   NOT_FOUND_TITLE,
   OSINT_DESCRIPTION,
+  OSINT_SOURCE_PROFILE_TITLE,
   OSINT_TITLE,
   OVERVIEW_DESCRIPTION,
   PRODUCTION_HOME_DESCRIPTION,
@@ -26,6 +27,7 @@ import {
   SIGNUP_DESCRIPTION,
   SIGNUP_TITLE,
   TELEGRAM_DESCRIPTION,
+  TELEGRAM_SOURCE_HISTORY_TITLE,
   TELEGRAM_TITLE,
   resolveDashboardShellTitle,
 } from "@intel-dashboard/shared/route-meta.ts";
@@ -51,7 +53,9 @@ test("shared route titles stay aligned with dashboard shell resolution", () => {
   assert.match(NOT_FOUND_DESCRIPTION, /continue exploring Intel Dashboard/i);
   assert.equal(resolveDashboardShellTitle("/overview"), OVERVIEW_TITLE);
   assert.equal(resolveDashboardShellTitle("/osint"), OSINT_TITLE);
+  assert.equal(resolveDashboardShellTitle("/osint/source/gdelt-project"), OSINT_SOURCE_PROFILE_TITLE);
   assert.equal(resolveDashboardShellTitle("/telegram/focus"), TELEGRAM_TITLE);
+  assert.equal(resolveDashboardShellTitle("/telegram/source/operativnoZSU"), TELEGRAM_SOURCE_HISTORY_TITLE);
   assert.equal(resolveDashboardShellTitle("/briefings"), BRIEFINGS_TITLE);
   assert.equal(resolveDashboardShellTitle("/map"), MAP_TITLE);
   assert.equal(resolveDashboardShellTitle("/air-sea"), AIR_SEA_TITLE);

@@ -1,7 +1,9 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
 import { fetchIntelFeed } from "~/lib/intel-feed";
+import { REGION_ACCENT, REGION_CENTROIDS } from "~/lib/region-map-config";
 import { getRegionThreatLevel } from "~/lib/region-threat";
+import { buildRegionSummaries } from "~/lib/region-summary";
 import { readLatestArray } from "~/lib/resource-latest";
 import { REGION_LABELS, type IntelRegion, type IntelItem } from "~/lib/types";
 import {
@@ -14,97 +16,17 @@ import {
 } from "~/lib/freshness";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import SeverityBadge from "~/components/ui/SeverityBadge";
-import { countBySeverity, formatRelativeTimeAt, isInitialResourceLoading } from "~/lib/utils";
+import { formatRelativeTimeAt, isInitialResourceLoading } from "~/lib/utils";
 import { Globe, X as XIcon, MapPin } from "lucide-solid";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { MAP_DESCRIPTION, MAP_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 import "leaflet/dist/leaflet.css";
 
-/* ── Types ─────────────────────────────────────────────────────────── */
-
-interface RegionSummary {
-  region: IntelRegion;
-  eventCount: number;
-  critical: number;
-  high: number;
-  medium: number;
-  low: number;
-  topItems: IntelItem[];
-  lastUpdate: string;
-}
-
-/* ── Region config ─────────────────────────────────────────────────── */
-
-const REGION_ORDER: IntelRegion[] = [
-  "ukraine", "middle_east", "east_asia", "africa", "europe",
-  "central_america", "pacific", "military", "us", "global",
-];
-
-/** Lat/lon centroids for Leaflet markers */
-const REGION_CENTROIDS: Record<IntelRegion, [number, number]> = {
-  ukraine:         [48.5, 35.0],
-  middle_east:     [30.0, 44.0],
-  east_asia:       [35.0, 118.0],
-  africa:          [5.0, 22.0],
-  europe:          [50.0, 10.0],
-  central_america: [17.0, -88.0],
-  pacific:         [12.0, 140.0],
-  military:        [38.9, -77.0],
-  us:              [39.0, -98.0],
-  global:          [15.0, 0.0],
-};
-
-/** Color per region for map accents */
-const REGION_ACCENT: Record<IntelRegion, string> = {
-  ukraine:         "#fbbf24",
-  middle_east:     "#f97316",
-  east_asia:       "#06b6d4",
-  africa:          "#a855f7",
-  europe:          "#3b82f6",
-  central_america: "#10b981",
-  pacific:         "#0ea5e9",
-  military:        "#6366f1",
-  us:              "#8b5cf6",
-  global:          "#71717a",
-};
-
-/* ── Data loader ───────────────────────────────────────────────────── */
-
-async function loadIntel(): Promise<IntelItem[]> {
-  return fetchIntelFeed();
-}
-
-function buildRegions(items: IntelItem[]): RegionSummary[] {
-  const grouped: Record<string, IntelItem[]> = {};
-  for (const item of items) {
-    const region = item.region || "global";
-    if (!grouped[region]) grouped[region] = [];
-    grouped[region].push(item);
-  }
-
-  return REGION_ORDER.map((region) => {
-    const regionItems = grouped[region] ?? [];
-    const counts = countBySeverity(regionItems);
-    const lastUpdate = regionItems[0]?.timestamp ?? new Date().toISOString();
-    const topItems = regionItems.slice(0, 5);
-    return {
-      region,
-      eventCount: regionItems.length,
-      critical: counts.critical,
-      high: counts.high,
-      medium: counts.medium,
-      low: counts.low,
-      topItems,
-      lastUpdate,
-    };
-  });
-}
-
 /* ── Component ─────────────────────────────────────────────────────── */
 
 export default function ThreatMap() {
-  const [intel, { refetch }] = createResource(loadIntel, { initialValue: [] as IntelItem[] });
+  const [intel, { refetch }] = createResource(fetchIntelFeed, { initialValue: [] as IntelItem[] });
   const [selectedRegion, setSelectedRegion] = createSignal<IntelRegion | null>(null);
   const feedThresholds = STANDARD_FEED_FRESHNESS_THRESHOLDS;
   const nowMs = useWallClock(1000);
@@ -120,7 +42,7 @@ export default function ThreatMap() {
 
   const intelItems = () => readLatestArray(intel.latest, intel());
   const loadingInitial = () => isInitialResourceLoading(intel.state, intelItems().length);
-  const regions = () => buildRegions(intelItems());
+  const regions = () => buildRegionSummaries(intelItems());
   const activeRegions = createMemo(() => regions().filter((r) => r.eventCount > 0));
   const totalEvents = () => intelItems().length;
   const totalCritical = () => regions().reduce((s, r) => s + r.critical, 0);

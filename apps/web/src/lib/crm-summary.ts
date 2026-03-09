@@ -1,9 +1,73 @@
+import { formatDateTime, formatWholeNumber } from "./utils.ts";
+
 export type CrmSummaryDegradedState = {
   partial?: boolean;
   stale?: boolean;
   accountsTruncated?: boolean;
   activityTruncated?: boolean;
   reasons?: string[];
+} | null | undefined;
+
+export type CrmDataQualityState = {
+  missingAvatarUsers?: number;
+  placeholderNameUsers?: number;
+  syntheticLoginUsers?: number;
+  orphanTrackedUsers?: number;
+  providerCoveragePct?: number;
+  billingCoveragePct?: number;
+} | null | undefined;
+
+export type CrmSummaryResultLike = {
+  generatedAtMs?: number;
+  billing?: {
+    mrrActiveUsd?: number;
+    arrActiveUsd?: number;
+    statuses?: {
+      active?: number;
+    };
+    stripe?: {
+      statuses?: {
+        active?: number;
+      };
+      syncedAtMs?: number;
+      source?: string | null;
+      live?: boolean;
+      error?: string;
+    };
+  };
+  telemetry?: {
+    uniqueUsers24h?: number;
+    cancellations7d?: number;
+  };
+  commandCenter?: {
+    revenue?: {
+      source?: string | null;
+      mrrActiveUsd?: number;
+      arrActiveUsd?: number;
+      arpuActiveUsd?: number;
+    };
+    funnel?: {
+      trialToPaidRate7dPct?: number;
+      subscriberPenetrationPct?: number;
+      trialingSharePct?: number;
+    };
+    risk?: {
+      churnRate30dPct?: number;
+      netSubscriberDelta7d?: number;
+      cancellations7d?: number;
+    };
+    activity?: {
+      uniqueUsers24h?: number;
+    };
+  };
+  directory?: {
+    totalUsers?: number;
+    newUsers24h?: number;
+    newUsers7d?: number;
+    orphanTrackedUsers?: number;
+  };
+  dataQuality?: CrmDataQualityState;
+  degraded?: CrmSummaryDegradedState;
 } | null | undefined;
 
 export function getCrmSummaryWarningTone(state: CrmSummaryDegradedState): string {
@@ -36,6 +100,16 @@ export function getCrmSummaryStatusLabel(state: CrmSummaryDegradedState): string
   return null;
 }
 
+export function getCrmSummaryStatusTone(state: CrmSummaryDegradedState): string | null {
+  if (state?.partial) {
+    return "text-rose-300";
+  }
+  if (state?.stale) {
+    return "text-amber-300";
+  }
+  return null;
+}
+
 export function getCrmRevenueSourceLabel(source: string | null | undefined): string {
   switch (source) {
     case "stripe_live":
@@ -47,4 +121,59 @@ export function getCrmRevenueSourceLabel(source: string | null | undefined): str
     default:
       return "Internal Snapshot";
   }
+}
+
+export function getCrmQualityBadgeTone(state: CrmDataQualityState): string {
+  const issues =
+    (state?.missingAvatarUsers ?? 0) +
+    (state?.placeholderNameUsers ?? 0) +
+    (state?.syntheticLoginUsers ?? 0) +
+    (state?.orphanTrackedUsers ?? 0);
+  return issues > 0
+    ? "text-amber-300 border-amber-500/40 bg-amber-500/10"
+    : "text-emerald-300 border-emerald-500/40 bg-emerald-500/10";
+}
+
+export function getCrmSubscriberCount(result: CrmSummaryResultLike): number | undefined {
+  return result?.billing?.stripe?.statuses?.active ?? result?.billing?.statuses?.active;
+}
+
+export function getCrmMrrActiveUsd(result: CrmSummaryResultLike): number | undefined {
+  return result?.commandCenter?.revenue?.mrrActiveUsd ?? result?.billing?.mrrActiveUsd;
+}
+
+export function getCrmArrActiveUsd(result: CrmSummaryResultLike): number | undefined {
+  return result?.commandCenter?.revenue?.arrActiveUsd ?? result?.billing?.arrActiveUsd;
+}
+
+export function getCrmUniqueUsers24h(result: CrmSummaryResultLike): number | undefined {
+  return result?.commandCenter?.activity?.uniqueUsers24h ?? result?.telemetry?.uniqueUsers24h;
+}
+
+export function getCrmCancellations7d(result: CrmSummaryResultLike): number | undefined {
+  return result?.commandCenter?.risk?.cancellations7d ?? result?.telemetry?.cancellations7d;
+}
+
+export function getCrmStripeSyncedAtMs(result: CrmSummaryResultLike): number | undefined {
+  const value = result?.billing?.stripe?.syncedAtMs;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+export function getCrmGeneratedAtMs(result: { generatedAtMs?: number } | null | undefined): number | undefined {
+  const value = result?.generatedAtMs;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+export function getCrmCustomer360SummaryText(result: CrmSummaryResultLike): string {
+  return `Updated ${formatDateTime(getCrmGeneratedAtMs(result))} • New users 24h: ${formatWholeNumber(result?.directory?.newUsers24h)} • New users 7d: ${formatWholeNumber(result?.directory?.newUsers7d)} • Legacy billing-only identities: ${formatWholeNumber(result?.directory?.orphanTrackedUsers)}`;
+}
+
+export function getCrmDataQualityRows(state: CrmDataQualityState): Array<{ label: string; value: string }> {
+  return [
+    { label: "Missing avatars", value: formatWholeNumber(state?.missingAvatarUsers) },
+    { label: "Placeholder names", value: formatWholeNumber(state?.placeholderNameUsers) },
+    { label: "Synthetic logins", value: formatWholeNumber(state?.syntheticLoginUsers) },
+    { label: "Provider coverage", value: `${Math.max(0, state?.providerCoveragePct ?? 0).toFixed(1)}%` },
+    { label: "Billing identity coverage", value: `${Math.max(0, state?.billingCoveragePct ?? 0).toFixed(1)}%` },
+  ];
 }

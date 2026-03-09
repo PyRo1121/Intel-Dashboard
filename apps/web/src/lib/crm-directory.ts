@@ -1,3 +1,5 @@
+import { formatSubscriptionStatus } from "@intel-dashboard/shared/entitlement.ts";
+
 export type CrmBillingAccountLike = {
   userId?: string;
   status?: string;
@@ -60,11 +62,25 @@ export function formatCrmProviders(
   separator = ", ",
   emptyValue = "—",
 ): string {
-  const values = (providers ?? [])
-    .map((value) => (typeof value === "string" ? value.trim() : ""))
-    .filter((value) => value.length > 0);
+  const values = (providers ?? []).filter((value) => typeof value === "string" && value.trim().length > 0);
   if (values.length === 0) {
     return emptyValue;
   }
   return values.join(separator);
+}
+
+export function formatCrmAccountStatus(status: string | null | undefined): string {
+  return formatSubscriptionStatus(status ?? undefined);
+}
+
+export function getCrmUserDisplayName(
+  user: Pick<CrmDirectoryUserLike, "name" | "login" | "email"> | null | undefined,
+): string {
+  return user?.name || user?.login || user?.email || "Unknown user";
+}
+
+export function getCrmUserSecondaryLabel(
+  user: Pick<CrmDirectoryUserLike, "login" | "email"> | null | undefined,
+): string {
+  return user?.login || user?.email || "—";
 }

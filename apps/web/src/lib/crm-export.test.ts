@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCrmLatestEventMap, escapeCsvCell } from "./crm-export.ts";
+import { buildCrmLatestEventMap, escapeCsvCell, getCrmLatestEventDisplay } from "./crm-export.ts";
 
 test("buildCrmLatestEventMap keeps the first event per user and ignores invalid ids", () => {
   const map = buildCrmLatestEventMap([
@@ -20,4 +20,21 @@ test("escapeCsvCell quotes commas, quotes, and newlines", () => {
   assert.equal(escapeCsvCell("comma,value"), "\"comma,value\"");
   assert.equal(escapeCsvCell("quote\"value"), "\"quote\"\"value\"");
   assert.equal(escapeCsvCell("line\nbreak"), "\"line\nbreak\"");
+});
+
+test("getCrmLatestEventDisplay formats kind and timestamp with safe fallbacks", () => {
+  assert.deepEqual(
+    getCrmLatestEventDisplay({ kind: "billing.start_trial", atMs: Date.UTC(2026, 2, 9, 12, 0, 0) }),
+    {
+      kindLabel: "billing start trial",
+      atLabel: new Date(Date.UTC(2026, 2, 9, 12, 0, 0)).toLocaleString(),
+    },
+  );
+  assert.deepEqual(
+    getCrmLatestEventDisplay(undefined),
+    {
+      kindLabel: "—",
+      atLabel: "—",
+    },
+  );
 });

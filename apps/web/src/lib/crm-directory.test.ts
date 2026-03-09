@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCrmAccountStatusMap, filterCrmDirectoryUsers, findCrmDirectoryUserById, formatCrmProviders } from "./crm-directory.ts";
+import {
+  buildCrmAccountStatusMap,
+  filterCrmDirectoryUsers,
+  formatCrmAccountStatus,
+  findCrmDirectoryUserById,
+  formatCrmProviders,
+  getCrmUserDisplayName,
+  getCrmUserSecondaryLabel,
+} from "./crm-directory.ts";
 
 test("buildCrmAccountStatusMap keys billing state by user id and skips invalid ids", () => {
   const map = buildCrmAccountStatusMap([
@@ -59,4 +67,17 @@ test("formatCrmProviders joins values and applies the configured empty fallback"
   assert.equal(formatCrmProviders(["github", "x"], "|", ""), "github|x");
   assert.equal(formatCrmProviders([" ", ""], ", ", "none"), "none");
   assert.equal(formatCrmProviders(undefined), "—");
+  assert.equal(formatCrmAccountStatus("active"), "Active");
+  assert.equal(formatCrmAccountStatus(undefined), "None");
+});
+
+test("CRM user display helpers prefer name/login/email fallbacks in a stable order", () => {
+  assert.equal(getCrmUserDisplayName({ name: "Analyst", login: "analyst", email: "a@example.com" }), "Analyst");
+  assert.equal(getCrmUserDisplayName({ name: "", login: "analyst", email: "a@example.com" }), "analyst");
+  assert.equal(getCrmUserDisplayName({ name: "", login: "", email: "a@example.com" }), "a@example.com");
+  assert.equal(getCrmUserDisplayName(undefined), "Unknown user");
+
+  assert.equal(getCrmUserSecondaryLabel({ login: "analyst", email: "a@example.com" }), "analyst");
+  assert.equal(getCrmUserSecondaryLabel({ login: "", email: "a@example.com" }), "a@example.com");
+  assert.equal(getCrmUserSecondaryLabel(undefined), "—");
 });

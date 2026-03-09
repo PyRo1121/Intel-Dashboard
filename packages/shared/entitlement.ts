@@ -38,6 +38,12 @@ export function resolveEntitlementView(entitlement: EntitlementViewInput | null 
   };
 }
 
+export function formatEntitlementLimit(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "Unlimited";
+  const numeric = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+  return String(numeric);
+}
+
 export function isEntitledRole(value: string | undefined): boolean {
   const raw = (value || "").trim().toLowerCase();
   return raw === "owner" || raw === "subscriber";

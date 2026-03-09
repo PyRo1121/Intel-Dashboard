@@ -1,13 +1,65 @@
 export type TelegramVerificationState = "verified" | "corroborated" | "single_source" | undefined;
-export type TelegramTrustTier = "core" | "verified" | "watch" | undefined;
+export type TelegramSourceTrustTier = "core" | "verified" | "watch" | undefined;
 export type TelegramFreshnessState = "hot" | "warm" | "cool" | "cold";
-export type TelegramTrustBadgeTier = "High" | "Medium" | "Watch";
+export type TelegramTrustTier = "High" | "Medium" | "Watch";
+
+type TelegramMessageLike = {
+  text_original: string;
+  text_en: string;
+  image_text_en?: string;
+  link: string;
+  datetime: string;
+  media: Array<{ url: string }>;
+};
+
+type TelegramEntryLike = {
+  dedupe?: {
+    verificationState?: TelegramVerificationState;
+    sourceCount?: number;
+  };
+  message: TelegramMessageLike;
+};
 
 export function freshnessStateForAge(ageMs: number): TelegramFreshnessState {
   if (ageMs <= 10 * 60 * 1000) return "hot";
   if (ageMs <= 60 * 60 * 1000) return "warm";
   if (ageMs <= 6 * 60 * 60 * 1000) return "cool";
   return "cold";
+}
+
+export function hasUsefulImageText(value: string | undefined): boolean {
+  const text = (value || "").trim();
+  if (!text) return false;
+  return text.toLowerCase() !== "no readable text detected in image.";
+}
+
+export function messageText(message: TelegramMessageLike): string {
+  return (message.text_en || message.text_original || "").trim();
+}
+
+export function mediaUrl(url: string): string {
+  const normalized = (url || "").trim();
+  if (!normalized) return "";
+  if (normalized.startsWith("/")) return normalized;
+  if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+    return normalized;
+  }
+  return `/media/${normalized}`;
+}
+
+export function entryMediaCount(entry: TelegramEntryLike): number {
+  return entry.message.media.length;
+}
+
+export function isVerifiedEntry(entry: TelegramEntryLike): boolean {
+  if (entry.dedupe?.verificationState === "verified" || entry.dedupe?.verificationState === "corroborated") {
+    return true;
+  }
+  return (
+    (entry.dedupe?.sourceCount ?? 1) >= 2 ||
+    entry.message.media.length > 0 ||
+    hasUsefulImageText(entry.message.image_text_en)
+  );
 }
 
 export function freshnessBadgeClass(state: TelegramFreshnessState): string {
@@ -17,10 +69,10 @@ export function freshnessBadgeClass(state: TelegramFreshnessState): string {
   return "border-zinc-500/20 bg-zinc-500/10 text-zinc-300";
 }
 
-export function trustTierFromSignals(args: {
-  trustTier?: TelegramTrustTier;
+export function trustTierForSignals(args: {
+  trustTier?: TelegramSourceTrustTier;
   sourceCount?: number;
-}): TelegramTrustBadgeTier {
+}): TelegramTrustTier {
   if (args.trustTier === "core") return "High";
   if (args.trustTier === "verified") return "Medium";
   if (args.trustTier === "watch") return "Watch";
@@ -29,13 +81,13 @@ export function trustTierFromSignals(args: {
   return "Watch";
 }
 
-export function trustBadgeClass(tier: TelegramTrustBadgeTier): string {
+export function trustBadgeClass(tier: TelegramTrustTier): string {
   if (tier === "High") return "border-emerald-400/30 bg-emerald-500/10 text-emerald-200";
   if (tier === "Medium") return "border-blue-400/30 bg-blue-500/10 text-blue-200";
   return "border-zinc-500/20 bg-zinc-500/10 text-zinc-300";
 }
 
-export function verificationLabelFromSignals(args: {
+export function verificationLabelForSignals(args: {
   verificationState?: TelegramVerificationState;
   sourceCount?: number;
   hasMedia?: boolean;
@@ -51,4 +103,3 @@ export function verificationLabelFromSignals(args: {
   if (args.hasUsefulImageText) return "OCR-backed";
   return "Single-source";
 }
-

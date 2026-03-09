@@ -6,17 +6,23 @@ import {
   freshnessBannerTone,
   freshnessPillTone,
   freshnessTooltip,
+  STANDARD_FEED_FRESHNESS_THRESHOLDS,
   useFreshnessTransitionNotice,
 } from "~/lib/freshness";
 import { fetchClientJson, fetchPublicJson } from "~/lib/client-json";
 import { formatEventLabel } from "~/lib/event-label";
 import {
+  entryMediaCount,
   freshnessBadgeClass,
   freshnessStateForAge,
+  hasUsefulImageText,
+  isVerifiedEntry,
+  mediaUrl,
+  messageText,
   trustBadgeClass,
   trustTierForSignals,
   verificationLabelForSignals,
-} from "~/lib/telegram-entry-display";
+} from "~/lib/telegram-entry";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import { formatAgeCompactFromMs, formatRelativeTimeAt, parseTimestampMs as parseTs } from "~/lib/utils";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
@@ -236,41 +242,6 @@ const DEFAULT_STYLE = { bg: "bg-zinc-500/10", border: "border-zinc-500/20", text
 
 function getCategoryStyle(category: string) {
   return CATEGORY_STYLES[category] ?? DEFAULT_STYLE;
-}
-
-function messageText(msg: TelegramMessage) {
-  return (msg.text_en || msg.text_original || "").trim();
-}
-
-function hasUsefulImageText(value: string | undefined) {
-  const text = (value || "").trim();
-  if (!text) return false;
-  return text.toLowerCase() !== "no readable text detected in image.";
-}
-
-function mediaUrl(url: string): string {
-  const normalized = (url || "").trim();
-  if (!normalized) return "";
-  if (normalized.startsWith("/")) return normalized;
-  if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
-    return normalized;
-  }
-  return `/media/${normalized}`;
-}
-
-function entryMediaCount(entry: TelegramEntry) {
-  return entry.message.media.length;
-}
-
-function isVerifiedEntry(entry: TelegramEntry) {
-  if (entry.dedupe?.verificationState === "verified" || entry.dedupe?.verificationState === "corroborated") {
-    return true;
-  }
-  return (
-    (entry.dedupe?.sourceCount ?? 1) >= 2 ||
-    entry.message.media.length > 0 ||
-    hasUsefulImageText(entry.message.image_text_en)
-  );
 }
 
 function rankReasonsForEntry(entry: TelegramEntry, nowMs: number): string[] {
@@ -1088,7 +1059,7 @@ export default function TelegramPage() {
   const [adminBusy, setAdminBusy] = createSignal(false);
   const [adminStatus, setAdminStatus] = createSignal("");
   const [streamConnected, setStreamConnected] = createSignal(false);
-  const feedThresholds = { liveMaxMinutes: 20, delayedMaxMinutes: 90 } as const;
+  const feedThresholds = STANDARD_FEED_FRESHNESS_THRESHOLDS;
   let lastTimestamp = "";
 
   const refreshDedupeFeedbackStatus = async (): Promise<void> => {

@@ -10,6 +10,7 @@ import {
   freshnessPillTone,
   freshnessTooltip,
   maxIsoTimestamp,
+  STANDARD_FEED_FRESHNESS_THRESHOLDS,
   useFeedFreshness,
 } from "~/lib/freshness";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
@@ -21,7 +22,7 @@ import { OVERVIEW_DESCRIPTION, OVERVIEW_OG_DESCRIPTION, OVERVIEW_TITLE, OVERVIEW
 
 export default function OverviewPage(props: { canonicalHref: string }) {
   const [intel, { refetch }] = createResource(fetchIntelFeed, { initialValue: [] as IntelItem[] });
-  const feedThresholds = { liveMaxMinutes: 20, delayedMaxMinutes: 90 } as const;
+  const feedThresholds = STANDARD_FEED_FRESHNESS_THRESHOLDS;
   const nowMs = useWallClock(1000);
 
   useLiveRefresh(() => {

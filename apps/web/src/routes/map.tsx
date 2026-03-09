@@ -8,6 +8,7 @@ import {
   freshnessPillTone,
   freshnessTooltip,
   maxIsoTimestamp,
+  STANDARD_FEED_FRESHNESS_THRESHOLDS,
   useFeedFreshness,
 } from "~/lib/freshness";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
@@ -113,7 +114,7 @@ function buildRegions(items: IntelItem[]): RegionSummary[] {
 export default function ThreatMap() {
   const [intel, { refetch }] = createResource(loadIntel, { initialValue: [] as IntelItem[] });
   const [selectedRegion, setSelectedRegion] = createSignal<IntelRegion | null>(null);
-  const feedThresholds = { liveMaxMinutes: 20, delayedMaxMinutes: 90 } as const;
+  const feedThresholds = STANDARD_FEED_FRESHNESS_THRESHOLDS;
   const nowMs = useWallClock(1000);
 
   // Leaflet refs

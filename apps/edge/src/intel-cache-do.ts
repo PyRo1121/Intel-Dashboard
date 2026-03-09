@@ -209,49 +209,22 @@ export class IntelCacheDO extends DurableObject<Env> {
       if (cached) {
         const ageMs = Date.now() - cached.timestamp;
         if (ageMs < maxAgeMs) {
-          return new Response(cached.data, {
-            status: cached.status,
-            headers: {
-              "Content-Type": "application/json",
-              "X-Cache-Source": "durable-object-memory",
-              "X-Cache-Age": String(Math.round(ageMs / 1000)),
-            },
-          });
+          return this.cachedJsonResponse(cached, "durable-object-memory", ageMs);
         }
 
         if (ageMs < staleWindowMs) {
           this.scheduleBackgroundRefresh(path);
-          return new Response(cached.data, {
-            status: cached.status,
-            headers: {
-              "Content-Type": "application/json",
-              "X-Cache-Source": "durable-object-stale-revalidate",
-              "X-Cache-Age": String(Math.round(ageMs / 1000)),
-            },
-          });
+          return this.cachedJsonResponse(cached, "durable-object-stale-revalidate", ageMs);
         }
       }
 
       const fresh = await this.fetchEndpointDedup(path);
       if (fresh) {
-        return new Response(fresh.data, {
-          status: fresh.status,
-          headers: {
-            "Content-Type": "application/json",
-            "X-Cache-Source": "durable-object-fresh",
-          },
-        });
+        return this.cachedJsonResponse(fresh, "durable-object-fresh");
       }
 
       if (cached) {
-        return new Response(cached.data, {
-          status: cached.status,
-          headers: {
-            "Content-Type": "application/json",
-            "X-Cache-Source": "durable-object-stale-if-error",
-            "X-Cache-Age": String(Math.round((Date.now() - cached.timestamp) / 1000)),
-          },
-        });
+        return this.cachedJsonResponse(cached, "durable-object-stale-if-error", Date.now() - cached.timestamp);
       }
 
       return new Response(
@@ -264,6 +237,25 @@ export class IntelCacheDO extends DurableObject<Env> {
     }
 
     return new Response("Not Found", { status: 404 });
+  }
+
+  private cachedJsonResponse(
+    cached: CachedResponse,
+    cacheSource: string,
+    ageMs?: number,
+    statusOverride?: number,
+  ): Response {
+    const headers = new Headers({
+      "Content-Type": "application/json",
+      "X-Cache-Source": cacheSource,
+    });
+    if (typeof ageMs === "number" && Number.isFinite(ageMs)) {
+      headers.set("X-Cache-Age", String(Math.round(ageMs / 1000)));
+    }
+    return new Response(cached.data, {
+      status: statusOverride ?? cached.status,
+      headers,
+    });
   }
 
   private async handleAdminGuard(request: Request): Promise<Response> {
@@ -403,49 +395,22 @@ export class IntelCacheDO extends DurableObject<Env> {
     if (cached) {
       const ageMs = Date.now() - cached.timestamp;
       if (ageMs < WHALE_REFRESH_MS) {
-        return new Response(cached.data, {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "X-Cache-Source": "durable-object-memory",
-            "X-Cache-Age": String(Math.round(ageMs / 1000)),
-          },
-        });
+        return this.cachedJsonResponse(cached, "durable-object-memory", ageMs, 200);
       }
 
       if (ageMs < WHALE_STALE_WINDOW_MS) {
         this.scheduleBackgroundRefresh("/api/whales-freshen");
-        return new Response(cached.data, {
-          status: 200,
-          headers: {
-            "Content-Type": "application/json",
-            "X-Cache-Source": "durable-object-stale-revalidate",
-            "X-Cache-Age": String(Math.round(ageMs / 1000)),
-          },
-        });
+        return this.cachedJsonResponse(cached, "durable-object-stale-revalidate", ageMs, 200);
       }
     }
 
     const fresh = await this.fetchWhalesDedup();
     if (fresh) {
-      return new Response(fresh.data, {
-        status: fresh.status,
-        headers: {
-          "Content-Type": "application/json",
-          "X-Cache-Source": "durable-object-fresh",
-        },
-      });
+      return this.cachedJsonResponse(fresh, "durable-object-fresh");
     }
 
     if (cached) {
-      return new Response(cached.data, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "X-Cache-Source": "durable-object-stale-if-error",
-          "X-Cache-Age": String(Math.round((Date.now() - cached.timestamp) / 1000)),
-        },
-      });
+      return this.cachedJsonResponse(cached, "durable-object-stale-if-error", Date.now() - cached.timestamp, 200);
     }
 
     return jsonResponse([], { status: 200 });
@@ -503,58 +468,25 @@ export class IntelCacheDO extends DurableObject<Env> {
     if (cached) {
       const ageMs = Date.now() - cached.timestamp;
       if (ageMs < CHAT_HISTORY_REFRESH_MS) {
-        return new Response(cached.data, {
-          status: cached.status,
-          headers: {
-            "Content-Type": "application/json",
-            "X-Cache-Source": "durable-object-memory",
-            "X-Cache-Age": String(Math.round(ageMs / 1000)),
-          },
-        });
+        return this.cachedJsonResponse(cached, "durable-object-memory", ageMs);
       }
 
       if (ageMs < CHAT_HISTORY_STALE_WINDOW_MS) {
         this.scheduleBackgroundRefresh(cacheKey, 0);
-        return new Response(cached.data, {
-          status: cached.status,
-          headers: {
-            "Content-Type": "application/json",
-            "X-Cache-Source": "durable-object-stale-revalidate",
-            "X-Cache-Age": String(Math.round(ageMs / 1000)),
-          },
-        });
+        return this.cachedJsonResponse(cached, "durable-object-stale-revalidate", ageMs);
       }
     }
 
     const fresh = await this.fetchEndpointDedup(cacheKey, 0);
     if (fresh) {
-      return new Response(fresh.data, {
-        status: fresh.status,
-        headers: {
-          "Content-Type": "application/json",
-          "X-Cache-Source": "durable-object-fresh",
-        },
-      });
+      return this.cachedJsonResponse(fresh, "durable-object-fresh");
     }
 
     if (cached) {
-      return new Response(cached.data, {
-        status: cached.status,
-        headers: {
-          "Content-Type": "application/json",
-          "X-Cache-Source": "durable-object-stale-if-error",
-          "X-Cache-Age": String(Math.round((Date.now() - cached.timestamp) / 1000)),
-        },
-      });
+      return this.cachedJsonResponse(cached, "durable-object-stale-if-error", Date.now() - cached.timestamp);
     }
 
-    return new Response(
-      JSON.stringify({ error: "Chat history unavailable" }),
-      {
-        status: 503,
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+    return jsonResponse({ error: "Chat history unavailable" }, { status: 503 });
   }
 
   private async fetchEndpoint(

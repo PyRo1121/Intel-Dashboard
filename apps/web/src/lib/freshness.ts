@@ -22,6 +22,11 @@ export interface FreshnessStatus {
   label: string;
 }
 
+export const STANDARD_FEED_FRESHNESS_THRESHOLDS = {
+  liveMaxMinutes: 20,
+  delayedMaxMinutes: 90,
+} as const;
+
 export interface FreshnessTransitionNotice {
   state: FreshnessState;
   message: string;

@@ -2,13 +2,7 @@ import { A } from "@solidjs/router";
 import { Show } from "solid-js";
 import { useAuth } from "~/lib/auth";
 import { formatDelayMinutesShortLabel, UPGRADE_INSTANT_FEED_LABEL } from "@intel-dashboard/shared/access-offers.ts";
-import { resolveEntitlementView } from "@intel-dashboard/shared/entitlement.ts";
-
-function formatLimit(raw: number | null | undefined): string {
-  if (raw === null || raw === undefined) return "Unlimited";
-  const value = Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
-  return String(value);
-}
+import { formatEntitlementLimit, resolveEntitlementView } from "@intel-dashboard/shared/entitlement.ts";
 
 export default function FeedAccessNotice(props: { surface: string }) {
   let auth: ReturnType<typeof useAuth>;
@@ -39,7 +33,7 @@ export default function FeedAccessNotice(props: { surface: string }) {
               {entitlementView().planLabel} Access
             </p>
             <p class="mt-1 text-sm text-zinc-200">
-              {props.surface} feed is delayed by {formatDelayMinutesShortLabel(entitlementView().delayMinutes)} and capped at {formatLimit(primaryCap())} visible items.
+              {props.surface} feed is delayed by {formatDelayMinutesShortLabel(entitlementView().delayMinutes)} and capped at {formatEntitlementLimit(primaryCap())} visible items.
             </p>
           </div>
           <div class="flex items-center gap-2">

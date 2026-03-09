@@ -36,6 +36,7 @@ import {
   resolveTelegramFeedData,
 } from "~/lib/telegram-client";
 import { reconcileTelegramData } from "~/lib/telegram-reconcile";
+import { loadSessionSnapshot, saveSessionSnapshot } from "~/lib/feed-snapshot-cache";
 import type {
   TelegramAgeWindow as AgeWindow,
   TelegramCanonicalEvent,
@@ -54,6 +55,8 @@ import { TELEGRAM_DESCRIPTION, TELEGRAM_TITLE } from "@intel-dashboard/shared/ro
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 
 export default function TelegramPage() {
+  const TELEGRAM_SNAPSHOT_CACHE_KEY = "telegram-feed-snapshot-v1";
+  const TELEGRAM_SNAPSHOT_CACHE_TTL_MS = 2 * 60 * 1000;
   const auth = useAuth();
   const [data, setData] = createSignal<TelegramData | null>(null);
   const [loadingInitial, setLoadingInitial] = createSignal(true);
@@ -112,6 +115,7 @@ export default function TelegramPage() {
       if (changed) {
         setData(merged);
         lastTimestamp = next.timestamp;
+        saveSessionSnapshot(TELEGRAM_SNAPSHOT_CACHE_KEY, merged);
       }
       return changed;
     } catch {
@@ -123,6 +127,12 @@ export default function TelegramPage() {
   };
 
   onMount(() => {
+    const cached = loadSessionSnapshot<TelegramData>(TELEGRAM_SNAPSHOT_CACHE_KEY, TELEGRAM_SNAPSHOT_CACHE_TTL_MS);
+    if (cached) {
+      setData(cached);
+      lastTimestamp = cached.timestamp;
+      setLoadingInitial(false);
+    }
     const focus = new URL(window.location.href).searchParams.get("focus");
     if (focus) {
       setFocusKey(focus);

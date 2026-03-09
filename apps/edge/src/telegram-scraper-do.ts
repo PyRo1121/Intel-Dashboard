@@ -31,6 +31,7 @@ import {
   type TelegramSignalGrade,
   type TelegramSignalProfile,
 } from "./telegram-signal-grade";
+import { resolveTelegramScrapePlan } from "./telegram-scrape-plan";
 
 // ============================================================================
 // Types
@@ -45,6 +46,7 @@ interface Env extends Cloudflare.Env {
   AI_GATEWAY_NAME?: string;
   SCRAPE_INTERVAL_MS?: string;
   SCRAPE_ROTATION_WINDOW_SECONDS?: string;
+  HOT_CHANNELS_PER_CYCLE?: string;
   SCRAPE_WORKER_CONCURRENCY?: string;
   CHANNEL_BUILD_CONCURRENCY?: string;
   MAX_MESSAGES_PER_CHANNEL?: string;
@@ -247,16 +249,18 @@ type AnyMediaItem = { type: string; url: string; thumbnail?: string };
 // Constants
 // ============================================================================
 
-const DEFAULT_SCRAPE_INTERVAL_MS = 30_000;
-const MIN_SCRAPE_INTERVAL_MS = 10_000;
+const DEFAULT_SCRAPE_INTERVAL_MS = 10_000;
+const MIN_SCRAPE_INTERVAL_MS = 5_000;
 const MAX_SCRAPE_INTERVAL_MS = 120_000;
-const DEFAULT_ROTATION_WINDOW_SECONDS = 240;
+const DEFAULT_ROTATION_WINDOW_SECONDS = 60;
 const MIN_ROTATION_WINDOW_SECONDS = 10;
 const MAX_ROTATION_WINDOW_SECONDS = 3600;
 const DEFAULT_SCRAPE_WORKER_CONCURRENCY = 20;
 const DEFAULT_CHANNEL_BUILD_CONCURRENCY = 20;
 const MAX_CONCURRENCY = 50;
-const HOT_CHANNELS_PER_CYCLE = 32;
+const DEFAULT_HOT_CHANNELS_PER_CYCLE = 64;
+const MIN_HOT_CHANNELS_PER_CYCLE = 8;
+const MAX_HOT_CHANNELS_PER_CYCLE = 128;
 const MEDIA_BATCH_SIZE = 10;
 const MEDIA_CONCURRENCY = 10;
 const DEFAULT_MAX_MESSAGES_PER_CHANNEL = 30;
@@ -557,6 +561,15 @@ export class TelegramScraperDO extends DurableObject<Env> {
     );
   }
 
+  private getHotChannelsPerCycle(): number {
+    return normalizeBoundedInt(
+      this.env.HOT_CHANNELS_PER_CYCLE,
+      DEFAULT_HOT_CHANNELS_PER_CYCLE,
+      MIN_HOT_CHANNELS_PER_CYCLE,
+      MAX_HOT_CHANNELS_PER_CYCLE,
+    );
+  }
+
   private async ensureD1Schema(): Promise<void> {
     if (this.d1SchemaReady || !this.env.INTEL_DB) {
       return;
@@ -644,28 +657,13 @@ export class TelegramScraperDO extends DurableObject<Env> {
     slot: number;
     slots: number;
   } {
-    const prioritized = [...CHANNELS].sort((left, right) => right.subscriberValueScore - left.subscriberValueScore);
-    const hotChannels = prioritized.slice(0, Math.min(HOT_CHANNELS_PER_CYCLE, prioritized.length));
-    const hotSet = new Set(hotChannels.map((channel) => channel.username));
-    const rotatingPool = CHANNELS.filter((channel) => !hotSet.has(channel.username));
-    const intervalMs = this.getScrapeIntervalMs();
-    const rotationWindowMs = this.getRotationWindowSeconds() * 1000;
-    const slots = Math.max(1, Math.ceil(rotationWindowMs / intervalMs));
-    if (slots <= 1 || rotatingPool.length <= 1) {
-      return {
-        channels: hotChannels.length > 0 ? [...hotChannels, ...rotatingPool] : CHANNELS,
-        slot: 0,
-        slots: 1,
-      };
-    }
-
-    const slot = Math.floor(nowMs / intervalMs) % slots;
-    const selected = rotatingPool.filter((_, index) => index % slots === slot);
-    return {
-      channels: selected.length > 0 ? [...hotChannels, ...selected] : CHANNELS,
-      slot,
-      slots,
-    };
+    return resolveTelegramScrapePlan({
+      channels: CHANNELS,
+      nowMs,
+      intervalMs: this.getScrapeIntervalMs(),
+      rotationWindowSeconds: this.getRotationWindowSeconds(),
+      hotChannelsPerCycle: this.getHotChannelsPerCycle(),
+    });
   }
 
   private makeEmptyChannelState(config: ChannelConfig): ChannelState {

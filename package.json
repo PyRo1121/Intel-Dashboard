@@ -29,6 +29,7 @@
     "test:backend": "bun run --cwd apps/backend test",
     "test:e2e": "node scripts/run-e2e-with-dev-vars.mjs",
     "test:e2e:browser": "node scripts/run-e2e-with-dev-vars.mjs --test e2e/browser-smoke.test.mjs",
+    "test:e2e:helpers": "node --test e2e/browser-test-helpers.test.mjs",
     "test:e2e:owner-admin": "node scripts/run-e2e-with-dev-vars.mjs --test e2e/browser-owner-admin.test.mjs",
     "test:e2e:backend-api": "node scripts/run-e2e-with-dev-vars.mjs --test e2e/backend-api-smoke.test.mjs",
     "test:e2e:public-browser": "node scripts/run-e2e-with-dev-vars.mjs --test e2e/browser-public.test.mjs",

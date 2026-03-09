@@ -17,10 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      E2E_CF_ACCESS_CLIENT_ID: ${{ secrets.E2E_CF_ACCESS_CLIENT_ID }}
-      E2E_CF_ACCESS_CLIENT_SECRET: ${{ secrets.E2E_CF_ACCESS_CLIENT_SECRET }}
-      E2E_EDGE_BASE_URL: https://intel.pyro1121.com
+      E2E_EDGE_BASE_URL: http://127.0.0.1:3210
     steps:
       - uses: actions/checkout@v4
 
@@ -38,11 +35,29 @@ jobs:
       - name: Install Chromium
         run: bunx playwright install chromium
 
-      - name: Allowlist runner IP for public browser checks
-        run: bun run security:cf:allow-owner-e2e-ip
+      - name: Build web app
+        run: bun run build:web
 
-      - name: Let public allowlist propagate
-        run: sleep 20
+      - name: Start local web app
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output/e2e-browser
+          PORT=3210 bun run start:web > output/e2e-browser/public-browser-server.log 2>&1 &
+          echo $! > output/e2e-browser/public-browser-server.pid
+
+      - name: Wait for local web app
+        shell: bash
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3210/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Local web app did not become ready in time" >&2
+          exit 1
 
       - name: Create artifact directory
         run: mkdir -p output/e2e-browser
@@ -69,6 +84,11 @@ jobs:
           path: output/e2e-browser
           if-no-files-found: ignore
 
-      - name: Clear runner IP allowlist
+      - name: Stop local web app
         if: always()
-        run: bun run security:cf:clear-owner-e2e-ip
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f output/e2e-browser/public-browser-server.pid ]; then
+            kill "$(cat output/e2e-browser/public-browser-server.pid)" >/dev/null 2>&1 || true
+          fi

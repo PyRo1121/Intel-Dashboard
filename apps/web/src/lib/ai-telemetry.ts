@@ -23,7 +23,8 @@ export function getAiTelemetryLabel(label: string | undefined): string {
 }
 
 export function getAiTelemetryOutputInputPercent(summary: AiTelemetrySummaryLike): number {
-  return (summary?.outputInputRatio ?? 0) * 100;
+  const ratio = summary?.outputInputRatio;
+  return typeof ratio === "number" && Number.isFinite(ratio) ? ratio * 100 : 0;
 }
 
 export function getAiTelemetryCalls(summary: AiTelemetrySummaryLike): number | undefined {

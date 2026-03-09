@@ -73,4 +73,5 @@ test("AI telemetry summary selectors expose raw values and derived output/input 
   assert.equal(getAiTelemetryOutputInputPercent(summary), 40);
   assert.equal(getAiTelemetryAvgDurationMs(summary), 250);
   assert.equal(getAiTelemetryP95DurationMs(summary), 900);
+  assert.equal(getAiTelemetryOutputInputPercent({ outputInputRatio: Number.NaN }), 0);
 });

@@ -4,6 +4,8 @@ type BackendBindingEnv = {
   INTEL_BACKEND?: Fetcher | null;
   BACKEND_URL?: string;
   ALLOW_BACKEND_URL_FALLBACK?: string;
+  USAGE_DATA_SOURCE_TOKEN?: string;
+  INTEL_API_TOKEN?: string;
 };
 
 function normalizeBoolean(value: string | undefined): boolean {
@@ -47,4 +49,14 @@ export function resolveBackendEndpointUrl(env: BackendBindingEnv, backendPath: s
   }
 
   throw new Error("intel_backend_binding_required");
+}
+
+export function resolveBackendApiToken(env: BackendBindingEnv): string {
+  return (env.USAGE_DATA_SOURCE_TOKEN || env.INTEL_API_TOKEN || "").trim();
+}
+
+export function resolveBackendFetch(env: BackendBindingEnv): typeof fetch {
+  return usesBackendServiceBinding(env)
+    ? env.INTEL_BACKEND.fetch.bind(env.INTEL_BACKEND) as typeof fetch
+    : fetch;
 }

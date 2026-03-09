@@ -720,6 +720,7 @@ export default function CrmRoute() {
                           type="button"
                           onClick={() => setAiWindow(window)}
                           data-testid={`crm-ai-window-${window}`}
+                          aria-pressed={aiWindow() === window}
                           class={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                             aiWindow() === window
                               ? "border-cyan-400/60 bg-cyan-500/12 text-cyan-200"

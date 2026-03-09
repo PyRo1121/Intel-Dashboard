@@ -12,14 +12,16 @@ import { buildDeterministicAvatarDataUrl } from "./avatar-fallback";
 import { resolveBackendEndpointUrl, usesBackendServiceBinding } from "./backend-origin";
 import { buildClientXProfileDiagnostics, type XProfileSyncDiagnostics } from "./auth-diagnostics";
 import { normalizeSafeAuthRedirectLocation } from "./auth-redirect";
-import { summarizeCrmDataQuality } from "./crm-quality";
 import { buildOwnerCrmAiTelemetryFailureResponse } from "./crm-ai-telemetry-proxy";
-import { corsHeaders, mergeVary, privateApiHeaders } from "./private-api-headers";
+import { postOwnerBackendJson } from "./owner-backend-json";
+import { buildOwnerCrmOverviewPayload, type CrmDirectoryUser } from "./crm-overview";
+import { corsHeaders, corsJson, mergeVary, privateApiHeaders, privateApiJson } from "./private-api-headers";
 import { getDashboardAppRoutePrefixes, normalizeSafePostAuthPath } from "./post-auth-path";
 import { createTurnstileGateToken, type TurnstileMode, verifyTurnstileGateToken } from "./turnstile";
 import { DASHBOARD_HOME_PATH, DEFAULT_POST_AUTH_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
 import { buildAuthModeSwitchHref, buildAuthPageHref, buildAuthProviderHref } from "@intel-dashboard/shared/auth-flow.ts";
 import { getAuthCopy } from "@intel-dashboard/shared/auth-copy.ts";
+import { isOwnerRole } from "@intel-dashboard/shared/entitlement.ts";
 import {
   FREE_FEED_DELAY_MINUTES,
   FREE_PLAN_NAME,
@@ -193,17 +195,6 @@ type BackendCrmSummaryResponse = {
   ok?: unknown;
   result?: Record<string, unknown>;
   error?: unknown;
-};
-
-type CrmDirectoryUser = {
-  id: string;
-  login: string;
-  name: string;
-  email: string;
-  avatarUrl: string;
-  providers: string[];
-  createdAtMs: number;
-  updatedAtMs: number;
 };
 
 type FeedEntitlement = {
@@ -1002,15 +993,15 @@ function withDefaultSecurityHeaders(response: Response): Response {
   return response;
 }
 
-function withSensitiveNoStore(response: Response): Response {
+function withSensitiveNoStore(
+  response: Response,
+  varyKeys: string[] = ["Origin", "Cookie", "Authorization"],
+): Response {
   response.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
   response.headers.set("CDN-Cache-Control", "no-store");
   response.headers.set("Pragma", "no-cache");
   response.headers.set("Expires", "0");
-  response.headers.set(
-    "Vary",
-    mergeVary(response.headers.get("Vary"), ["Origin", "Cookie", "Authorization"]),
-  );
+  response.headers.set("Vary", mergeVary(response.headers.get("Vary"), varyKeys));
   return withDefaultSecurityHeaders(response);
 }
 
@@ -1026,23 +1017,11 @@ function fromBase64Url(s: string): Uint8Array {
 }
 
 function unauthorizedApiResponse(origin: string | null): Response {
-  return new Response(
-    JSON.stringify({ error: "Unauthorized", login_url: "/login" }),
-    {
-      status: 401,
-      headers: privateApiHeaders(origin),
-    },
-  );
+  return privateApiJson(origin, 401, { error: "Unauthorized", login_url: "/login" });
 }
 
 function misconfiguredApiResponse(origin: string | null): Response {
-  return new Response(
-    JSON.stringify({ error: "Server auth misconfigured" }),
-    {
-      status: 503,
-      headers: privateApiHeaders(origin),
-    },
-  );
+  return privateApiJson(origin, 503, { error: "Server auth misconfigured" });
 }
 
 function normalizeString(value: unknown): string | null {
@@ -1175,33 +1154,15 @@ async function handleTurnstileVerifyApi(params: {
   origin: string | null;
 }): Promise<Response> {
   if (params.request.method !== "POST") {
-    return withDefaultSecurityHeaders(new Response(
-      JSON.stringify({ ok: false, error: "method_not_allowed" }),
-      {
-        status: 405,
-        headers: privateApiHeaders(params.origin),
-      },
-    ));
+    return privateApiJson(params.origin, 405, { ok: false, error: "method_not_allowed" });
   }
 
   if (!isTrustedRequestOrigin({ request: params.request })) {
-    return withDefaultSecurityHeaders(new Response(
-      JSON.stringify({ ok: false, error: "forbidden_origin" }),
-      {
-        status: 403,
-        headers: privateApiHeaders(params.origin),
-      },
-    ));
+    return privateApiJson(params.origin, 403, { ok: false, error: "forbidden_origin" });
   }
 
   if (!isTurnstileEnabled(params.env)) {
-    return withDefaultSecurityHeaders(new Response(
-      JSON.stringify({ ok: true, bypassed: true }),
-      {
-        status: 200,
-        headers: privateApiHeaders(params.origin),
-      },
-    ));
+    return privateApiJson(params.origin, 200, { ok: true, bypassed: true });
   }
 
   const payload = await params.request.json().catch(() => null);
@@ -1209,13 +1170,7 @@ async function handleTurnstileVerifyApi(params: {
   const token = normalizeString(body.token);
   const mode = resolveTurnstileMode(body.mode);
   if (!token || !mode) {
-    return withDefaultSecurityHeaders(new Response(
-      JSON.stringify({ ok: false, error: "invalid_payload" }),
-      {
-        status: 400,
-        headers: privateApiHeaders(params.origin),
-      },
-    ));
+    return privateApiJson(params.origin, 400, { ok: false, error: "invalid_payload" });
   }
 
   const verification = await verifyTurnstileTokenWithCloudflare({
@@ -1225,24 +1180,12 @@ async function handleTurnstileVerifyApi(params: {
     request: params.request,
   });
   if (!verification.ok) {
-    return withDefaultSecurityHeaders(new Response(
-      JSON.stringify({ ok: false, error: verification.code, detail: verification.detail ?? null }),
-      {
-        status: 403,
-        headers: privateApiHeaders(params.origin),
-      },
-    ));
+    return privateApiJson(params.origin, 403, { ok: false, error: verification.code, detail: verification.detail ?? null });
   }
 
   const authSecret = (params.env.AUTH_SECRET || "").trim();
   if (!authSecret) {
-    return withDefaultSecurityHeaders(new Response(
-      JSON.stringify({ ok: false, error: "auth_secret_missing" }),
-      {
-        status: 503,
-        headers: privateApiHeaders(params.origin),
-      },
-    ));
+    return privateApiJson(params.origin, 503, { ok: false, error: "auth_secret_missing" });
   }
   const passToken = await createTurnstileGateToken({
     secret: authSecret,
@@ -2163,9 +2106,7 @@ async function fetchFeedEntitlement(params: {
       redirect: "manual",
       signal: AbortSignal.timeout(5_000),
     });
-    const backendResponse = usesBackendServiceBinding(params.env)
-      ? await params.env.INTEL_BACKEND.fetch(backendRequest)
-      : await fetch(backendRequest);
+    const backendResponse = await resolveBackendFetch(params.env)(backendRequest);
     if (!backendResponse.ok) {
       throw new Error(`user_info_http_${backendResponse.status}`);
     }
@@ -2227,12 +2168,65 @@ async function fetchFeedEntitlement(params: {
   }
 }
 
+async function requireOwnerEntitlement(params: {
+  env: Env;
+  user: VerifiedSession | null;
+  origin: string | null;
+}): Promise<
+  | { ok: true; entitlement: FeedEntitlement; userId: string }
+  | { ok: false; response: Response }
+> {
+  if (!params.user) {
+    return {
+      ok: false,
+      response: privateApiJson(params.origin, 403, { error: "Forbidden" }),
+    };
+  }
+  const userId = resolveUserId(params.user);
+  const entitlement = await fetchFeedEntitlement({
+    env: params.env,
+    userId,
+    userLogin: params.user.login,
+  });
+  if (!isOwnerRole(entitlement.role)) {
+    return {
+      ok: false,
+      response: privateApiJson(params.origin, 403, { error: "Forbidden" }),
+    };
+  }
+  return {
+    ok: true,
+    entitlement,
+    userId,
+  };
+}
+
+async function resolveOptionalFeedEntitlement(params: {
+  env: Env;
+  user: VerifiedSession | null;
+}): Promise<FeedEntitlement> {
+  if (!params.user) {
+    return defaultFeedEntitlement();
+  }
+  return fetchFeedEntitlement({
+    env: params.env,
+    userId: resolveUserId(params.user),
+    userLogin: params.user.login,
+  });
+}
+
 function resolveBackendEndpoint(env: Env, backendPath: string): string {
   return resolveBackendEndpointUrl(env, backendPath);
 }
 
 function resolveBackendApiToken(env: Env): string {
   return (env.USAGE_DATA_SOURCE_TOKEN || env.INTEL_API_TOKEN || "").trim();
+}
+
+function resolveBackendFetch(env: Env): typeof fetch {
+  return usesBackendServiceBinding(env)
+    ? env.INTEL_BACKEND.fetch.bind(env.INTEL_BACKEND) as typeof fetch
+    : fetch;
 }
 
 function parseProviderList(raw: unknown): string[] {
@@ -2324,55 +2318,14 @@ async function fetchOwnerCrmBackendSummary(params: {
   env: Env;
   user: VerifiedSession;
 }): Promise<{ ok: true; payload: Record<string, unknown> } | { ok: false; status: number; error: string }> {
-  const backendToken = resolveBackendApiToken(params.env);
-  if (!backendToken) {
-    return { ok: false, status: 503, error: "Backend API token is not configured." };
-  }
-
-  const backendRequest = new Request(
-    resolveBackendEndpoint(params.env, "/api/intel-dashboard/admin/crm/summary"),
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${backendToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        userId: resolveUserId(params.user),
-        userLogin: params.user.login,
-      }),
-      redirect: "manual",
-      signal: AbortSignal.timeout(30_000),
-    },
-  );
-
-  let backendResponse: Response;
-  try {
-    backendResponse = usesBackendServiceBinding(params.env)
-      ? await params.env.INTEL_BACKEND.fetch(backendRequest)
-      : await fetch(backendRequest);
-  } catch (error) {
-    return {
-      ok: false,
-      status: 502,
-      error: error instanceof Error ? error.message : "Backend unavailable",
-    };
-  }
-
-  const parsed = await backendResponse.json().catch(() => null) as BackendCrmSummaryResponse | null;
-  const result = parsed && isRecord(parsed.result) ? parsed.result : null;
-  if (!backendResponse.ok || !result) {
-    const error = parsed && typeof parsed.error === "string"
-      ? parsed.error
-      : `Backend CRM summary failed with HTTP ${backendResponse.status}`;
-    return {
-      ok: false,
-      status: backendResponse.status || 502,
-      error,
-    };
-  }
-
-  return { ok: true, payload: result };
+  return postOwnerBackendJson({
+    backendToken: resolveBackendApiToken(params.env),
+    url: resolveBackendEndpoint(params.env, "/api/intel-dashboard/admin/crm/summary"),
+    userId: resolveUserId(params.user),
+    userLogin: params.user.login,
+    errorPrefix: "Backend CRM summary",
+    fetchImpl: resolveBackendFetch(params.env),
+  });
 }
 
 type OwnerCrmAiTelemetryFetchResult =
@@ -2384,56 +2337,15 @@ async function fetchOwnerCrmAiTelemetry(params: {
   user: VerifiedSession;
   window: string;
 }): Promise<OwnerCrmAiTelemetryFetchResult> {
-  const backendToken = resolveBackendApiToken(params.env);
-  if (!backendToken) {
-    return { ok: false, status: 503, error: "Backend API token is not configured." };
-  }
-
-  const backendRequest = new Request(
-    resolveBackendEndpoint(params.env, "/api/intel-dashboard/admin/crm/ai-telemetry"),
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${backendToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        userId: resolveUserId(params.user),
-        userLogin: params.user.login,
-        window: params.window,
-      }),
-      redirect: "manual",
-      signal: AbortSignal.timeout(30_000),
-    },
-  );
-
-  let backendResponse: Response;
-  try {
-    backendResponse = usesBackendServiceBinding(params.env)
-      ? await params.env.INTEL_BACKEND.fetch(backendRequest)
-      : await fetch(backendRequest);
-  } catch (error) {
-    return {
-      ok: false,
-      status: 502,
-      error: error instanceof Error ? error.message : "Backend unavailable",
-    };
-  }
-
-  const parsed = await backendResponse.json().catch(() => null) as { result?: Record<string, unknown>; error?: string } | null;
-  const result = parsed && isRecord(parsed.result) ? parsed.result : null;
-  if (!backendResponse.ok || !result) {
-    const error = parsed && typeof parsed.error === "string"
-      ? parsed.error
-      : `Backend AI telemetry failed with HTTP ${backendResponse.status}`;
-    return {
-      ok: false,
-      status: backendResponse.status || 502,
-      error,
-    };
-  }
-
-  return { ok: true, payload: result };
+  return postOwnerBackendJson({
+    backendToken: resolveBackendApiToken(params.env),
+    url: resolveBackendEndpoint(params.env, "/api/intel-dashboard/admin/crm/ai-telemetry"),
+    userId: resolveUserId(params.user),
+    userLogin: params.user.login,
+    extraBody: { window: params.window },
+    errorPrefix: "Backend AI telemetry",
+    fetchImpl: resolveBackendFetch(params.env),
+  });
 }
 
 function normalizeOwnerAiTelemetryWindow(rawValue: string | null): string | null {
@@ -2469,39 +2381,25 @@ async function proxySessionBillingRoute(params: {
   allowMethods: ReadonlyArray<string>;
 }): Promise<Response> {
   if (!params.allowMethods.includes(params.request.method)) {
-    const headers = privateApiHeaders(params.origin);
-    headers.set("Allow", params.allowMethods.join(", "));
-    return new Response(
-      JSON.stringify({ error: "Method Not Allowed" }),
-      {
-        status: 405,
-        headers,
-      },
+    return privateApiJson(
+      params.origin,
+      405,
+      { error: "Method Not Allowed" },
+      null,
+      { Allow: params.allowMethods.join(", ") },
     );
   }
 
   const backendToken = resolveBackendApiToken(params.env);
   if (!backendToken) {
-    return new Response(
-      JSON.stringify({ error: "Backend API token is not configured." }),
-      {
-        status: 503,
-        headers: privateApiHeaders(params.origin),
-      },
-    );
+    return privateApiJson(params.origin, 503, { error: "Backend API token is not configured." });
   }
 
   let payload: Record<string, unknown>;
   try {
     payload = await parseOptionalJsonObject(params.request);
   } catch {
-    return new Response(
-      JSON.stringify({ error: "Expected JSON object body." }),
-      {
-        status: 400,
-        headers: privateApiHeaders(params.origin),
-      },
-    );
+    return privateApiJson(params.origin, 400, { error: "Expected JSON object body." });
   }
 
   const backendRequest = new Request(
@@ -2524,20 +2422,12 @@ async function proxySessionBillingRoute(params: {
 
   let backendResponse: Response;
   try {
-    backendResponse = usesBackendServiceBinding(params.env)
-      ? await params.env.INTEL_BACKEND.fetch(backendRequest)
-      : await fetch(backendRequest);
+    backendResponse = await resolveBackendFetch(params.env)(backendRequest);
   } catch (error) {
-    return new Response(
-      JSON.stringify({
-        error: "Backend unavailable",
-        detail: error instanceof Error ? error.message : "unknown_error",
-      }),
-      {
-        status: 502,
-        headers: privateApiHeaders(params.origin),
-      },
-    );
+    return privateApiJson(params.origin, 502, {
+      error: "Backend unavailable",
+      detail: error instanceof Error ? error.message : "unknown_error",
+    });
   }
 
   const response = new Response(backendResponse.body, {
@@ -2560,13 +2450,7 @@ async function authorizePrivilegedRoute(params: {
   if (params.request.method !== "POST") {
     return {
       ok: false,
-      response: new Response(JSON.stringify({ error: "Method Not Allowed" }), {
-        status: 405,
-        headers: {
-          "Content-Type": "application/json",
-          ...corsHeaders(params.origin),
-        },
-      }),
+      response: corsJson(params.origin, 405, { error: "Method Not Allowed" }),
     };
   }
 
@@ -2579,16 +2463,7 @@ async function authorizePrivilegedRoute(params: {
   if (!signed.ok) {
     return {
       ok: false,
-      response: new Response(
-        JSON.stringify({ error: "Forbidden", reason: signed.reason }),
-        {
-          status: 403,
-          headers: {
-            "Content-Type": "application/json",
-            ...corsHeaders(params.origin),
-          },
-        },
-      ),
+      response: corsJson(params.origin, 403, { error: "Forbidden", reason: signed.reason }),
     };
   }
 
@@ -2611,16 +2486,13 @@ async function authorizePrivilegedRoute(params: {
     const body = await guardRes.text();
     return {
       ok: false,
-      response: new Response(
-        body || JSON.stringify({ error: "Forbidden" }),
-        {
-          status: guardRes.status,
-          headers: {
-            "Content-Type": "application/json",
-            ...corsHeaders(params.origin),
-          },
+      response: new Response(body || JSON.stringify({ error: "Forbidden" }), {
+        status: guardRes.status,
+        headers: {
+          "Content-Type": "application/json",
+          ...corsHeaders(params.origin),
         },
-      ),
+      }),
     };
   }
 
@@ -2633,24 +2505,12 @@ async function handleStripeWebhook(params: {
   origin: string | null;
 }): Promise<Response> {
   if (params.request.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method Not Allowed" }), {
-      status: 405,
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders(params.origin),
-      },
-    });
+    return withDefaultSecurityHeaders(privateApiJson(params.origin, 405, { error: "Method Not Allowed" }, null, { Allow: "POST" }));
   }
 
   const signature = params.request.headers.get("Stripe-Signature");
   if (!signature) {
-    return new Response(JSON.stringify({ error: "Stripe-Signature header is required." }), {
-      status: 400,
-      headers: {
-        "Content-Type": "application/json",
-        ...corsHeaders(params.origin),
-      },
-    });
+    return withDefaultSecurityHeaders(privateApiJson(params.origin, 400, { error: "Stripe-Signature header is required." }, null, { Vary: "Origin" }));
   }
 
   const rawBody = await params.request.text();
@@ -2668,9 +2528,7 @@ async function handleStripeWebhook(params: {
       redirect: "manual",
       signal: AbortSignal.timeout(30_000),
     });
-    const backendResponse = usesBackendServiceBinding(params.env)
-      ? await params.env.INTEL_BACKEND.fetch(backendRequest)
-      : await fetch(backendRequest);
+    const backendResponse = await resolveBackendFetch(params.env)(backendRequest);
     const response = new Response(backendResponse.body, {
       status: backendResponse.status,
       headers: backendResponse.headers,
@@ -2678,24 +2536,12 @@ async function handleStripeWebhook(params: {
     for (const [k, v] of Object.entries(corsHeaders(params.origin))) {
       response.headers.set(k, v);
     }
-    response.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
-    response.headers.set("CDN-Cache-Control", "no-store");
-    response.headers.set("Vary", mergeVary(response.headers.get("Vary"), ["Origin"]));
-    return response;
+    return withSensitiveNoStore(response, ["Origin"]);
   } catch (error) {
-    return new Response(
-      JSON.stringify({
-        error: "Backend webhook forwarding failed",
-        detail: error instanceof Error ? error.message : "unknown_error",
-      }),
-      {
-        status: 502,
-        headers: {
-          "Content-Type": "application/json",
-          ...corsHeaders(params.origin),
-        },
-      },
-    );
+    return corsJson(params.origin, 502, {
+      error: "Backend webhook forwarding failed",
+      detail: error instanceof Error ? error.message : "unknown_error",
+    });
   }
 }
 
@@ -5099,7 +4945,7 @@ export default {
         userId,
         userLogin: user.login,
       });
-      if ((entitlement.role ?? "").toLowerCase() !== "owner") {
+      if (!isOwnerRole(entitlement.role)) {
         return new Response(
           JSON.stringify({ error: "Not Found" }),
           {
@@ -5241,13 +5087,7 @@ export default {
       path.startsWith("/api/") &&
       !isTrustedRequestOrigin({ request })
     ) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden" }),
-        {
-          status: 403,
-          headers: privateApiHeaders(origin),
-        },
-      );
+      return privateApiJson(origin, 403, { error: "Forbidden" });
     }
 
     const sessionUser = user as VerifiedSession;
@@ -5309,47 +5149,22 @@ export default {
 
     if (path === "/api/admin/crm/overview") {
       if (request.method !== "GET") {
-        const headers = privateApiHeaders(origin);
-        headers.set("Allow", "GET");
-        return new Response(
-          JSON.stringify({ error: "Method Not Allowed" }),
-          {
-            status: 405,
-            headers,
-          },
-        );
+        return privateApiJson(origin, 405, { error: "Method Not Allowed" }, null, { Allow: "GET" });
       }
 
-      const userId = resolveUserId(sessionUser);
-      const entitlement = await fetchFeedEntitlement({
-        env,
-        userId,
-        userLogin: sessionUser.login,
-      });
-      if ((entitlement.role ?? "").toLowerCase() !== "owner") {
-        return new Response(
-          JSON.stringify({ error: "Forbidden" }),
-          {
-            status: 403,
-            headers: privateApiHeaders(origin),
-          },
-        );
+      const ownerGate = await requireOwnerEntitlement({ env, user: sessionUser, origin });
+      if (!ownerGate.ok) {
+        return ownerGate.response;
       }
 
       let directory: Awaited<ReturnType<typeof loadCrmDirectorySnapshot>>;
       try {
         directory = await loadCrmDirectorySnapshot(env);
       } catch (error) {
-        return new Response(
-          JSON.stringify({
-            error: "Unable to load CRM directory snapshot.",
-            detail: error instanceof Error ? error.message : "unknown_error",
-          }),
-          {
-            status: 500,
-            headers: privateApiHeaders(origin),
-          },
-        );
+        return privateApiJson(origin, 500, {
+          error: "Unable to load CRM directory snapshot.",
+          detail: error instanceof Error ? error.message : "unknown_error",
+        });
       }
 
       const backendSummary = await fetchOwnerCrmBackendSummary({
@@ -5357,89 +5172,32 @@ export default {
         user: sessionUser,
       });
       if (!backendSummary.ok) {
-        return new Response(
-          JSON.stringify({
-            error: backendSummary.error,
-          }),
-          {
-            status: backendSummary.status,
-            headers: privateApiHeaders(origin),
-          },
-        );
+        return privateApiJson(origin, backendSummary.status, { error: backendSummary.error });
       }
 
-      const billing = isRecord(backendSummary.payload.billing)
-        ? backendSummary.payload.billing
-        : {};
-      const trackedUsers = Math.max(
-        0,
-        Math.floor(normalizeNumber((billing as Record<string, unknown>).trackedUsers) ?? 0),
-      );
-      const qualitySummary = summarizeCrmDataQuality({
-        users: directory.users,
-        totalUsers: directory.totalUsers,
-        trackedUsers,
-      });
-
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          result: {
-            generatedAtMs: Date.now(),
-            directory: {
-              ...directory,
-              untrackedUsers: qualitySummary.untrackedUsers,
-              orphanTrackedUsers: qualitySummary.orphanTrackedUsers,
-            },
-            dataQuality: qualitySummary,
-            ...backendSummary.payload,
-          },
-        }),
-        {
-          status: 200,
-          headers: privateApiHeaders(origin),
-        },
+      return privateApiJson(
+        origin,
+        200,
+        buildOwnerCrmOverviewPayload({
+          directory,
+          backendSummary: backendSummary.payload,
+        }) as Record<string, unknown>,
       );
     }
 
     if (path === "/api/admin/crm/ai-telemetry") {
       if (request.method !== "GET") {
-        const headers = privateApiHeaders(origin);
-        headers.set("Allow", "GET");
-        return new Response(
-          JSON.stringify({ error: "Method Not Allowed" }),
-          {
-            status: 405,
-            headers,
-          },
-        );
+        return privateApiJson(origin, 405, { error: "Method Not Allowed" }, null, { Allow: "GET" });
       }
 
-      const userId = resolveUserId(sessionUser);
-      const entitlement = await fetchFeedEntitlement({
-        env,
-        userId,
-        userLogin: sessionUser.login,
-      });
-      if ((entitlement.role ?? "").toLowerCase() !== "owner") {
-        return new Response(
-          JSON.stringify({ error: "Forbidden" }),
-          {
-            status: 403,
-            headers: privateApiHeaders(origin),
-          },
-        );
+      const ownerGate = await requireOwnerEntitlement({ env, user: sessionUser, origin });
+      if (!ownerGate.ok) {
+        return ownerGate.response;
       }
 
       const window = normalizeOwnerAiTelemetryWindow(url.searchParams.get("window"));
       if (!window) {
-        return new Response(
-          JSON.stringify({ error: "Invalid AI telemetry window." }),
-          {
-            status: 400,
-            headers: privateApiHeaders(origin),
-          },
-        );
+        return privateApiJson(origin, 400, { error: "Invalid AI telemetry window." });
       }
       const backendTelemetry = await fetchOwnerCrmAiTelemetry({
         env,
@@ -5450,16 +5208,7 @@ export default {
         return buildOwnerCrmAiTelemetryFailureResponse(origin, backendTelemetry);
       }
 
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          result: backendTelemetry.payload,
-        }),
-        {
-          status: 200,
-          headers: privateApiHeaders(origin),
-        },
-      );
+      return privateApiJson(origin, 200, { ok: true, result: backendTelemetry.payload });
     }
 
     if (path === "/api/admin/crm/customer") {
@@ -5496,45 +5245,13 @@ export default {
     }
 
     if (path === "/api/telegram/dedupe-feedback") {
-      const userId = user ? resolveUserId(user) : "";
-      const entitlement = user
-        ? await fetchFeedEntitlement({
-          env,
-          userId,
-          userLogin: user.login,
-        })
-        : defaultFeedEntitlement();
-      if ((entitlement.role ?? "").toLowerCase() !== "owner") {
-        return new Response(
-          JSON.stringify({ error: "Forbidden" }),
-          {
-            status: 403,
-            headers: {
-              "Content-Type": "application/json",
-              "Cache-Control": "private, no-store, no-cache, must-revalidate",
-              "CDN-Cache-Control": "no-store",
-              "Vary": mergeVary(null, ["Origin", "Cookie", "Authorization"]),
-              ...corsHeaders(origin),
-            },
-          },
-        );
+      const ownerGate = await requireOwnerEntitlement({ env, user, origin });
+      if (!ownerGate.ok) {
+        return ownerGate.response;
       }
 
       if (request.method !== "GET" && request.method !== "POST") {
-        return new Response(
-          JSON.stringify({ error: "Method Not Allowed" }),
-          {
-            status: 405,
-            headers: {
-              "Content-Type": "application/json",
-              "Allow": "GET, POST",
-              "Cache-Control": "private, no-store, no-cache, must-revalidate",
-              "CDN-Cache-Control": "no-store",
-              "Vary": mergeVary(null, ["Origin", "Cookie", "Authorization"]),
-              ...corsHeaders(origin),
-            },
-          },
-        );
+        return privateApiJson(origin, 405, { error: "Method Not Allowed" }, null, { Allow: "GET, POST" });
       }
 
       let body: string | undefined;
@@ -5556,13 +5273,10 @@ export default {
         status: doRes.status,
         headers: doRes.headers,
       });
-      response.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
-      response.headers.set("CDN-Cache-Control", "no-store");
-      response.headers.set("Vary", mergeVary(response.headers.get("Vary"), ["Origin", "Cookie", "Authorization"]));
       for (const [k, v] of Object.entries(corsHeaders(origin))) {
         response.headers.set(k, v);
       }
-      return response;
+      return withSensitiveNoStore(response);
     }
 
     // ----------------------------------------------------------------
@@ -5629,15 +5343,7 @@ export default {
               state,
             });
           }
-          let entitlement = defaultFeedEntitlement();
-          if (user) {
-            const userId = resolveUserId(user);
-            entitlement = await fetchFeedEntitlement({
-              env,
-              userId,
-              userLogin: user.login,
-            });
-          }
+          const entitlement = await resolveOptionalFeedEntitlement({ env, user });
           const effectiveDelayMinutes = entitlement.entitled
             ? 0
             : Math.max(DEFAULT_NON_SUBSCRIBER_DELAY_MINUTES, entitlement.delayMinutes);
@@ -5679,19 +5385,7 @@ export default {
         }
       }
 
-      return new Response(
-        JSON.stringify({ error: "Telegram state unavailable" }),
-        {
-          status: 503,
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "private, no-store, no-cache, must-revalidate",
-            "CDN-Cache-Control": "no-store",
-            "Vary": mergeVary(null, ["Origin", "Cookie", "Authorization"]),
-            ...corsHeaders(origin),
-          },
-        },
-      );
+      return privateApiJson(origin, 503, { error: "Telegram state unavailable" });
     }
 
     if (path === "/api/telegram/stream") {
@@ -5733,15 +5427,7 @@ export default {
       const isDelayScopedPath =
         path === "/api/intel" || path === "/api/briefings" || path === "/api/air-sea";
       if (isDelayScopedPath) {
-        let entitlement = defaultFeedEntitlement();
-        if (user) {
-          const userId = resolveUserId(user);
-          entitlement = await fetchFeedEntitlement({
-            env,
-            userId,
-            userLogin: user.login,
-          });
-        }
+        const entitlement = await resolveOptionalFeedEntitlement({ env, user });
         const effectiveDelayMinutes = entitlement.entitled
           ? 0
           : Math.max(DEFAULT_NON_SUBSCRIBER_DELAY_MINUTES, entitlement.delayMinutes);
@@ -5781,11 +5467,7 @@ export default {
       for (const [k, v] of Object.entries(corsHeaders(origin))) {
         response.headers.set(k, v);
       }
-      response.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
-      response.headers.set("CDN-Cache-Control", "no-store");
-      response.headers.set("Vary", mergeVary(response.headers.get("Vary"), ["Origin", "Cookie", "Authorization"]));
-
-      return response;
+      return withSensitiveNoStore(response);
     }
 
     if (path.startsWith("/api/intel-dashboard/")) {
@@ -5893,10 +5575,7 @@ export default {
       for (const [k, v] of Object.entries(corsHeaders(origin))) {
         response.headers.set(k, v);
       }
-      response.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
-      response.headers.set("CDN-Cache-Control", "no-store");
-      response.headers.set("Vary", mergeVary(response.headers.get("Vary"), ["Origin", "Cookie", "Authorization"]));
-      return response;
+      return withSensitiveNoStore(response);
     }
 
     if (path.startsWith("/api/")) {

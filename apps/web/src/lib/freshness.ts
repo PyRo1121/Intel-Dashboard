@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from "solid-js";
 import { formatAgeCompactFromMs } from "./utils.ts";
 
 export type FreshnessState = "live" | "delayed" | "stale";
@@ -163,4 +163,35 @@ export function useFreshnessTransitionNotice(
   });
 
   return notice;
+}
+
+export function useFeedFreshness(params: {
+  nowMs: Accessor<number>;
+  latestTimestampMs: Accessor<number>;
+  thresholds: FreshnessThresholds;
+  subject: string;
+  labels?: FreshnessLabels;
+}) {
+  const feedFreshness = createMemo(() =>
+    buildFreshnessStatusAt(
+      params.nowMs(),
+      params.latestTimestampMs(),
+      params.thresholds,
+      params.labels,
+    ),
+  );
+  const latestFeedAgeMs = createMemo(() => {
+    const ts = params.latestTimestampMs();
+    if (!Number.isFinite(ts) || ts <= 0) return null;
+    return Math.max(0, params.nowMs() - ts);
+  });
+  const latestFeedAgeLabel = createMemo(() => formatAgeCompactFromMs(latestFeedAgeMs()));
+  const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, params.subject);
+
+  return {
+    feedFreshness,
+    latestFeedAgeMs,
+    latestFeedAgeLabel,
+    freshnessNotice,
+  };
 }

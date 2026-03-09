@@ -3,37 +3,23 @@ import { Title, Meta, Link } from "@solidjs/meta";
 import { TriangleAlert, Radio, Shield, ExternalLink, ArrowUpRight, Activity } from "lucide-solid";
 import StatCard from "~/components/ui/StatCard";
 import SeverityBadge from "~/components/ui/SeverityBadge";
+import { fetchIntelFeed } from "~/lib/intel-feed";
 import {
-  buildFreshnessStatusAt,
   freshnessBannerTone,
   freshnessPillTone,
   freshnessTooltip,
   maxIsoTimestamp,
-  useFreshnessTransitionNotice,
+  useFeedFreshness,
 } from "~/lib/freshness";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import type { IntelItem } from "~/lib/types";
-import { formatAgeCompactFromMs, formatRelativeTimeAt } from "~/lib/utils";
+import { formatRelativeTimeAt } from "~/lib/utils";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { FREE_FEED_DELAY_MINUTES, PREMIUM_PRICE_USD, TRIAL_DAYS } from "@intel-dashboard/shared/access-offers.ts";
 import { OVERVIEW_DESCRIPTION, OVERVIEW_OG_DESCRIPTION, OVERVIEW_TITLE, OVERVIEW_TWITTER_DESCRIPTION } from "@intel-dashboard/shared/route-meta.ts";
 
-async function loadIntel(): Promise<IntelItem[]> {
-  try {
-    const res = await fetch("/api/intel", {
-      signal: AbortSignal.timeout(30_000),
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
-}
-
 export default function OverviewPage(props: { canonicalHref: string }) {
-  const [intel, { refetch }] = createResource(loadIntel, { initialValue: [] as IntelItem[] });
+  const [intel, { refetch }] = createResource(fetchIntelFeed, { initialValue: [] as IntelItem[] });
   const feedThresholds = { liveMaxMinutes: 20, delayedMaxMinutes: 90 } as const;
   const nowMs = useWallClock(1000);
 
@@ -46,14 +32,12 @@ export default function OverviewPage(props: { canonicalHref: string }) {
   const criticalCount = () => intelItems().filter((i) => i.severity === "critical").length;
   const highCount = () => intelItems().filter((i) => i.severity === "high").length;
   const latestIntelTs = createMemo(() => maxIsoTimestamp(intelItems().map((item) => item.timestamp)));
-  const feedFreshness = createMemo(() => buildFreshnessStatusAt(nowMs(), latestIntelTs(), feedThresholds));
-  const latestFeedAgeMs = createMemo(() => {
-    const ts = latestIntelTs();
-    if (!ts) return null;
-    return Math.max(0, nowMs() - ts);
+  const freshness = useFeedFreshness({
+    nowMs,
+    latestTimestampMs: latestIntelTs,
+    thresholds: feedThresholds,
+    subject: "Intel feed",
   });
-  const latestFeedAgeLabel = createMemo(() => formatAgeCompactFromMs(latestFeedAgeMs()));
-  const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "Intel feed");
 
   return (
     <>
@@ -77,9 +61,9 @@ export default function OverviewPage(props: { canonicalHref: string }) {
             <p class="mt-1 text-xs text-zinc-600">{TRIAL_DAYS}-day trial, then ${PREMIUM_PRICE_USD}/month. Free users receive delayed and capped feeds (up to {FREE_FEED_DELAY_MINUTES} minutes).</p>
           </div>
           <div class="flex items-center gap-2">
-            <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
-              Feed: {feedFreshness().label}
-              <Show when={latestFeedAgeMs() !== null}> ({latestFeedAgeLabel()})</Show>
+            <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+              Feed: {freshness.feedFreshness().label}
+              <Show when={freshness.latestFeedAgeMs() !== null}> ({freshness.latestFeedAgeLabel()})</Show>
             </span>
             <a href="/osint" class="intel-btn intel-btn-ghost !min-h-9 !px-3 !py-1 text-[12px]">
               Full feed <ArrowUpRight size={14} />
@@ -87,7 +71,7 @@ export default function OverviewPage(props: { canonicalHref: string }) {
           </div>
         </header>
 
-        <Show when={freshnessNotice()}>
+        <Show when={freshness.freshnessNotice()}>
           {(notice) => (
             <output
               class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}

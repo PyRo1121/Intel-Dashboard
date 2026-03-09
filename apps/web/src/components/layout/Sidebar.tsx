@@ -28,7 +28,7 @@ import {
 import { useAuth } from "~/lib/auth";
 import { DASHBOARD_HOME_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
 import { formatDelayMinutesShortLabel, UPGRADE_INSTANT_FEED_LABEL } from "@intel-dashboard/shared/access-offers.ts";
-import { entitlementTierTone, formatEntitlementTier, isEntitledRole } from "@intel-dashboard/shared/entitlement.ts";
+import { resolveEntitlementRole, resolveEntitlementView } from "@intel-dashboard/shared/entitlement.ts";
 import { SITE_NAME, SITE_OPERATIONS_LABEL } from "@intel-dashboard/shared/site-config.ts";
 
 // ============================================================================
@@ -108,7 +108,7 @@ export default function Sidebar() {
     return location.pathname.startsWith(href);
   };
 
-  const role = () => (auth.user()?.entitlement?.role || auth.user()?.entitlement?.tier || "free").toLowerCase();
+  const role = () => resolveEntitlementRole(auth.user()?.entitlement?.role, auth.user()?.entitlement?.tier);
   const navItems = () => (role() === "owner" ? [...mainNavItems, ownerNavItem] : mainNavItems);
 
   const renderNavItem = (item: NavItem, index: number, opts?: { collapsed?: boolean }) => {
@@ -268,16 +268,12 @@ export default function Sidebar() {
                       };
                       const avatarLetter = () => displayName().slice(0, 1).toUpperCase();
                       const entitlement = () => currentUser().entitlement;
-                      const role = () => (entitlement()?.role || entitlement()?.tier || "free").toLowerCase();
-                      const entitled = () => entitlement()?.entitled === true || isEntitledRole(role());
-                      const delayMinutes = () => {
-                        const raw = entitlement()?.delayMinutes;
-                        return typeof raw === "number" && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
-                      };
-                      const planLabel = () => {
-                        return formatEntitlementTier(entitlement()?.role || entitlement()?.tier);
-                      };
-                      const planTone = () => entitlementTierTone(entitlement()?.role || entitlement()?.tier);
+                      const entitlementView = () => resolveEntitlementView(entitlement());
+                      const role = () => entitlementView().role;
+                      const entitled = () => entitlementView().entitled;
+                      const delayMinutes = () => entitlementView().delayMinutes;
+                      const planLabel = () => entitlementView().planLabel;
+                      const planTone = () => entitlementView().planTone;
 
                       return (
                         <>
@@ -353,7 +349,7 @@ export default function Sidebar() {
         {(() => {
           try {
             const current = auth.user();
-            const role = (current?.entitlement?.role || current?.entitlement?.tier || "free").toLowerCase();
+            const role = resolveEntitlementRole(current?.entitlement?.role, current?.entitlement?.tier);
             const entitled = current?.entitlement?.entitled === true || role === "owner" || role === "subscriber";
             if (compact() || entitled) return null;
             return (

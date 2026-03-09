@@ -8,8 +8,17 @@ import {
   freshnessTooltip,
   useFreshnessTransitionNotice,
 } from "~/lib/freshness";
+import { fetchClientJson, fetchPublicJson } from "~/lib/client-json";
+import { formatEventLabel } from "~/lib/event-label";
+import {
+  freshnessBadgeClass,
+  freshnessStateForAge,
+  trustBadgeClass,
+  trustTierForSignals,
+  verificationLabelForSignals,
+} from "~/lib/telegram-entry-display";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
-import { formatAgeCompactFromMs } from "~/lib/utils";
+import { formatAgeCompactFromMs, formatRelativeTimeAt, parseTimestampMs as parseTs } from "~/lib/utils";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { TELEGRAM_DESCRIPTION, TELEGRAM_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
@@ -229,31 +238,6 @@ function getCategoryStyle(category: string) {
   return CATEGORY_STYLES[category] ?? DEFAULT_STYLE;
 }
 
-function parseTs(input: string) {
-  const ts = new Date(input).getTime();
-  return Number.isFinite(ts) ? ts : 0;
-}
-
-function formatRelativeTimeLive(input: string, nowMs: number): string {
-  const ts = parseTs(input);
-  if (!ts) return "unknown";
-  const delta = Math.max(0, nowMs - ts);
-  const totalSeconds = Math.floor(delta / 1000);
-  if (totalSeconds < 60) return `${totalSeconds}s ago`;
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes < 60) return `${minutes}m ${String(seconds).padStart(2, "0")}s ago`;
-
-  const hours = Math.floor(minutes / 60);
-  const remMinutes = minutes % 60;
-  if (hours < 24) return `${hours}h ${String(remMinutes).padStart(2, "0")}m ago`;
-
-  const days = Math.floor(hours / 24);
-  const remHours = hours % 24;
-  return `${days}d ${String(remHours).padStart(2, "0")}h ago`;
-}
-
 function messageText(msg: TelegramMessage) {
   return (msg.text_en || msg.text_original || "").trim();
 }
@@ -287,48 +271,6 @@ function isVerifiedEntry(entry: TelegramEntry) {
     entry.message.media.length > 0 ||
     hasUsefulImageText(entry.message.image_text_en)
   );
-}
-
-function freshnessStateForEntry(entry: TelegramEntry, nowMs: number): "hot" | "warm" | "cool" | "cold" {
-  const ageMs = Math.max(0, nowMs - parseTs(entry.message.datetime));
-  if (ageMs <= 10 * 60 * 1000) return "hot";
-  if (ageMs <= 60 * 60 * 1000) return "warm";
-  if (ageMs <= 6 * 60 * 60 * 1000) return "cool";
-  return "cold";
-}
-
-function freshnessBadgeClass(state: "hot" | "warm" | "cool" | "cold") {
-  if (state === "hot") return "border-rose-400/30 bg-rose-500/10 text-rose-200";
-  if (state === "warm") return "border-amber-400/30 bg-amber-500/10 text-amber-200";
-  if (state === "cool") return "border-sky-400/30 bg-sky-500/10 text-sky-200";
-  return "border-zinc-500/20 bg-zinc-500/10 text-zinc-300";
-}
-
-function trustTierForEntry(entry: TelegramEntry): "High" | "Medium" | "Watch" {
-  if (entry.dedupe?.trustTier === "core") return "High";
-  if (entry.dedupe?.trustTier === "verified") return "Medium";
-  if (entry.dedupe?.trustTier === "watch") return "Watch";
-  const sourceCount = entry.dedupe?.sourceCount ?? 1;
-  if (sourceCount >= 3) return "Medium";
-  return "Watch";
-}
-
-function trustBadgeClass(tier: "High" | "Medium" | "Watch") {
-  if (tier === "High") return "border-emerald-400/30 bg-emerald-500/10 text-emerald-200";
-  if (tier === "Medium") return "border-blue-400/30 bg-blue-500/10 text-blue-200";
-  return "border-zinc-500/20 bg-zinc-500/10 text-zinc-300";
-}
-
-function verificationLabel(entry: TelegramEntry) {
-  if (entry.dedupe?.verificationState === "verified") return "Cross-confirmed";
-  if (entry.dedupe?.verificationState === "corroborated") return "Multi-source";
-  if (entry.dedupe?.verificationState === "single_source") return "Single-source";
-  const sourceCount = entry.dedupe?.sourceCount ?? 1;
-  if (sourceCount >= 3) return "Cross-confirmed";
-  if (sourceCount >= 2) return "Multi-source";
-  if (entry.message.media.length > 0) return "Media-backed";
-  if (hasUsefulImageText(entry.message.image_text_en)) return "OCR-backed";
-  return "Single-source";
 }
 
 function rankReasonsForEntry(entry: TelegramEntry, nowMs: number): string[] {
@@ -834,8 +776,11 @@ function MessageCard(props: {
     setActivePhotoIndex(idx + 1);
   };
   const style = () => getCategoryStyle(props.entry.category);
-  const trustTier = () => trustTierForEntry(props.entry);
-  const freshnessState = () => freshnessStateForEntry(props.entry, props.nowMs);
+  const trustTier = () => trustTierForSignals({
+    trustTier: props.entry.dedupe?.trustTier,
+    sourceCount: props.entry.dedupe?.sourceCount,
+  });
+  const freshnessState = () => freshnessStateForAge(Math.max(0, props.nowMs - parseTs(props.entry.message.datetime)));
   const rankReasons = () => rankReasonsForEntry(props.entry, props.nowMs);
   const sourceLabels = () => props.entry.dedupe?.sourceLabels ?? [];
   const isFocused = () => props.focusKey === entryKey(props.entry);
@@ -879,7 +824,7 @@ function MessageCard(props: {
           <header class="telegram-tweet-header">
             <div class="telegram-tweet-author">
               <p class="telegram-tweet-author-name">{channelName()}</p>
-              <span class="telegram-tweet-time">· {formatRelativeTimeLive(props.entry.message.datetime, props.nowMs)}</span>
+              <span class="telegram-tweet-time">· {formatRelativeTimeAt(props.entry.message.datetime, props.nowMs)}</span>
               <Show when={props.showCategory}>
                 <span class={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${style().bg} ${style().border} ${style().text}`}>
                   {props.categoryLabel}
@@ -904,7 +849,12 @@ function MessageCard(props: {
 
           <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
             <span class="inline-flex rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-zinc-300">
-              {verificationLabel(props.entry)}
+              {verificationLabelForSignals({
+                verificationState: props.entry.dedupe?.verificationState,
+                sourceCount: props.entry.dedupe?.sourceCount,
+                hasMedia: props.entry.message.media.length > 0,
+                hasUsefulImageText: hasUsefulImageText(props.entry.message.image_text_en),
+              })}
             </span>
             <Show when={entryMediaCount(props.entry) > 0}>
               <span class="inline-flex rounded-full border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-amber-200">
@@ -991,7 +941,7 @@ function MessageCard(props: {
                 </Show>
                 <Show when={props.entry.dedupe?.verificationState}>
                   <span class="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
-                    {props.entry.dedupe?.verificationState?.replaceAll("_", " ")}
+                    {formatEventLabel(props.entry.dedupe?.verificationState)}
                   </span>
                 </Show>
                 <Show when={props.entry.dedupe?.latencyTier}>
@@ -1003,7 +953,7 @@ function MessageCard(props: {
                   <For each={props.entry.dedupe?.domainTags?.slice(0, 6) ?? []}>
                     {(tag) => (
                       <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-zinc-400">
-                        {tag.replaceAll("_", " ")}
+                        {formatEventLabel(tag)}
                       </span>
                     )}
                   </For>
@@ -1142,38 +1092,31 @@ export default function TelegramPage() {
   let lastTimestamp = "";
 
   const refreshDedupeFeedbackStatus = async (): Promise<void> => {
-    try {
-      const res = await fetch("/api/telegram/dedupe-feedback", {
-        signal: AbortSignal.timeout(8_000),
-        cache: "no-store",
-      });
-      if (res.status === 403) {
+    const result = await fetchClientJson<{ count?: unknown }>("/api/telegram/dedupe-feedback", {
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!result.ok) {
+      if (result.status === 403) {
         setOwnerDedupeEnabled(false);
         setDedupeFeedbackCount(0);
-        return;
       }
-      if (!res.ok) {
-        return;
-      }
-      const payload = await res.json() as { count?: unknown };
-      setOwnerDedupeEnabled(true);
-      const count = typeof payload.count === "number" && Number.isFinite(payload.count) ? Math.max(0, Math.floor(payload.count)) : 0;
-      setDedupeFeedbackCount(count);
-    } catch {
       // Best-effort owner capability detection.
+      return;
     }
+    setOwnerDedupeEnabled(true);
+    const count = typeof result.data.count === "number" && Number.isFinite(result.data.count) ? Math.max(0, Math.floor(result.data.count)) : 0;
+    setDedupeFeedbackCount(count);
   };
 
   const refreshTelegram = async (): Promise<boolean> => {
     if (refreshing()) return false;
     setRefreshing(true);
     try {
-      const res = await fetch("/api/telegram", {
+      const result = await fetchPublicJson<TelegramData>("/api/telegram", {
         signal: AbortSignal.timeout(15_000),
-        cache: "no-store",
       });
-      if (!res.ok) return false;
-      const next = (await res.json()) as TelegramData;
+      if (!result.ok) return false;
+      const next = result.data;
 
       const prev = data();
       if (prev) {
@@ -1532,18 +1475,16 @@ export default function TelegramPage() {
     setAdminBusy(true);
     setAdminStatus("");
     try {
-      const res = await fetch("/api/telegram/dedupe-feedback", {
+      const result = await fetchClientJson<unknown>("/api/telegram/dedupe-feedback", {
         method: "POST",
-        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: args.action,
           signatures: args.signatures,
           ...(args.targetCluster ? { targetCluster: args.targetCluster } : {}),
         }),
       });
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        setAdminStatus(`Dedupe action failed (${res.status}) ${body.slice(0, 120)}`);
+      if (!result.ok) {
+        setAdminStatus(`Dedupe action failed (${result.status ?? "?"}) ${result.error.slice(0, 120)}`);
         return;
       }
       setAdminStatus(`${args.action} applied to ${args.signatures.length} signatures`);

@@ -1,17 +1,17 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
+import { fetchIntelFeed } from "~/lib/intel-feed";
 import { REGION_LABELS, type IntelRegion, type IntelItem } from "~/lib/types";
 import {
-  buildFreshnessStatusAt,
   freshnessBannerTone,
   freshnessPillTone,
   freshnessTooltip,
   maxIsoTimestamp,
-  useFreshnessTransitionNotice,
+  useFeedFreshness,
 } from "~/lib/freshness";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import SeverityBadge from "~/components/ui/SeverityBadge";
-import { formatAgeCompactFromMs, formatRelativeTimeAt } from "~/lib/utils";
+import { formatRelativeTimeAt } from "~/lib/utils";
 import { Globe, X as XIcon, MapPin } from "lucide-solid";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { MAP_DESCRIPTION, MAP_TITLE } from "@intel-dashboard/shared/route-meta.ts";
@@ -78,15 +78,7 @@ function threatLevel(summary: RegionSummary): { label: string; color: string; ma
 /* ── Data loader ───────────────────────────────────────────────────── */
 
 async function loadIntel(): Promise<IntelItem[]> {
-  try {
-    const res = await fetch("/api/intel", {
-      signal: AbortSignal.timeout(30_000),
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
-  } catch { return []; }
+  return fetchIntelFeed();
 }
 
 function buildRegions(items: IntelItem[]): RegionSummary[] {
@@ -134,14 +126,12 @@ export default function ThreatMap() {
   const totalCritical = () => regions().reduce((s, r) => s + r.critical, 0);
   const totalHigh = () => regions().reduce((s, r) => s + r.high, 0);
   const latestIntelTs = createMemo(() => maxIsoTimestamp(intelItems().map((item) => item.timestamp)));
-  const feedFreshness = createMemo(() => buildFreshnessStatusAt(nowMs(), latestIntelTs(), feedThresholds));
-  const latestFeedAgeMs = createMemo(() => {
-    const ts = latestIntelTs();
-    if (!ts) return null;
-    return Math.max(0, nowMs() - ts);
+  const freshness = useFeedFreshness({
+    nowMs,
+    latestTimestampMs: latestIntelTs,
+    thresholds: feedThresholds,
+    subject: "Threat map feed",
   });
-  const latestFeedAgeLabel = createMemo(() => formatAgeCompactFromMs(latestFeedAgeMs()));
-  const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "Threat map feed");
 
   const selectedSummary = () => {
     const sel = selectedRegion();
@@ -301,9 +291,9 @@ export default function ThreatMap() {
               <div class="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.5)] animate-pulse" />
               Live Map
             </div>
-            <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
-              {feedFreshness().label}
-              <Show when={latestFeedAgeMs() !== null}> ({latestFeedAgeLabel()})</Show>
+            <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+              {freshness.feedFreshness().label}
+              <Show when={freshness.latestFeedAgeMs() !== null}> ({freshness.latestFeedAgeLabel()})</Show>
             </span>
           </div>
           <h1 class="intel-heading">Threat Map</h1>
@@ -333,7 +323,7 @@ export default function ThreatMap() {
       </header>
 
       {/* Freshness notice */}
-      <Show when={freshnessNotice()}>
+      <Show when={freshness.freshnessNotice()}>
         {(notice) => (
           <section
             class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}

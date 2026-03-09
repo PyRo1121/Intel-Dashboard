@@ -27,11 +27,15 @@ test("reconcileTelegramData reuses identical prior messages and preserves change
     views: "1.3K",
   };
 
+  const nextSharedCopy = {
+    ...sharedMessage,
+  };
+
   const next = {
     channels: [
       {
         category: "ru_milblog",
-        messages: [sharedMessage, updatedMessage],
+        messages: [nextSharedCopy, updatedMessage],
       },
     ],
   };

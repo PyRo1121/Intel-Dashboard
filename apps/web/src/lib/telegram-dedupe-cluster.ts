@@ -51,6 +51,9 @@ export function scoreTelegramDedupeCluster(args: {
   mediaWindowMs: number;
   textWindowMs: number;
 }): number {
+  if (!Number.isFinite(args.msgTs) || !Number.isFinite(args.cluster.latestTs)) {
+    return 0;
+  }
   const tsDelta = Math.abs(args.msgTs - args.cluster.latestTs);
 
   if (
@@ -96,6 +99,7 @@ export function buildTelegramDedupeClusterKey(
   mediaSignature: string,
 ): string {
   const seed = canonicalText || mediaSignature || getTelegramLegacyEntryKey(entry);
-  const bucket = Math.floor((msgTs || Date.now()) / (30 * 60 * 1000));
+  const bucketSeed = Number.isFinite(msgTs) ? msgTs : 0;
+  const bucket = Math.floor(bucketSeed / (30 * 60 * 1000));
   return `cluster_${bucket}_${fastHash(seed.slice(0, 400))}`;
 }

@@ -9098,10 +9098,22 @@ async function recoverStaleAiBatches(args: {
           continue;
         }
 
+        const replayableState =
+          state.status === "running"
+            ? {
+                ...state,
+                status: "queued" as const,
+                updatedAtMs: args.nowMs,
+              }
+            : state;
+        if (replayableState !== state) {
+          await saveAiBatchState(args.env, replayableState);
+        }
+
         try {
           await processAiBatchRunWithoutQueueRecovery({
             env: args.env,
-            batchId: state.id,
+            batchId: replayableState.id,
           });
         } catch {
           // Failure state is persisted in processAiBatchRunWithoutQueueRecovery.

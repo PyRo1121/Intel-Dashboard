@@ -4377,6 +4377,47 @@ describe("intel-dashboard backend worker", () => {
     expect(kv.data.has("intel-dashboard:ai-batch:pending:batch-stale")).toBe(false);
   });
 
+  it("replays stale internal running AI batches during scheduled recovery without a queue", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const kv = createKvMapBinding({
+      "intel-dashboard:ai-batch:state:batch-running": {
+        id: "batch-running",
+        status: "running",
+        createdAtMs: 10,
+        updatedAtMs: 10,
+        provider: "internal",
+        jobs: [
+          {
+            type: "dedupe",
+            payload: { title: "One", url: "https://example.com/one" },
+          },
+        ],
+        maxConnections: 10,
+        pollAttempts: 0,
+      },
+      "intel-dashboard:ai-batch:pending:batch-running": {
+        id: "batch-running",
+        updatedAtMs: 10,
+        status: "running",
+      },
+    });
+
+    await worker.scheduled({} as ScheduledController, {
+      USAGE_KV: kv.binding,
+      AI_BATCH_PROVIDER: "internal",
+      AI_BATCH_POLL_DELAY_SECONDS: "60",
+      NEWS_RSS_INGEST_ENABLED: "false",
+      USAGE_CACHE_WARM_ENABLED: "false",
+    });
+
+    const persisted = kv.data.get("intel-dashboard:ai-batch:state:batch-running");
+    expect(persisted).toBeTruthy();
+    const decoded = persisted ? JSON.parse(persisted) : null;
+    expect(decoded?.status).toBe("completed");
+    expect(decoded?.results).toHaveLength(1);
+    expect(kv.data.has("intel-dashboard:ai-batch:pending:batch-running")).toBe(false);
+  });
+
   it("skips full state loads for fresh pending AI batches during recovery", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1_000_000);
     const kv = createKvMapBinding({

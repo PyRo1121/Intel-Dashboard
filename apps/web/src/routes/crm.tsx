@@ -3,7 +3,7 @@ import { For, Show, createMemo, createResource, createSignal } from "solid-js";
 import { computeAiCacheHitRatePercent } from "~/lib/ai-telemetry";
 import { useAuth } from "~/lib/auth";
 import { isAuthUserOwner, resolveAuthUserRole } from "~/lib/auth-user";
-import { fetchClientJson } from "~/lib/client-json";
+import { fetchCrmAiTelemetry, fetchCrmOverview, postCrmAction } from "~/lib/crm-client";
 import { getCrmCustomerCacheSourceLabel } from "~/lib/crm-customer-cache";
 import { formatEventLabel } from "~/lib/event-label";
 import { formatSubscriptionStatus } from "@intel-dashboard/shared/entitlement.ts";
@@ -267,54 +267,16 @@ type AiTelemetryPayload = {
   };
 };
 
-async function fetchCrmOverview(): Promise<CrmPayload> {
-  const result = await fetchClientJson<CrmPayload>("/api/admin/crm/overview", {
-    method: "GET",
-  });
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: result.error,
-    };
-  }
-  return result.data;
-}
-
-async function postCrmAction(path: string, payload: Record<string, unknown>): Promise<CrmCustomerOpsPayload> {
-  const result = await fetchClientJson<CrmCustomerOpsPayload>(path, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: result.error,
-    };
-  }
-  return result.data;
-}
-
-async function fetchAiTelemetry(window: string): Promise<AiTelemetryPayload> {
-  const result = await fetchClientJson<AiTelemetryPayload>(`/api/admin/crm/ai-telemetry?window=${encodeURIComponent(window)}`, {
-    method: "GET",
-  });
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: result.error,
-    };
-  }
-  return result.data;
-}
-
 export default function CrmRoute() {
   const auth = useAuth();
-  const role = () => resolveAuthUserRole(auth.user());
   const isOwner = () => isAuthUserOwner(auth.user());
-  const [crm, { refetch }] = createResource(fetchCrmOverview);
+  const [crm, { refetch }] = createResource(() => fetchCrmOverview<CrmPayload>());
   const [aiWindow, setAiWindow] = createSignal<"15m" | "1h" | "24h" | "7d" | "30d">("1h");
   const aiTelemetrySource = createMemo(() => (isOwner() ? aiWindow() : undefined));
-  const [aiTelemetry, { refetch: refetchAiTelemetry }] = createResource(aiTelemetrySource, fetchAiTelemetry);
+  const [aiTelemetry, { refetch: refetchAiTelemetry }] = createResource(
+    aiTelemetrySource,
+    (window) => fetchCrmAiTelemetry<AiTelemetryPayload>(window),
+  );
   const [searchTerm, setSearchTerm] = createSignal("");
   const [statusFilter, setStatusFilter] = createSignal<"all" | "active" | "trialing" | "canceled" | "expired" | "none">("all");
   const [selectedUserId, setSelectedUserId] = createSignal("");
@@ -350,7 +312,7 @@ export default function CrmRoute() {
     setOpsError("");
     setOpsNotice("");
     setOpsBusy(true);
-    const payload = await postCrmAction("/api/admin/crm/customer", { targetUserId, ...(refresh ? { refresh: true } : {}) });
+    const payload = await postCrmAction<CrmCustomerOpsPayload>("/api/admin/crm/customer", { targetUserId, ...(refresh ? { refresh: true } : {}) });
     if (payload.ok === false) {
       setOpsError(payload.error || "Unable to load Stripe customer details.");
       setSelectedCustomerOps(null);
@@ -370,7 +332,7 @@ export default function CrmRoute() {
     setOpsBusy(true);
     setOpsError("");
     setOpsNotice("");
-    const payload = await postCrmAction("/api/admin/crm/cancel-subscription", {
+    const payload = await postCrmAction<CrmCustomerOpsPayload>("/api/admin/crm/cancel-subscription", {
       targetUserId,
       atPeriodEnd,
     });
@@ -401,7 +363,7 @@ export default function CrmRoute() {
     setOpsBusy(true);
     setOpsError("");
     setOpsNotice("");
-    const payload = await postCrmAction("/api/admin/crm/refund", {
+    const payload = await postCrmAction<CrmCustomerOpsPayload>("/api/admin/crm/refund", {
       targetUserId,
       ...(chargeId ? { chargeId } : {}),
       ...(hasAmount ? { amountUsd: parsedAmount } : {}),

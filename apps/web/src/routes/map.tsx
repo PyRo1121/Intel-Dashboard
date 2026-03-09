@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
 import { fetchIntelFeed } from "~/lib/intel-feed";
+import { readLatestArray } from "~/lib/resource-latest";
 import { REGION_LABELS, type IntelRegion, type IntelItem } from "~/lib/types";
 import {
   freshnessBannerTone,
@@ -11,7 +12,7 @@ import {
 } from "~/lib/freshness";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import SeverityBadge from "~/components/ui/SeverityBadge";
-import { formatRelativeTimeAt } from "~/lib/utils";
+import { formatRelativeTimeAt, isInitialResourceLoading } from "~/lib/utils";
 import { Globe, X as XIcon, MapPin } from "lucide-solid";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { MAP_DESCRIPTION, MAP_TITLE } from "@intel-dashboard/shared/route-meta.ts";
@@ -118,8 +119,8 @@ export default function ThreatMap() {
 
   useLiveRefresh(() => { void refetch(); }, 45_000, { runImmediately: true });
 
-  const intelItems = () => intel.latest ?? intel() ?? [];
-  const loadingInitial = () => intel.state === "refreshing" && intelItems().length === 0;
+  const intelItems = () => readLatestArray(intel.latest, intel());
+  const loadingInitial = () => isInitialResourceLoading(intel.state, intelItems().length);
   const regions = () => buildRegions(intelItems());
   const activeRegions = createMemo(() => regions().filter((r) => r.eventCount > 0));
   const totalEvents = () => intelItems().length;

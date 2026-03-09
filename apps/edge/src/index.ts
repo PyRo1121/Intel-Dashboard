@@ -15,7 +15,7 @@ import { normalizeSafeAuthRedirectLocation } from "./auth-redirect";
 import { buildOwnerCrmAiTelemetryFailureResponse } from "./crm-ai-telemetry-proxy";
 import { postOwnerBackendJson } from "./owner-backend-json";
 import { buildOwnerCrmOverviewPayload, type CrmDirectoryUser } from "./crm-overview";
-import { corsHeaders, corsJson, mergeVary, privateApiHeaders, privateApiJson } from "./private-api-headers";
+import { corsHeaders, corsJson, mergeVary, privateApiHeaders, privateApiJson, privateApiMethodNotAllowed } from "./private-api-headers";
 import { getDashboardAppRoutePrefixes, normalizeSafePostAuthPath } from "./post-auth-path";
 import { createTurnstileGateToken, type TurnstileMode, verifyTurnstileGateToken } from "./turnstile";
 import { DASHBOARD_HOME_PATH, DEFAULT_POST_AUTH_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
@@ -1154,7 +1154,7 @@ async function handleTurnstileVerifyApi(params: {
   origin: string | null;
 }): Promise<Response> {
   if (params.request.method !== "POST") {
-    return privateApiJson(params.origin, 405, { ok: false, error: "method_not_allowed" });
+    return privateApiMethodNotAllowed(params.origin, "POST", { ok: false, error: "method_not_allowed" });
   }
 
   if (!isTrustedRequestOrigin({ request: params.request })) {
@@ -2505,12 +2505,12 @@ async function handleStripeWebhook(params: {
   origin: string | null;
 }): Promise<Response> {
   if (params.request.method !== "POST") {
-    return withDefaultSecurityHeaders(privateApiJson(params.origin, 405, { error: "Method Not Allowed" }, null, { Allow: "POST" }));
+    return withDefaultSecurityHeaders(privateApiMethodNotAllowed(params.origin, "POST"));
   }
 
   const signature = params.request.headers.get("Stripe-Signature");
   if (!signature) {
-    return withDefaultSecurityHeaders(privateApiJson(params.origin, 400, { error: "Stripe-Signature header is required." }, null, { Vary: "Origin" }));
+    return privateApiJson(params.origin, 400, { error: "Stripe-Signature header is required." }, null, { Vary: "Origin" });
   }
 
   const rawBody = await params.request.text();
@@ -5149,7 +5149,7 @@ export default {
 
     if (path === "/api/admin/crm/overview") {
       if (request.method !== "GET") {
-        return privateApiJson(origin, 405, { error: "Method Not Allowed" }, null, { Allow: "GET" });
+        return privateApiMethodNotAllowed(origin, "GET");
       }
 
       const ownerGate = await requireOwnerEntitlement({ env, user: sessionUser, origin });
@@ -5187,7 +5187,7 @@ export default {
 
     if (path === "/api/admin/crm/ai-telemetry") {
       if (request.method !== "GET") {
-        return privateApiJson(origin, 405, { error: "Method Not Allowed" }, null, { Allow: "GET" });
+        return privateApiMethodNotAllowed(origin, "GET");
       }
 
       const ownerGate = await requireOwnerEntitlement({ env, user: sessionUser, origin });
@@ -5251,7 +5251,7 @@ export default {
       }
 
       if (request.method !== "GET" && request.method !== "POST") {
-        return privateApiJson(origin, 405, { error: "Method Not Allowed" }, null, { Allow: "GET, POST" });
+        return privateApiMethodNotAllowed(origin, "GET, POST");
       }
 
       let body: string | undefined;

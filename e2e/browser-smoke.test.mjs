@@ -19,6 +19,7 @@ import {
   trim,
   waitForProtectedLoginOverlay,
   navigateByKeyboard,
+  openPage,
   openDashboardPage,
   openBillingDashboard,
   openCrmDashboard,
@@ -1292,7 +1293,7 @@ test("browser route metadata stays aligned with production titles and canonical 
         : authRuntime;
       const page = await runtime.context.newPage();
       try {
-        const response = await page.goto(`${EDGE_BASE_URL}${expectation.path}`, {
+        const response = await openPage(page, expectation.path, {
           waitUntil: "domcontentloaded",
           timeout: 30_000,
         });
@@ -1321,18 +1322,12 @@ test("browser authenticated sidebar navigation opens the expected routes", async
 
   try {
     const page = await context.newPage();
-    await page.goto(`${EDGE_BASE_URL}/osint`, {
-      waitUntil: "networkidle",
-      timeout: 45_000,
-    });
+    await openDashboardPage(page, "/osint");
 
     await page.getByRole("link", { name: "Intel Dashboard home" }).click();
     await page.waitForURL(/\/overview$/, { timeout: 30_000 });
     assert.match((await page.textContent("body")) || "", /Intel Dashboard Overview/i);
-    await page.goto(`${EDGE_BASE_URL}/osint`, {
-      waitUntil: "networkidle",
-      timeout: 45_000,
-    });
+    await openDashboardPage(page, "/osint");
 
     const checks = [
       { label: "Overview", heading: "Intel Dashboard Overview", path: "/overview" },

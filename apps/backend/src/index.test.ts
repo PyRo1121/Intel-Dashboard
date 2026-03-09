@@ -1945,6 +1945,92 @@ describe("intel-dashboard backend worker", () => {
     });
   });
 
+  it("uses cached internal CRM summary snapshot when fresh", async () => {
+    const now = Date.now();
+    const kv = createKvMapBinding({
+      "intel-dashboard:billing:crm:summary": {
+        generatedAtMs: now,
+        billing: {
+          trackedUsers: 1,
+          statuses: {
+            active: 1,
+            trialing: 0,
+            canceled: 0,
+            expired: 0,
+            none: 0,
+          },
+          mrrActiveUsd: 29,
+          arrActiveUsd: 348,
+          accounts: [
+            {
+              userId: "user-a",
+              status: "active",
+              monthlyPriceUsd: 29,
+              updatedAtMs: now,
+            },
+          ],
+        },
+        telemetry: {
+          events24h: 2,
+          events7d: 2,
+          uniqueUsers24h: 1,
+          uniqueUsers7d: 1,
+          trialStarts7d: 0,
+          paidStarts7d: 1,
+          cancellations7d: 0,
+          cancellations30d: 0,
+          topKinds7d: [{ kind: "subscription_set_active", count: 1 }],
+        },
+        latestEvents: [
+          {
+            id: "evt-paid",
+            userId: "user-a",
+            atMs: now - 2 * 60 * 1000,
+            kind: "subscription_set_active",
+            source: "api",
+          },
+        ],
+      },
+    });
+    kv.binding.list = vi.fn(async () => {
+      throw new Error("crm summary should not enumerate KV when cache is fresh");
+    });
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/admin/crm/summary", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "owner-id" }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+        BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+        USAGE_KV: kv.binding,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      result: {
+        generatedAtMs: now,
+        billing: {
+          trackedUsers: 1,
+          mrrActiveUsd: 29,
+          arrActiveUsd: 348,
+        },
+        telemetry: {
+          events24h: 2,
+          paidStarts7d: 1,
+        },
+      },
+    });
+  });
+
   it("returns owner CRM AI telemetry snapshot", async () => {
     const analyticsFetch = vi.fn(async () =>
       new Response(

@@ -100,6 +100,8 @@ const DEFAULT_CRM_STRIPE_CACHE_TTL_SECONDS = 5 * 60;
 const MAX_CRM_STRIPE_CACHE_TTL_SECONDS = 24 * 60 * 60;
 const DEFAULT_CRM_CUSTOMER_CACHE_TTL_SECONDS = 60;
 const MAX_CRM_CUSTOMER_CACHE_TTL_SECONDS = 15 * 60;
+const DEFAULT_CRM_SUMMARY_CACHE_TTL_SECONDS = 60;
+const MAX_CRM_SUMMARY_CACHE_TTL_SECONDS = 30 * 60;
 const DEFAULT_AI_GATEWAY_TIMEOUT_MS = 3_000;
 const DEFAULT_AI_GATEWAY_MODEL = "cerebras/gpt-oss-120b";
 const DEFAULT_AI_GATEWAY_MEDIA_MODEL = "groq/meta-llama/llama-4-scout-17b-16e-instruct";
@@ -300,6 +302,27 @@ type CrmTelemetrySummary = {
   cancellations7d: number;
   cancellations30d: number;
   topKinds7d: Array<{ kind: string; count: number }>;
+};
+
+type CrmStatusCounts = {
+  active: number;
+  trialing: number;
+  canceled: number;
+  expired: number;
+  none: number;
+};
+
+type CrmSummarySnapshot = {
+  generatedAtMs: number;
+  billing: {
+    trackedUsers: number;
+    statuses: CrmStatusCounts;
+    mrrActiveUsd: number;
+    arrActiveUsd: number;
+    accounts: CrmAccountSnapshot[];
+  };
+  telemetry: CrmTelemetrySummary;
+  latestEvents: BillingActivityEvent[];
 };
 
 type CrmCustomerStripeSnapshot = {
@@ -619,6 +642,7 @@ export type WorkerEnv = {
   FEATURE_GATES_PATH?: string;
   USER_INFO_PATH?: string;
   ADMIN_CRM_SUMMARY_PATH?: string;
+  CRM_SUMMARY_CACHE_TTL_SECONDS?: string;
   ADMIN_CRM_AI_TELEMETRY_PATH?: string;
   ADMIN_CRM_CUSTOMER_PATH?: string;
   ADMIN_CRM_CANCEL_SUBSCRIPTION_PATH?: string;
@@ -968,6 +992,14 @@ function normalizeCrmCustomerCacheTtlSeconds(rawValue: string | undefined): numb
     return DEFAULT_CRM_CUSTOMER_CACHE_TTL_SECONDS;
   }
   return clamp(Math.floor(parsed), 0, MAX_CRM_CUSTOMER_CACHE_TTL_SECONDS);
+}
+
+function normalizeCrmSummaryCacheTtlSeconds(rawValue: string | undefined): number {
+  const parsed = parseFiniteNumber(rawValue);
+  if (parsed === undefined) {
+    return DEFAULT_CRM_SUMMARY_CACHE_TTL_SECONDS;
+  }
+  return clamp(Math.floor(parsed), 0, MAX_CRM_SUMMARY_CACHE_TTL_SECONDS);
 }
 
 function normalizeNewsLimit(rawValue: unknown): number {
@@ -4106,6 +4138,127 @@ async function deleteCachedCrmSummary(env: WorkerEnv): Promise<void> {
   await kv.delete(buildCrmSummaryKey(env));
 }
 
+function createEmptyCrmStatusCounts(): CrmStatusCounts {
+  return {
+    active: 0,
+    trialing: 0,
+    canceled: 0,
+    expired: 0,
+    none: 0,
+  };
+}
+
+function normalizeCrmSummarySnapshot(value: unknown): CrmSummarySnapshot | null {
+  if (!isRecord(value) || !isRecord(value.billing) || !isRecord(value.telemetry) || !Array.isArray(value.latestEvents)) {
+    return null;
+  }
+  const generatedAtMs = parseFiniteNumber(value.generatedAtMs);
+  if (generatedAtMs === undefined) {
+    return null;
+  }
+  const billingStatuses = isRecord(value.billing.statuses) ? value.billing.statuses : {};
+  const statuses = createEmptyCrmStatusCounts();
+  for (const key of Object.keys(statuses) as Array<keyof CrmStatusCounts>) {
+    statuses[key] = Math.max(0, Math.floor(parseFiniteNumber(billingStatuses[key]) ?? 0));
+  }
+  const trackedUsers = parseFiniteNumber(value.billing.trackedUsers);
+  const mrrActiveUsd = parseFiniteNumber(value.billing.mrrActiveUsd);
+  const arrActiveUsd = parseFiniteNumber(value.billing.arrActiveUsd);
+  if (trackedUsers === undefined || mrrActiveUsd === undefined || arrActiveUsd === undefined) {
+    return null;
+  }
+
+  const accountsRaw = Array.isArray(value.billing.accounts) ? value.billing.accounts : [];
+  const accounts = accountsRaw
+    .map((entry) => {
+      if (!isRecord(entry)) return null;
+      const userId = trimString(entry.userId);
+      const status = trimString(entry.status);
+      const monthlyPriceUsd = parseFiniteNumber(entry.monthlyPriceUsd);
+      const updatedAtMs = parseFiniteNumber(entry.updatedAtMs);
+      const trialEndsAtMs = parseFiniteNumber(entry.trialEndsAtMs);
+      if (!userId || !status || monthlyPriceUsd === undefined || updatedAtMs === undefined) {
+        return null;
+      }
+      return {
+        userId,
+        status: normalizeBillingStatus(status) ?? "none",
+        monthlyPriceUsd: Number(monthlyPriceUsd.toFixed(2)),
+        updatedAtMs: Math.max(0, Math.floor(updatedAtMs)),
+        ...(trialEndsAtMs === undefined ? {} : { trialEndsAtMs: Math.max(0, Math.floor(trialEndsAtMs)) }),
+      } satisfies CrmAccountSnapshot;
+    })
+    .filter((entry): entry is CrmAccountSnapshot => entry !== null);
+
+  const telemetry: CrmTelemetrySummary = {
+    events24h: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.events24h) ?? 0)),
+    events7d: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.events7d) ?? 0)),
+    uniqueUsers24h: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.uniqueUsers24h) ?? 0)),
+    uniqueUsers7d: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.uniqueUsers7d) ?? 0)),
+    trialStarts7d: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.trialStarts7d) ?? 0)),
+    paidStarts7d: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.paidStarts7d) ?? 0)),
+    cancellations7d: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.cancellations7d) ?? 0)),
+    cancellations30d: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.cancellations30d) ?? 0)),
+    topKinds7d: Array.isArray(value.telemetry.topKinds7d)
+      ? value.telemetry.topKinds7d
+          .map((entry) => {
+            if (!isRecord(entry)) return null;
+            const kind = trimString(entry.kind);
+            const count = parseFiniteNumber(entry.count);
+            if (!kind || count === undefined) return null;
+            return { kind, count: Math.max(0, Math.floor(count)) };
+          })
+          .filter((entry): entry is { kind: string; count: number } => entry !== null)
+      : [],
+  };
+
+  const latestEvents = value.latestEvents
+    .map((entry) => normalizeBillingActivityEvent(entry, trimString((entry as Record<string, unknown>)?.userId) ?? "unknown"))
+    .filter((entry): entry is BillingActivityEvent => entry !== null)
+    .sort((left, right) => right.atMs - left.atMs)
+    .slice(0, 60);
+
+  return {
+    generatedAtMs: Math.max(0, Math.floor(generatedAtMs)),
+    billing: {
+      trackedUsers: Math.max(0, Math.floor(trackedUsers)),
+      statuses,
+      mrrActiveUsd: Number(mrrActiveUsd.toFixed(2)),
+      arrActiveUsd: Number(arrActiveUsd.toFixed(2)),
+      accounts,
+    },
+    telemetry,
+    latestEvents,
+  };
+}
+
+async function loadCachedCrmSummary(env: WorkerEnv): Promise<CrmSummarySnapshot | null> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.get !== "function") {
+    return null;
+  }
+  const raw = await kv.get(buildCrmSummaryKey(env));
+  if (!raw) {
+    return null;
+  }
+  try {
+    return normalizeCrmSummarySnapshot(JSON.parse(raw) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+async function saveCachedCrmSummary(env: WorkerEnv, summary: CrmSummarySnapshot): Promise<void> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.put !== "function") {
+    return;
+  }
+  const ttlSeconds = normalizeCrmSummaryCacheTtlSeconds(env.CRM_SUMMARY_CACHE_TTL_SECONDS);
+  await kv.put(buildCrmSummaryKey(env), JSON.stringify(summary), {
+    expirationTtl: ttlSeconds > 0 ? ttlSeconds * 3 : undefined,
+  });
+}
+
 async function deleteCachedStripeCrmSummary(env: WorkerEnv): Promise<void> {
   const kv = env.USAGE_KV;
   if (!kv || typeof kv.delete !== "function") {
@@ -4448,6 +4601,59 @@ async function summarizeCrmTelemetry(env: WorkerEnv): Promise<{
     },
     latestEvents: latestEvents.slice(0, 60),
   };
+}
+
+async function buildCrmSummarySnapshot(env: WorkerEnv): Promise<CrmSummarySnapshot> {
+  const accounts = await loadCrmAccountSnapshots(env);
+  const statuses = createEmptyCrmStatusCounts();
+  let mrrActiveUsd = 0;
+  for (const account of accounts) {
+    if (account.status === "active") {
+      statuses.active += 1;
+      mrrActiveUsd += account.monthlyPriceUsd;
+      continue;
+    }
+    if (account.status === "trialing") {
+      statuses.trialing += 1;
+      continue;
+    }
+    if (account.status === "canceled") {
+      statuses.canceled += 1;
+      continue;
+    }
+    if (account.status === "expired") {
+      statuses.expired += 1;
+      continue;
+    }
+    statuses.none += 1;
+  }
+
+  const { telemetry, latestEvents } = await summarizeCrmTelemetry(env);
+  const normalizedMrr = Number(mrrActiveUsd.toFixed(2));
+
+  return {
+    generatedAtMs: Date.now(),
+    billing: {
+      trackedUsers: accounts.length,
+      statuses,
+      mrrActiveUsd: normalizedMrr,
+      arrActiveUsd: Number((normalizedMrr * 12).toFixed(2)),
+      accounts,
+    },
+    telemetry,
+    latestEvents,
+  };
+}
+
+async function resolveCrmSummarySnapshot(env: WorkerEnv): Promise<CrmSummarySnapshot> {
+  const ttlMs = normalizeCrmSummaryCacheTtlSeconds(env.CRM_SUMMARY_CACHE_TTL_SECONDS) * 1000;
+  const cached = await loadCachedCrmSummary(env);
+  if (cached && (ttlMs <= 0 || Date.now() - cached.generatedAtMs <= ttlMs)) {
+    return cached;
+  }
+  const built = await buildCrmSummarySnapshot(env);
+  await saveCachedCrmSummary(env, built);
+  return built;
 }
 
 type AiTelemetryWindowKey = "15m" | "1h" | "24h" | "7d" | "30d";
@@ -6884,37 +7090,12 @@ async function handleAdminCrmSummary(args: {
     return errorJson(403, "Forbidden.");
   }
 
-  const accounts = await loadCrmAccountSnapshots(args.env);
-  const statusCounts = {
-    active: 0,
-    trialing: 0,
-    canceled: 0,
-    expired: 0,
-    none: 0,
-  };
-  let kvMrrActiveUsd = 0;
-  for (const account of accounts) {
-    if (account.status === "active") {
-      statusCounts.active += 1;
-      kvMrrActiveUsd += account.monthlyPriceUsd;
-      continue;
-    }
-    if (account.status === "trialing") {
-      statusCounts.trialing += 1;
-      continue;
-    }
-    if (account.status === "canceled") {
-      statusCounts.canceled += 1;
-      continue;
-    }
-    if (account.status === "expired") {
-      statusCounts.expired += 1;
-      continue;
-    }
-    statusCounts.none += 1;
-  }
-
-  const { telemetry, latestEvents } = await summarizeCrmTelemetry(args.env);
+  const summarySnapshot = await resolveCrmSummarySnapshot(args.env);
+  const accounts = summarySnapshot.billing.accounts;
+  const statusCounts = summarySnapshot.billing.statuses;
+  const kvMrrActiveUsd = summarySnapshot.billing.mrrActiveUsd;
+  const telemetry = summarySnapshot.telemetry;
+  const latestEvents = summarySnapshot.latestEvents;
   let stripeLive: StripeCrmLiveSummary | StripeCrmLiveFallback | undefined;
   const stripeResult = await resolveStripeCrmSummary(args.env);
   if ("live" in stripeResult) {
@@ -6950,9 +7131,9 @@ async function handleAdminCrmSummary(args: {
   return responseJson(200, {
     ok: true,
     result: {
-      generatedAtMs: Date.now(),
+      generatedAtMs: summarySnapshot.generatedAtMs,
       billing: {
-        trackedUsers,
+        trackedUsers: summarySnapshot.billing.trackedUsers,
         statuses: statusCounts,
         mrrActiveUsd: Number(revenueMrrActiveUsd.toFixed(2)),
         arrActiveUsd: revenueArrActiveUsd,
@@ -11532,6 +11713,8 @@ const worker = {
     if (isCrmStripeLiveEnabled(env) && trimString(env.STRIPE_SECRET_KEY)) {
       const crmStartedAt = Date.now();
       try {
+        const crmSummary = await buildCrmSummarySnapshot(env);
+        await saveCachedCrmSummary(env, crmSummary);
         const stripeResult = await fetchStripeLiveCrmSummary(env);
         if (stripeResult.ok) {
           await saveCachedStripeCrmSummary(env, stripeResult.summary);

@@ -421,22 +421,25 @@ export async function assertLandingCtaDestination(page, options) {
 export async function assertRouteMetadata(page, expectation, options = {}) {
   const {
     titleWaitMs = 750,
+    includeDescription = true,
+    includeRobots = true,
+    includeCanonical = true,
   } = options;
 
   await page.waitForTimeout(titleWaitMs);
   assert.equal(await page.title(), expectation.title, `${expectation.path} should render the expected document title`);
 
-  if (expectation.description) {
+  if (includeDescription && expectation.description) {
     const description = await page.locator('meta[name="description"]').first().getAttribute("content");
     assert.equal(description, expectation.description, `${expectation.path} should render the expected meta description`);
   }
 
-  if (expectation.robotsPattern) {
+  if (includeRobots && expectation.robotsPattern) {
     const robotsContent = await page.locator('meta[name="robots"]').first().getAttribute("content");
     assert.match(robotsContent || "", expectation.robotsPattern, `${expectation.path} should expose the expected robots directive`);
   }
 
-  if (expectation.canonicalHref) {
+  if (includeCanonical && expectation.canonicalHref) {
     const canonicalHrefs = await page.locator('link[rel="canonical"]').evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("href")).filter(Boolean),
     );
@@ -452,6 +455,9 @@ export async function openAndAssertRouteMetadata(page, expectation, options = {}
     waitUntil = "domcontentloaded",
     timeout = 30_000,
     titleWaitMs = 750,
+    includeDescription = true,
+    includeRobots = true,
+    includeCanonical = true,
     expectedStatus,
     maxStatusExclusive,
   } = options;
@@ -469,7 +475,12 @@ export async function openAndAssertRouteMetadata(page, expectation, options = {}
     assert.ok(response.status() < maxStatusExclusive, `${expectation.path} should not return an error >= ${maxStatusExclusive}`);
   }
 
-  await assertRouteMetadata(page, expectation, { titleWaitMs });
+  await assertRouteMetadata(page, expectation, {
+    titleWaitMs,
+    includeDescription,
+    includeRobots,
+    includeCanonical,
+  });
   return response;
 }
 

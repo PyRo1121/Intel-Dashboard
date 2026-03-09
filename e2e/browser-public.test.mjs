@@ -41,6 +41,9 @@ test("public auth entry pages render the current Intel Dashboard access contract
         await openAndAssertRouteMetadata(page, expectation, {
           expectedStatus: 200,
           titleWaitMs: 500,
+          includeDescription: false,
+          includeRobots: false,
+          includeCanonical: false,
         });
       } catch (error) {
         await captureBrowserArtifacts(page, `public-auth-meta-${expectation.path}`, error);

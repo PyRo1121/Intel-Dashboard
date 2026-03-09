@@ -5,6 +5,20 @@ export function getTelegramCollageLayoutClass(count: number): string {
   return "telegram-photo-collage--quad";
 }
 
+export function getVisibleTelegramPhotos<T>(
+  photos: readonly T[],
+  limit = 4,
+): T[] {
+  return photos.slice(0, Math.max(0, limit));
+}
+
+export function getHiddenTelegramPhotoCount(
+  totalPhotos: number,
+  visibleLimit = 4,
+): number {
+  return Math.max(0, totalPhotos - Math.max(0, visibleLimit));
+}
+
 export function getTelegramCollageCellClass(count: number, index: number): string {
   if (count === 3) {
     if (index === 0) return "telegram-photo-cell telegram-photo-cell--hero";

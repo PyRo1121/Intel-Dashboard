@@ -1,4 +1,5 @@
 import { fastHash, jaccardSimilarity } from "./telegram-dedupe.ts";
+import { getTelegramMessageFallbackKey } from "./telegram-entry-meta.ts";
 
 export type TelegramClusterLike = {
   canonicalText: string;
@@ -17,7 +18,7 @@ export type TelegramEntryClusterKeyLike = {
 };
 
 export function getTelegramLegacyEntryKey(entry: TelegramEntryClusterKeyLike): string {
-  return entry.message.link || `${entry.category}:${entry.message.datetime}:${entry.message.text_original.slice(0, 48)}`;
+  return getTelegramMessageFallbackKey(entry);
 }
 
 export function registerTelegramClusterIndex(map: Map<string, number[]>, key: string, index: number): void {

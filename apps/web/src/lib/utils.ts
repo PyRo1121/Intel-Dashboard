@@ -104,6 +104,11 @@ export function truncateText(value: string, maxChars: number, ellipsis = "..."):
   return `${value.slice(0, maxChars)}${ellipsis}`;
 }
 
+export function getInitialLetter(value: string, fallback: string): string {
+  const normalized = value.trim();
+  return normalized.slice(0, 1).toUpperCase() || fallback;
+}
+
 export function isInitialResourceLoading(resourceState: string | undefined, itemCount: number): boolean {
   return resourceState === "refreshing" && itemCount === 0;
 }

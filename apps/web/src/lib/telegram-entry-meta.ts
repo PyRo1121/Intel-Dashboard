@@ -1,4 +1,5 @@
 import { getIntelCategoryStyle } from "./intel-category-style.ts";
+import { getInitialLetter } from "./utils.ts";
 
 export type TelegramEntryLike = {
   category: string;
@@ -20,6 +21,7 @@ export type TelegramEntryLike = {
     freshnessTier?: "breaking" | "fresh" | "watch";
     domainTags?: string[];
     categorySet?: string[];
+    sources?: unknown[];
   };
 };
 
@@ -72,16 +74,55 @@ export function getTelegramChannelName(entry: TelegramEntryLike): string {
 }
 
 export function getTelegramAvatarLetter(entry: TelegramEntryLike): string {
-  return getTelegramChannelName(entry).charAt(0).toUpperCase() || "T";
+  return getInitialLetter(getTelegramChannelName(entry), "T");
+}
+
+export function getTelegramMessageFallbackKey(entry: {
+  category: string;
+  message: {
+    link: string;
+    datetime: string;
+    text_original: string;
+  };
+}): string {
+  return entry.message.link || `${entry.category}:${entry.message.datetime}:${entry.message.text_original.slice(0, 48)}`;
 }
 
 export function getTelegramEntryKey(entry: TelegramEntryLike): string {
   if (entry.dedupe?.clusterKey) return entry.dedupe.clusterKey;
-  return entry.message.link || `${entry.category}:${entry.message.datetime}:${entry.message.text_original.slice(0, 48)}`;
+  return getTelegramMessageFallbackKey(entry);
+}
+
+function filterTelegramTextList(values: string[] | undefined): string[] {
+  return values?.filter((value) => typeof value === "string" && value.trim().length > 0) ?? [];
 }
 
 export function getTelegramEntrySourceSignatures(entry: TelegramEntryLike): string[] {
-  return entry.dedupe?.sourceSignatures?.filter((value) => typeof value === "string" && value.trim().length > 0) ?? [];
+  return filterTelegramTextList(entry.dedupe?.sourceSignatures);
+}
+
+export function getTelegramSourceLabels(entry: TelegramEntryLike, limit?: number): string[] {
+  const labels = filterTelegramTextList(entry.dedupe?.sourceLabels);
+  if (limit === undefined) {
+    return labels;
+  }
+  return labels.slice(0, Math.max(0, limit));
+}
+
+export function getTelegramSourceLabelsTitle(entry: TelegramEntryLike): string {
+  return getTelegramSourceLabels(entry).join(", ");
+}
+
+export function getTelegramDomainTags(entry: TelegramEntryLike, limit = 6): string[] {
+  return (entry.dedupe?.domainTags ?? []).slice(0, Math.max(0, limit));
+}
+
+export function getTelegramSources<TSource>(
+  entry: { dedupe?: { sources?: TSource[] } },
+  limit = 8,
+): TSource[] {
+  const sources = entry.dedupe?.sources ?? [];
+  return sources.slice(0, Math.max(0, limit));
 }
 
 export function toTelegramSafeDomId(value: string): string {
@@ -113,11 +154,11 @@ export function getTelegramRankReasons(args: {
 }
 
 export function doesTelegramGroupMatchEntry<TEntry extends TelegramEntryLike>(
-  group: TelegramFilterGroupLike<TEntry>,
+  group: TelegramFilterGroupLike<TEntry> | TelegramFilterGroupLike,
   entry: TEntry,
 ): boolean {
   if (group.id === "all") return true;
-  if (group.predicate?.(entry)) return true;
+  if (group.predicate?.(entry as never)) return true;
   const categorySet = new Set(group.categories ?? []);
   if (categorySet.size === 0) return false;
   if (categorySet.has(entry.category)) return true;

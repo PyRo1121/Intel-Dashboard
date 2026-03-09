@@ -7,12 +7,16 @@ import {
   getTelegramAvatarLetter,
   getTelegramAvatarBgColor,
   getTelegramChannelName,
+  getTelegramDomainTags,
   getTelegramEntryKey,
   getTelegramEntrySourceSignatures,
   getTelegramRankReasons,
+  getTelegramSources,
+  getTelegramSourceLabels,
+  getTelegramSourceLabelsTitle,
   toTelegramSafeDomId,
 } from "~/lib/telegram-entry-meta";
-import { getTelegramCollageLayoutClass } from "~/lib/telegram-media-layout";
+import { getHiddenTelegramPhotoCount, getTelegramCollageLayoutClass, getVisibleTelegramPhotos } from "~/lib/telegram-media-layout";
 import {
   entryMediaCount,
   freshnessBadgeClass,
@@ -47,8 +51,8 @@ export default function TelegramMessageCard(props: {
     props.entry.message.text_en.trim() !== props.entry.message.text_original.trim();
   const videos = () => props.entry.message.media.filter((media) => media.type === "video");
   const photos = () => props.entry.message.media.filter((media) => media.type === "photo");
-  const visiblePhotos = () => photos().slice(0, 4);
-  const hiddenPhotoCount = () => Math.max(0, photos().length - 4);
+  const visiblePhotos = () => getVisibleTelegramPhotos(photos());
+  const hiddenPhotoCount = () => getHiddenTelegramPhotoCount(photos().length);
   const activePhoto = () => {
     const idx = activePhotoIndex();
     if (idx === null) return null;
@@ -75,7 +79,7 @@ export default function TelegramMessageCard(props: {
     entry: props.entry,
     hasUsefulImageText,
   });
-  const sourceLabels = () => props.entry.dedupe?.sourceLabels ?? [];
+  const sourceLabels = () => getTelegramSourceLabels(props.entry);
   const isFocused = () => props.focusKey === getTelegramEntryKey(props.entry);
   const itemId = () => `msg-${toTelegramSafeDomId(getTelegramEntryKey(props.entry))}`;
   const channelName = () => getTelegramChannelName(props.entry);
@@ -126,7 +130,7 @@ export default function TelegramMessageCard(props: {
               <Show when={(props.entry.dedupe?.sourceCount ?? 1) > 1}>
                 <span
                   class="inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300"
-                  title={(props.entry.dedupe?.sourceLabels ?? []).join(", ")}
+                  title={getTelegramSourceLabelsTitle(props.entry)}
                 >
                   {props.entry.dedupe?.sourceCount} sources
                 </span>
@@ -242,8 +246,8 @@ export default function TelegramMessageCard(props: {
                     {props.entry.dedupe?.latencyTier}
                   </span>
                 </Show>
-                <Show when={props.entry.dedupe?.domainTags && props.entry.dedupe.domainTags.length > 0}>
-                  <For each={props.entry.dedupe?.domainTags?.slice(0, 6) ?? []}>
+                <Show when={getTelegramDomainTags(props.entry).length > 0}>
+                  <For each={getTelegramDomainTags(props.entry)}>
                     {(tag) => (
                       <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-zinc-400">
                         {formatEventLabel(tag)}
@@ -253,7 +257,7 @@ export default function TelegramMessageCard(props: {
                 </Show>
               </div>
               <div class="mt-2 flex flex-wrap gap-1.5">
-                <For each={sourceLabels().slice(0, 18)}>
+                <For each={getTelegramSourceLabels(props.entry, 18)}>
                   {(label) => (
                     <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300">
                       {label}
@@ -261,9 +265,9 @@ export default function TelegramMessageCard(props: {
                   )}
                 </For>
               </div>
-              <Show when={(props.entry.dedupe?.sources?.length ?? 0) > 0}>
+              <Show when={getTelegramSources(props.entry).length > 0}>
                 <div class="mt-3 grid gap-2">
-                  <For each={props.entry.dedupe?.sources?.slice(0, 8) ?? []}>
+                  <For each={getTelegramSources(props.entry)}>
                     {(source) => (
                       <div class="rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2 text-[10px] text-zinc-400">
                         <div class="flex flex-wrap items-center gap-1.5">

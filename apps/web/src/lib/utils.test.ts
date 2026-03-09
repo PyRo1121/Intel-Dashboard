@@ -5,6 +5,7 @@ import {
   formatAgeAgoAt,
   formatDateTime,
   formatLongDateTime,
+  getInitialLetter,
   parseCompactNumber,
   parseTimestampMs,
   formatPercent,
@@ -71,6 +72,12 @@ test("truncateText preserves short strings and appends ellipsis to long ones", (
   assert.equal(truncateText("abcdefghijklmnopqrstuvwxyz", 5), "abcde...");
   assert.equal(truncateText("abcdefghijklmnopqrstuvwxyz", 5, "…"), "abcde…");
   assert.equal(truncateText("text", 0), "");
+});
+
+test("getInitialLetter returns an uppercase first character with fallback", () => {
+  assert.equal(getInitialLetter("analyst", "U"), "A");
+  assert.equal(getInitialLetter("  owner@example.com", "U"), "O");
+  assert.equal(getInitialLetter("", "U"), "U");
 });
 
 test("isInitialResourceLoading only flags empty refreshing resources", () => {

@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  countTelegramEntriesWithMedia,
+  countVerifiedTelegramEntries,
   entryMediaCount,
   freshnessBadgeClass,
   freshnessStateForAge,
@@ -68,5 +70,32 @@ test("telegram entry helpers normalize text, media URLs, and verification state"
       },
     }),
     false,
+  );
+  assert.equal(
+    countVerifiedTelegramEntries([
+      entry,
+      {
+        dedupe: { sourceCount: 1 },
+        message: {
+          ...entry.message,
+          image_text_en: undefined,
+          media: [],
+        },
+      },
+    ]),
+    1,
+  );
+  assert.equal(
+    countTelegramEntriesWithMedia([
+      entry,
+      {
+        dedupe: { sourceCount: 1 },
+        message: {
+          ...entry.message,
+          media: [],
+        },
+      },
+    ]),
+    1,
   );
 });

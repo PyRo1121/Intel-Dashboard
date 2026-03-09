@@ -15,6 +15,8 @@ for (const candidate of candidates) {
 
 const edgeBaseUrl = (process.env.E2E_EDGE_BASE_URL?.trim() || SITE_ORIGIN).replace(/\/+$/, "");
 const sessionCookie = process.env.E2E_SESSION_COOKIE?.trim() || "";
+const accessClientId = process.env.E2E_CF_ACCESS_CLIENT_ID?.trim() || "";
+const accessClientSecret = process.env.E2E_CF_ACCESS_CLIENT_SECRET?.trim() || "";
 
 if (!sessionCookie) {
   console.error("Missing required owner/admin browser e2e configuration:");
@@ -22,10 +24,20 @@ if (!sessionCookie) {
   process.exit(1);
 }
 
+const headers = {
+  Cookie: sessionCookie,
+};
+if ((accessClientId && !accessClientSecret) || (!accessClientId && accessClientSecret)) {
+  console.error("E2E_CF_ACCESS_CLIENT_ID and E2E_CF_ACCESS_CLIENT_SECRET must be set together when using Cloudflare Access for owner/admin e2e.");
+  process.exit(1);
+}
+if (accessClientId && accessClientSecret) {
+  headers["CF-Access-Client-Id"] = accessClientId;
+  headers["CF-Access-Client-Secret"] = accessClientSecret;
+}
+
 const response = await fetch(`${edgeBaseUrl}/api/auth/me`, {
-  headers: {
-    Cookie: sessionCookie,
-  },
+  headers,
   signal: AbortSignal.timeout(20_000),
 });
 

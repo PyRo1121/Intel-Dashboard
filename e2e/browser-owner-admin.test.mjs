@@ -12,6 +12,8 @@ function trim(value) {
 const EDGE_BASE_URL = (trim(process.env.E2E_EDGE_BASE_URL) || SITE_ORIGIN).replace(/\/+$/, "");
 const EDGE_HOSTNAME = new URL(EDGE_BASE_URL).hostname;
 const SESSION_COOKIE = trim(process.env.E2E_SESSION_COOKIE);
+const ACCESS_CLIENT_ID = trim(process.env.E2E_CF_ACCESS_CLIENT_ID);
+const ACCESS_CLIENT_SECRET = trim(process.env.E2E_CF_ACCESS_CLIENT_SECRET);
 const REQUIRE_AUTH = process.env.E2E_REQUIRE_AUTH === "1";
 const STRICT = process.env.E2E_STRICT === "1";
 const ARTIFACT_DIR = join(process.cwd(), "output", "e2e-browser");
@@ -65,10 +67,15 @@ async function validateSessionCookie(t, cookieHeader, missingMessage) {
 
   if (!sessionValidationCache.has(cookie)) {
     sessionValidationCache.set(cookie, (async () => {
+      const headers = {
+        Cookie: cookie,
+      };
+      if (ACCESS_CLIENT_ID && ACCESS_CLIENT_SECRET) {
+        headers["CF-Access-Client-Id"] = ACCESS_CLIENT_ID;
+        headers["CF-Access-Client-Secret"] = ACCESS_CLIENT_SECRET;
+      }
       const response = await fetch(`${EDGE_BASE_URL}/api/auth/me`, {
-        headers: {
-          Cookie: cookie,
-        },
+        headers,
         signal: AbortSignal.timeout(20_000),
       });
       if (response.status !== 200) {
@@ -109,7 +116,15 @@ async function createBrowserContext(t, options = {}) {
     return null;
   }
 
-  const context = await browser.newContext({ acceptDownloads: true, ...options });
+  const extraHTTPHeaders =
+    ACCESS_CLIENT_ID && ACCESS_CLIENT_SECRET
+      ? {
+          "CF-Access-Client-Id": ACCESS_CLIENT_ID,
+          "CF-Access-Client-Secret": ACCESS_CLIENT_SECRET,
+        }
+      : undefined;
+
+  const context = await browser.newContext({ acceptDownloads: true, extraHTTPHeaders, ...options });
   await context.addCookies([
     {
       name: parsedCookie.name,

@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 45
     env:
       E2E_SESSION_COOKIE: ${{ secrets.E2E_SESSION_COOKIE }}
+      E2E_CF_ACCESS_CLIENT_ID: ${{ secrets.E2E_CF_ACCESS_CLIENT_ID }}
+      E2E_CF_ACCESS_CLIENT_SECRET: ${{ secrets.E2E_CF_ACCESS_CLIENT_SECRET }}
       E2E_EDGE_BASE_URL: https://intel.pyro1121.com
       E2E_REQUIRE_AUTH: "1"
       E2E_STRICT: "1"

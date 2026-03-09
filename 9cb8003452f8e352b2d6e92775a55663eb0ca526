@@ -1,0 +1,27 @@
+apps/edge/src/crm-ai-telemetry-proxy.ts
+  ee18a179ffd1e45f 1-2
+apps/edge/src/private-api-headers.ts
+  ee18a179ffd1e45f 1-34
+apps/edge/src/index.ts
+  ee18a179ffd1e45f 17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.8",
+  "base_commit_sha": "9cb8003452f8e352b2d6e92775a55663eb0ca526",
+  "prompts": {
+    "ee18a179ffd1e45f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cb3ea-8647-7d20-a2a7-33c67b4f0702",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 37,
+      "total_deletions": 83,
+      "accepted_lines": 37,
+      "overriden_lines": 0
+    }
+  }
+}

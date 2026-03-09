@@ -1,10 +1,50 @@
+import { formatEventLabel } from "./event-label.ts";
+
 export type AiTelemetryCacheStatsLike = {
   cacheHits?: number;
   cacheMisses?: number;
 } | null | undefined;
 
+export type AiTelemetrySummaryLike = {
+  calls?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  outputInputRatio?: number;
+  avgDurationMs?: number;
+  p95DurationMs?: number;
+} | null | undefined;
+
 export function readAiTelemetryItems<T>(items: readonly T[] | null | undefined): T[] {
-  return items ? (items as T[]) : [];
+  return [...(items ?? [])];
+}
+
+export function getAiTelemetryLabel(label: string | undefined): string {
+  return formatEventLabel(label);
+}
+
+export function getAiTelemetryOutputInputPercent(summary: AiTelemetrySummaryLike): number {
+  const ratio = summary?.outputInputRatio;
+  return typeof ratio === "number" && Number.isFinite(ratio) ? ratio * 100 : 0;
+}
+
+export function getAiTelemetryCalls(summary: AiTelemetrySummaryLike): number | undefined {
+  return summary?.calls;
+}
+
+export function getAiTelemetryPromptTokens(summary: AiTelemetrySummaryLike): number | undefined {
+  return summary?.promptTokens;
+}
+
+export function getAiTelemetryCompletionTokens(summary: AiTelemetrySummaryLike): number | undefined {
+  return summary?.completionTokens;
+}
+
+export function getAiTelemetryAvgDurationMs(summary: AiTelemetrySummaryLike): number | undefined {
+  return summary?.avgDurationMs;
+}
+
+export function getAiTelemetryP95DurationMs(summary: AiTelemetrySummaryLike): number | undefined {
+  return summary?.p95DurationMs;
 }
 
 export function getAiTelemetryMaxValue<T>(

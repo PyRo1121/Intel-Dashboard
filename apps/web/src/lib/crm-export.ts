@@ -1,3 +1,6 @@
+import { formatEventLabel } from "./event-label.ts";
+import { formatDateTime } from "./utils.ts";
+
 export type CrmLatestEventLike = {
   userId?: string;
   atMs?: number;
@@ -14,6 +17,15 @@ export function buildCrmLatestEventMap(
     }
   }
   return map;
+}
+
+export function getCrmLatestEventDisplay(
+  event: { atMs?: number; kind?: string } | null | undefined,
+): { kindLabel: string; atLabel: string } {
+  return {
+    kindLabel: formatEventLabel(event?.kind),
+    atLabel: formatDateTime(event?.atMs),
+  };
 }
 
 export function escapeCsvCell(value: unknown): string {

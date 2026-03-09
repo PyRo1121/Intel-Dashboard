@@ -1,6 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeAiCacheHitRatePercent, getAiTelemetryMaxValue, getAiTelemetryTopEntryBy, readAiTelemetryItems } from "./ai-telemetry.ts";
+import {
+  computeAiCacheHitRatePercent,
+  getAiTelemetryAvgDurationMs,
+  getAiTelemetryCalls,
+  getAiTelemetryCompletionTokens,
+  getAiTelemetryLabel,
+  getAiTelemetryMaxValue,
+  getAiTelemetryOutputInputPercent,
+  getAiTelemetryP95DurationMs,
+  getAiTelemetryPromptTokens,
+  getAiTelemetryTopEntryBy,
+  readAiTelemetryItems,
+} from "./ai-telemetry.ts";
 
 test("computeAiCacheHitRatePercent handles empty, clamped, and normal cache stats", () => {
   assert.equal(computeAiCacheHitRatePercent(undefined), 0);
@@ -38,4 +50,28 @@ test("getAiTelemetryTopEntryBy selects the highest-scoring entry with null-safe 
 test("readAiTelemetryItems returns a stable array fallback", () => {
   assert.deepEqual(readAiTelemetryItems([{ value: 1 }]), [{ value: 1 }]);
   assert.deepEqual(readAiTelemetryItems(undefined), []);
+});
+
+test("getAiTelemetryLabel formats lane/model labels with shared event-label rules", () => {
+  assert.equal(getAiTelemetryLabel("briefing.generate"), "briefing generate");
+  assert.equal(getAiTelemetryLabel(undefined), "—");
+});
+
+test("AI telemetry summary selectors expose raw values and derived output/input percent", () => {
+  const summary = {
+    calls: 10,
+    promptTokens: 100,
+    completionTokens: 40,
+    outputInputRatio: 0.4,
+    avgDurationMs: 250,
+    p95DurationMs: 900,
+  };
+
+  assert.equal(getAiTelemetryCalls(summary), 10);
+  assert.equal(getAiTelemetryPromptTokens(summary), 100);
+  assert.equal(getAiTelemetryCompletionTokens(summary), 40);
+  assert.equal(getAiTelemetryOutputInputPercent(summary), 40);
+  assert.equal(getAiTelemetryAvgDurationMs(summary), 250);
+  assert.equal(getAiTelemetryP95DurationMs(summary), 900);
+  assert.equal(getAiTelemetryOutputInputPercent({ outputInputRatio: Number.NaN }), 0);
 });

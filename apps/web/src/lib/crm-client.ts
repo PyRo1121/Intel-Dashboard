@@ -1,5 +1,9 @@
 import { fetchClientJson } from "./client-json.ts";
 
+export function readCrmItems<T>(items: readonly T[] | null | undefined): T[] {
+  return [...(items ?? [])];
+}
+
 export async function fetchCrmOverview<T extends { ok?: boolean; error?: string }>(): Promise<T> {
   const result = await fetchClientJson<T>("/api/admin/crm/overview", {
     method: "GET",

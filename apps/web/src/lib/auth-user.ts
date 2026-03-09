@@ -1,4 +1,4 @@
-import { isOwnerRole, resolveEntitlementRole, resolveEntitlementView } from "@intel-dashboard/shared/entitlement.ts";
+import { isOwnerRole, resolveEntitlementRole, resolveEntitlementView, resolveFeedSurfaceLimit } from "@intel-dashboard/shared/entitlement.ts";
 
 export type AuthUserLike = {
   login?: string;
@@ -9,6 +9,12 @@ export type AuthUserLike = {
     tier?: string;
     entitled?: boolean;
     delayMinutes?: number;
+    limits?: {
+      intelMaxItems?: number | null;
+      briefingsMaxItems?: number | null;
+      airSeaMaxItems?: number | null;
+      telegramTotalMessagesMax?: number | null;
+    };
   };
 } | null | undefined;
 
@@ -22,6 +28,10 @@ export function isAuthUserOwner(user: AuthUserLike): boolean {
 
 export function resolveAuthUserEntitlementView(user: AuthUserLike) {
   return resolveEntitlementView(user?.entitlement);
+}
+
+export function resolveAuthUserFeedSurfaceLimit(user: AuthUserLike, surface: string): number | null | undefined {
+  return resolveFeedSurfaceLimit(surface, user?.entitlement?.limits);
 }
 
 export function resolveAuthUserDisplay(user: AuthUserLike): {

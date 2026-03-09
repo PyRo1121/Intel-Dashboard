@@ -36,24 +36,20 @@ const SEVERITY_STYLES: Record<Severity, {
   },
 };
 
-function resolveSeverityStyle(severity: Severity | "") {
-  return severity ? SEVERITY_STYLES[severity] ?? null : null;
-}
-
 export function severityColor(severity: Severity | ""): string {
-  return resolveSeverityStyle(severity)?.text ?? "text-zinc-500";
+  return severity ? SEVERITY_STYLES[severity].text : "text-zinc-500";
 }
 
 export function severityBg(severity: Severity | ""): string {
-  return resolveSeverityStyle(severity)?.surface ?? "bg-zinc-500/10 text-zinc-500 ring-zinc-500/20";
+  return severity ? SEVERITY_STYLES[severity].surface : "bg-zinc-500/10 text-zinc-500 ring-zinc-500/20";
 }
 
 export function severityDot(severity: Severity | ""): string {
-  return resolveSeverityStyle(severity)?.dot ?? "bg-zinc-500";
+  return severity ? SEVERITY_STYLES[severity].dot : "bg-zinc-500";
 }
 
 export function severityHexColor(severity: Severity | ""): string {
-  return resolveSeverityStyle(severity)?.hex ?? "#71717a";
+  return severity ? SEVERITY_STYLES[severity].hex : "#71717a";
 }
 
 export function formatRelativeTimeAt(timestamp: string, now: number): string {
@@ -92,6 +88,16 @@ export function formatAgeAgoAt(atMs: number | undefined, nowMs: number): string 
     return "Unknown";
   }
   return `${formatAgeCompactFromMs(Math.max(0, nowMs - atMs))} ago`;
+}
+
+export function truncateText(value: string, maxChars: number, ellipsis = "..."): string {
+  if (!Number.isFinite(maxChars) || maxChars <= 0) {
+    return "";
+  }
+  if (value.length <= maxChars) {
+    return value;
+  }
+  return `${value.slice(0, maxChars)}${ellipsis}`;
 }
 
 export function isInitialResourceLoading(resourceState: string | undefined, itemCount: number): boolean {

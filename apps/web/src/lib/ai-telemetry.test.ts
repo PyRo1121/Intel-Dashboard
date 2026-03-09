@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeAiCacheHitRatePercent, getAiTelemetryMaxValue, getAiTelemetryTopEntryBy } from "./ai-telemetry.ts";
+import { computeAiCacheHitRatePercent, getAiTelemetryMaxValue, getAiTelemetryTopEntryBy, readAiTelemetryItems } from "./ai-telemetry.ts";
 
 test("computeAiCacheHitRatePercent handles empty, clamped, and normal cache stats", () => {
   assert.equal(computeAiCacheHitRatePercent(undefined), 0);
@@ -33,4 +33,9 @@ test("getAiTelemetryTopEntryBy selects the highest-scoring entry with null-safe 
     { label: "slow", score: 120 },
   );
   assert.equal(getAiTelemetryTopEntryBy(undefined, (entry: { score?: number }) => entry.score), null);
+});
+
+test("readAiTelemetryItems returns a stable array fallback", () => {
+  assert.deepEqual(readAiTelemetryItems([{ value: 1 }]), [{ value: 1 }]);
+  assert.deepEqual(readAiTelemetryItems(undefined), []);
 });

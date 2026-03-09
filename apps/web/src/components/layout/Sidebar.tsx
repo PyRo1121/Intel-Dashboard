@@ -8,7 +8,7 @@ import {
   onCleanup,
   type JSX,
 } from "solid-js";
-import { resolveAuthUserDisplay, resolveAuthUserEntitlementView, resolveAuthUserRole } from "~/lib/auth-user";
+import { isAuthUserOwner, resolveAuthUserDisplay, resolveAuthUserEntitlementView } from "~/lib/auth-user";
 import {
   LayoutDashboard,
   Radio,
@@ -108,8 +108,7 @@ export default function Sidebar() {
     return location.pathname.startsWith(href);
   };
 
-  const role = () => resolveAuthUserRole(auth.user());
-  const navItems = () => (role() === "owner" ? [...mainNavItems, ownerNavItem] : mainNavItems);
+  const navItems = () => (isAuthUserOwner(auth.user()) ? [...mainNavItems, ownerNavItem] : mainNavItems);
 
   const renderNavItem = (item: NavItem, index: number, opts?: { collapsed?: boolean }) => {
     const compact = opts?.collapsed === true;

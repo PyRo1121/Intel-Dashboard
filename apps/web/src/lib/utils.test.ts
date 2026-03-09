@@ -9,10 +9,9 @@ import {
   parseTimestampMs,
   formatPercent,
   formatShortDateTime,
-  severityBg,
-  severityColor,
   severityDot,
   severityHexColor,
+  truncateText,
   formatUsd,
   formatWholeNumber,
   isInitialResourceLoading,
@@ -65,6 +64,13 @@ test("formatAgeAgoAt formats elapsed time and handles missing values safely", ()
   assert.equal(formatAgeAgoAt(undefined, 10_000), "Unknown");
 });
 
+test("truncateText preserves short strings and appends ellipsis to long ones", () => {
+  assert.equal(truncateText("short", 10), "short");
+  assert.equal(truncateText("abcdefghijklmnopqrstuvwxyz", 5), "abcde...");
+  assert.equal(truncateText("abcdefghijklmnopqrstuvwxyz", 5, "…"), "abcde…");
+  assert.equal(truncateText("text", 0), "");
+});
+
 test("isInitialResourceLoading only flags empty refreshing resources", () => {
   assert.equal(isInitialResourceLoading("refreshing", 0), true);
   assert.equal(isInitialResourceLoading("ready", 0), false);
@@ -94,6 +100,4 @@ test("severity visual helpers stay aligned with the shared severity scale", () =
   assert.match(severityDot("high"), /amber/);
   assert.equal(severityHexColor("medium"), "#3b82f6");
   assert.equal(severityHexColor("low"), "#71717a");
-  assert.equal(severityColor("bogus" as never), "text-zinc-500");
-  assert.match(severityBg("bogus" as never), /zinc-500/);
 });

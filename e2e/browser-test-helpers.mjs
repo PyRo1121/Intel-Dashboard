@@ -334,6 +334,30 @@ export async function openAndAssertPublicAuthEntry(page, options) {
   await assertPublicAuthEntrySurface(page, { mode, nextPath });
 }
 
+export async function openAndAssertPublicAuthRoute(page, route) {
+  const response = await openPublicPage(page, route.path);
+  assert.ok(response, `${route.path} should return a response`);
+  assert.equal(response.status(), 200, `${route.path} should render successfully`);
+
+  const bodyText = (await page.textContent("body")) || "";
+  assert.match(bodyText, new RegExp(route.heading, "i"), `${route.path} should render the current heading`);
+  for (const label of route.labels) {
+    assert.match(bodyText, new RegExp(label, "i"), `${route.path} should render ${label}`);
+  }
+  assert.match(
+    bodyText,
+    /Waiting for security check|Complete the security check before continuing/i,
+    `${route.path} should explain the turnstile gate`,
+  );
+  assert.doesNotMatch(bodyText, /PyRoBOT|PyRo1121Bot/i, `${route.path} should not render legacy branding`);
+
+  const buttons = await page.getByRole("button").all();
+  assert.ok(buttons.length >= 2, `${route.path} should render gated auth buttons`);
+  for (const button of buttons.slice(0, 2)) {
+    assert.equal(await button.isDisabled(), true, `${route.path} auth CTA should stay disabled until turnstile completes`);
+  }
+}
+
 export async function assertPageTitle(page, expectedTitle) {
   await page.waitForTimeout(500);
   assert.equal(await page.title(), expectedTitle);

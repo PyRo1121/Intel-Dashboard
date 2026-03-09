@@ -2301,7 +2301,7 @@ async function fetchOwnerCrmBackendSummary(params: {
 }): Promise<{ ok: true; payload: Record<string, unknown> } | { ok: false; status: number; error: string }> {
   return postOwnerBackendJson({
     backendToken: resolveBackendApiToken(params.env),
-    url: resolveBackendEndpoint(params.env, "/api/intel-dashboard/admin/crm/summary"),
+    url: resolveBackendEndpointUrl(params.env, "/api/intel-dashboard/admin/crm/summary"),
     userId: resolveUserId(params.user),
     userLogin: params.user.login,
     errorPrefix: "Backend CRM summary",
@@ -2320,7 +2320,7 @@ async function fetchOwnerCrmAiTelemetry(params: {
 }): Promise<OwnerCrmAiTelemetryFetchResult> {
   return postOwnerBackendJson({
     backendToken: resolveBackendApiToken(params.env),
-    url: resolveBackendEndpoint(params.env, "/api/intel-dashboard/admin/crm/ai-telemetry"),
+    url: resolveBackendEndpointUrl(params.env, "/api/intel-dashboard/admin/crm/ai-telemetry"),
     userId: resolveUserId(params.user),
     userLogin: params.user.login,
     extraBody: { window: params.window },
@@ -2384,7 +2384,7 @@ async function proxySessionBillingRoute(params: {
   }
 
   const backendRequest = new Request(
-    resolveBackendEndpoint(params.env, params.backendPath),
+    resolveBackendEndpointUrl(params.env, params.backendPath),
     {
       method: "POST",
       headers: {

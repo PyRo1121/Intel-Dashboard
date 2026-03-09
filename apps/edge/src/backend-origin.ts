@@ -56,7 +56,12 @@ export function resolveBackendApiToken(env: BackendBindingEnv): string {
 }
 
 export function resolveBackendFetch(env: BackendBindingEnv): typeof fetch {
-  return usesBackendServiceBinding(env)
-    ? env.INTEL_BACKEND.fetch.bind(env.INTEL_BACKEND) as typeof fetch
-    : fetch;
+  if (!usesBackendServiceBinding(env)) {
+    return fetch;
+  }
+  const backendBinding = env.INTEL_BACKEND;
+  if (!backendBinding) {
+    return fetch;
+  }
+  return backendBinding.fetch.bind(backendBinding) as typeof fetch;
 }

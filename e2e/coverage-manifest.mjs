@@ -213,6 +213,8 @@ export const EDGE_API_ROUTE_CLASSIFICATION = Object.freeze({
   "/api/admin/crm/refund": "owner-edge-crm-mutation",
   "/api/telegram/dedupe-feedback": "owner-telegram-dedupe",
   "/api/telegram/stream": "session-telegram-stream",
+  "/api/subscriber/feed-preferences": "subscriber-preferences",
+  "/api/subscriber/my-feed": "subscriber-feed",
   "/api/status": "owner-ops-read",
   "/api/telegram": "session-feed",
   "/api/intel": "session-feed",

@@ -1,0 +1,111 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createEmptySubscriberFeedPreferences } from "../src/subscriber-feed.ts";
+import {
+  matchOsintSubscriberAlerts,
+  matchTelegramSubscriberAlerts,
+  normalizeSubscriberAlertState,
+  sortSubscriberAlerts,
+} from "../src/subscriber-alerts.ts";
+
+test("normalizeSubscriberAlertState defaults to unread", () => {
+  assert.equal(normalizeSubscriberAlertState("all"), "all");
+  assert.equal(normalizeSubscriberAlertState("unread"), "unread");
+  assert.equal(normalizeSubscriberAlertState("other"), "unread");
+});
+
+test("telegram alerts match watched regions and favorite channels", () => {
+  const prefs = createEmptySubscriberFeedPreferences();
+  prefs.watchRegions = ["ukraine"];
+  prefs.favoriteChannels = ["alpha"];
+
+  const alerts = matchTelegramSubscriberAlerts({
+    userId: "user-1",
+    event: {
+      event_id: "evt-1",
+      datetime: "2026-03-09T12:00:00.000Z",
+      category: "ukraine",
+      source_channels: ["alpha"],
+      source_labels: ["Alpha"],
+      text_en: "Telegram event",
+      signal_score: 88,
+      signal_grade: "A",
+      signal_reasons: ["first", "multi-source"],
+      sources: [{ link: "https://t.me/alpha/1" }],
+    },
+    preferences: prefs,
+  });
+
+  assert.deepEqual(
+    alerts.map((alert) => alert.type).sort(),
+    ["first_report_channel", "first_report_region", "high_signal_region"],
+  );
+});
+
+test("osint alerts match watched regions and favorite sources only for high severity", () => {
+  const prefs = createEmptySubscriberFeedPreferences();
+  prefs.watchRegions = ["global"];
+  prefs.favoriteSources = ["example desk"];
+
+  const alerts = matchOsintSubscriberAlerts({
+    userId: "user-1",
+    item: {
+      title: "OSINT item",
+      summary: "OSINT item summary",
+      source: "Example Desk",
+      url: "https://example.com/item",
+      timestamp: "2026-03-09T12:00:00.000Z",
+      region: "global",
+      category: "news",
+      severity: "high",
+    },
+    preferences: prefs,
+  });
+
+  assert.deepEqual(
+    alerts.map((alert) => alert.type).sort(),
+    ["high_signal_region", "high_signal_source"],
+  );
+});
+
+test("sortSubscriberAlerts orders newest first then stronger scores", () => {
+  const items = [
+    {
+      id: "older-high",
+      type: "high_signal_region",
+      sourceSurface: "osint",
+      createdAt: "2026-03-09T11:00:00.000Z",
+      readAt: null,
+      title: "older-high",
+      summary: "",
+      link: "",
+      sourceLabel: "",
+      channelOrProvider: "",
+      region: "",
+      tags: [],
+      signalScore: 95,
+      rankReasons: [],
+      matchedPreference: "global",
+    },
+    {
+      id: "newer-low",
+      type: "high_signal_region",
+      sourceSurface: "telegram",
+      createdAt: "2026-03-09T12:00:00.000Z",
+      readAt: null,
+      title: "newer-low",
+      summary: "",
+      link: "",
+      sourceLabel: "",
+      channelOrProvider: "",
+      region: "",
+      tags: [],
+      signalScore: 60,
+      rankReasons: [],
+      matchedPreference: "global",
+    },
+  ] as const;
+
+  assert.equal(sortSubscriberAlerts(items as never)[0]?.id, "newer-low");
+});
+

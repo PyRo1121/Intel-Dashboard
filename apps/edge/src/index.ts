@@ -18,6 +18,12 @@ import {
   sortSubscriberFeedItems,
   type SubscriberFeedPreferences,
 } from "./subscriber-feed";
+import {
+  matchOsintSubscriberAlerts,
+  matchTelegramSubscriberAlerts,
+  normalizeSubscriberAlertState,
+  sortSubscriberAlerts,
+} from "./subscriber-alerts";
 import { createEdgeAuth } from "./auth";
 import { misconfiguredApiResponse, unauthorizedApiResponse } from "./auth-api-response";
 import { buildDeterministicAvatarDataUrl } from "./avatar-fallback";
@@ -93,6 +99,26 @@ type SubscriberOsintItem = {
   region: string;
   category: string;
   severity: string;
+};
+
+type SubscriberAlertRow = {
+  id: string;
+  type: string;
+  source_surface: string;
+  item_id: string;
+  matched_preference: string;
+  title: string;
+  summary: string;
+  link: string;
+  source_label: string;
+  channel_or_provider: string;
+  region: string;
+  tags_json: string;
+  signal_score: number;
+  signal_grade: string | null;
+  rank_reasons_json: string;
+  created_at: string;
+  read_at: string | null;
 };
 
 export interface Env extends Cloudflare.Env {
@@ -2193,6 +2219,7 @@ function parseProviderList(raw: unknown): string[] {
 }
 
 let subscriberFeedSchemaReady = false;
+let subscriberAlertSchemaReady = false;
 
 async function ensureSubscriberFeedSchema(env: Env): Promise<void> {
   if (subscriberFeedSchemaReady) return;
@@ -2238,6 +2265,45 @@ async function ensureSubscriberFeedSchema(env: Env): Promise<void> {
     )`,
   ).run();
   subscriberFeedSchemaReady = true;
+}
+
+async function ensureSubscriberAlertSchema(env: Env): Promise<void> {
+  if (subscriberAlertSchemaReady) return;
+  await env.INTEL_DB.prepare(
+    `CREATE TABLE IF NOT EXISTS subscriber_alert_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      source_surface TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      matched_preference TEXT NOT NULL,
+      title TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      link TEXT NOT NULL,
+      source_label TEXT NOT NULL,
+      channel_or_provider TEXT NOT NULL,
+      region TEXT NOT NULL,
+      tags_json TEXT NOT NULL,
+      signal_score REAL NOT NULL DEFAULT 0,
+      signal_grade TEXT,
+      rank_reasons_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      read_at TEXT
+    )`,
+  ).run();
+  await env.INTEL_DB.prepare(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_subscriber_alert_events_unique
+     ON subscriber_alert_events (user_id, type, item_id, matched_preference)`,
+  ).run();
+  await env.INTEL_DB.prepare(
+    `CREATE INDEX IF NOT EXISTS idx_subscriber_alert_events_user_created
+     ON subscriber_alert_events (user_id, created_at DESC)`,
+  ).run();
+  await env.INTEL_DB.prepare(
+    `CREATE INDEX IF NOT EXISTS idx_subscriber_alert_events_user_read
+     ON subscriber_alert_events (user_id, read_at, created_at DESC)`,
+  ).run();
+  subscriberAlertSchemaReady = true;
 }
 
 async function requireSubscriberEntitlement(params: {
@@ -2369,6 +2435,158 @@ async function loadSubscriberOsintItems(env: Env): Promise<SubscriberOsintItem[]
   } catch {
     return [];
   }
+}
+
+function hasSubscriberAlertPreferences(preferences: SubscriberFeedPreferences): boolean {
+  return (
+    preferences.favoriteChannels.length > 0 ||
+    preferences.favoriteSources.length > 0 ||
+    preferences.watchRegions.length > 0 ||
+    preferences.watchTags.length > 0 ||
+    preferences.watchCategories.length > 0
+  );
+}
+
+async function materializeSubscriberAlerts(env: Env, userId: string, preferences: SubscriberFeedPreferences): Promise<void> {
+  await ensureSubscriberAlertSchema(env);
+  if (!hasSubscriberAlertPreferences(preferences)) {
+    return;
+  }
+
+  const [telegramEvents, intelItems] = await Promise.all([
+    loadTelegramCanonicalEvents(env),
+    loadSubscriberOsintItems(env),
+  ]);
+
+  const alerts = [
+    ...telegramEvents.flatMap((event) =>
+      matchTelegramSubscriberAlerts({
+        userId,
+        event: event as never,
+        preferences,
+      }),
+    ),
+    ...intelItems.flatMap((item) =>
+      matchOsintSubscriberAlerts({
+        userId,
+        item,
+        preferences,
+      }),
+    ),
+  ];
+
+  if (alerts.length < 1) {
+    return;
+  }
+
+  const statements = alerts.map((alert) =>
+    env.INTEL_DB.prepare(
+      `INSERT OR IGNORE INTO subscriber_alert_events (
+        id, user_id, type, source_surface, item_id, matched_preference,
+        title, summary, link, source_label, channel_or_provider, region,
+        tags_json, signal_score, signal_grade, rank_reasons_json, created_at, read_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+    ).bind(
+      alert.id,
+      userId,
+      alert.type,
+      alert.sourceSurface,
+      alert.id,
+      alert.matchedPreference,
+      alert.title,
+      alert.summary,
+      alert.link,
+      alert.sourceLabel,
+      alert.channelOrProvider,
+      alert.region,
+      JSON.stringify(alert.tags),
+      alert.signalScore,
+      alert.signalGrade ?? null,
+      JSON.stringify(alert.rankReasons),
+      alert.createdAt,
+    ),
+  );
+
+  await env.INTEL_DB.batch(statements);
+}
+
+async function loadSubscriberAlerts(env: Env, userId: string, state: "all" | "unread", limit: number) {
+  await ensureSubscriberAlertSchema(env);
+  const unreadRow = await env.INTEL_DB.prepare(
+    `SELECT COUNT(*) AS unreadCount FROM subscriber_alert_events WHERE user_id = ? AND read_at IS NULL`,
+  ).bind(userId).first<Record<string, unknown>>();
+
+  const whereClause = state === "unread" ? `WHERE user_id = ? AND read_at IS NULL` : `WHERE user_id = ?`;
+  const results = await env.INTEL_DB.prepare(
+    `SELECT
+      id, type, source_surface, item_id, matched_preference,
+      title, summary, link, source_label, channel_or_provider, region,
+      tags_json, signal_score, signal_grade, rank_reasons_json, created_at, read_at
+     FROM subscriber_alert_events
+     ${whereClause}
+     ORDER BY created_at DESC, signal_score DESC
+     LIMIT ?`,
+  ).bind(userId, limit).all<SubscriberAlertRow>();
+
+  const items = sortSubscriberAlerts(
+    (results.results ?? []).map((row) => ({
+      id: normalizeString(row.id) ?? "",
+      type: (normalizeString(row.type) ?? "") as never,
+      sourceSurface: ((normalizeString(row.source_surface) ?? "telegram") as "telegram" | "osint"),
+      createdAt: normalizeString(row.created_at) ?? "",
+      readAt: normalizeString(row.read_at) ?? null,
+      title: normalizeString(row.title) ?? "",
+      summary: normalizeString(row.summary) ?? "",
+      link: normalizeString(row.link) ?? "",
+      sourceLabel: normalizeString(row.source_label) ?? "",
+      channelOrProvider: normalizeString(row.channel_or_provider) ?? "",
+      region: normalizeString(row.region) ?? "",
+      tags: (() => {
+        try {
+          const parsed = JSON.parse(normalizeString(row.tags_json) ?? "[]");
+          return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+        } catch {
+          return [];
+        }
+      })(),
+      signalScore: normalizeNumber(row.signal_score) ?? 0,
+      signalGrade: normalizeString(row.signal_grade) ?? undefined,
+      rankReasons: (() => {
+        try {
+          const parsed = JSON.parse(normalizeString(row.rank_reasons_json) ?? "[]");
+          return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+        } catch {
+          return [];
+        }
+      })(),
+      matchedPreference: normalizeString(row.matched_preference) ?? "",
+    })),
+  );
+
+  return {
+    unreadCount: normalizeNumber(unreadRow?.unreadCount) ?? 0,
+    items,
+  };
+}
+
+async function markSubscriberAlertsRead(env: Env, userId: string, alertIds: string[]): Promise<void> {
+  await ensureSubscriberAlertSchema(env);
+  const ids = Array.from(new Set(alertIds.map((value) => normalizeString(value) ?? "").filter(Boolean))).slice(0, 100);
+  if (ids.length < 1) return;
+  const now = new Date().toISOString();
+  const statements = ids.map((id) =>
+    env.INTEL_DB.prepare(
+      `UPDATE subscriber_alert_events SET read_at = ? WHERE user_id = ? AND id = ? AND read_at IS NULL`,
+    ).bind(now, userId, id),
+  );
+  await env.INTEL_DB.batch(statements);
+}
+
+async function markAllSubscriberAlertsRead(env: Env, userId: string): Promise<void> {
+  await ensureSubscriberAlertSchema(env);
+  await env.INTEL_DB.prepare(
+    `UPDATE subscriber_alert_events SET read_at = ? WHERE user_id = ? AND read_at IS NULL`,
+  ).bind(new Date().toISOString(), userId).run();
 }
 
 async function loadCrmDirectorySnapshot(env: Env): Promise<{
@@ -5618,6 +5836,66 @@ export default {
         preferences,
         items,
       });
+    }
+
+    if (path === "/api/subscriber/my-alerts") {
+      if (request.method !== "GET") {
+        return privateApiMethodNotAllowed(origin, "GET");
+      }
+      if (!env.INTEL_DB) {
+        return privateApiJson(origin, 503, { error: "Subscriber alerts unavailable" });
+      }
+      const gate = await requireSubscriberEntitlement({ env, user, origin });
+      if (!gate.ok) {
+        return gate.response;
+      }
+
+      const preferences = await loadSubscriberFeedPreferences(env, gate.userId);
+      await materializeSubscriberAlerts(env, gate.userId, preferences);
+      const state = normalizeSubscriberAlertState(url.searchParams.get("state"));
+      const limitRaw = normalizeNumber(url.searchParams.get("limit"));
+      const limit = limitRaw === null ? 50 : Math.min(Math.max(1, Math.floor(limitRaw)), 200);
+      const response = await loadSubscriberAlerts(env, gate.userId, state, limit);
+      return privateApiJson(origin, 200, response);
+    }
+
+    if (path === "/api/subscriber/my-alerts/read") {
+      if (request.method !== "POST") {
+        return privateApiMethodNotAllowed(origin, "POST");
+      }
+      if (!env.INTEL_DB) {
+        return privateApiJson(origin, 503, { error: "Subscriber alerts unavailable" });
+      }
+      const gate = await requireSubscriberEntitlement({ env, user, origin });
+      if (!gate.ok) {
+        return gate.response;
+      }
+      let payload: unknown;
+      try {
+        payload = await request.json();
+      } catch {
+        return privateApiJson(origin, 400, { error: "Invalid JSON" });
+      }
+      const alertIds = isRecord(payload) && Array.isArray(payload.alertIds)
+        ? payload.alertIds.filter((value): value is string => typeof value === "string")
+        : [];
+      await markSubscriberAlertsRead(env, gate.userId, alertIds);
+      return privateApiJson(origin, 200, { ok: true });
+    }
+
+    if (path === "/api/subscriber/my-alerts/read-all") {
+      if (request.method !== "POST") {
+        return privateApiMethodNotAllowed(origin, "POST");
+      }
+      if (!env.INTEL_DB) {
+        return privateApiJson(origin, 503, { error: "Subscriber alerts unavailable" });
+      }
+      const gate = await requireSubscriberEntitlement({ env, user, origin });
+      if (!gate.ok) {
+        return gate.response;
+      }
+      await markAllSubscriberAlertsRead(env, gate.userId);
+      return privateApiJson(origin, 200, { ok: true });
     }
 
     if (

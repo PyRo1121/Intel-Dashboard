@@ -1341,6 +1341,7 @@ test("browser authenticated sidebar navigation opens the expected routes", async
 
     const checks = [
       { label: "Overview", heading: "Intel Dashboard Overview", path: "/overview" },
+      { label: "My Feed", heading: "My Feed", path: "/my-feed" },
       { label: "Threat Map", heading: "Threat Map", path: "/map" },
       { label: "Air/Sea Ops", heading: "Air / Sea Ops", path: "/air-sea" },
       { label: "Briefings", heading: "Briefings", path: "/briefings" },

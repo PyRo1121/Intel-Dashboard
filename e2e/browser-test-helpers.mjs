@@ -22,9 +22,7 @@ export const sessionValidationCache = new Map();
 export function isIgnorableConsoleError(text) {
   return (
     /^%c%d font-size:0;color:transparent NaN$/.test(text) ||
-    /Note that 'script-src' was not explicitly set, so 'default-src' is used as a fallback\./i.test(text) ||
-    /Failed to load resource: the server responded with a status of 401 \(\)/i.test(text) ||
-    /Failed to load resource: the server responded with a status of 404 \(\)/i.test(text)
+    /Note that 'script-src' was not explicitly set, so 'default-src' is used as a fallback\./i.test(text)
   );
 }
 

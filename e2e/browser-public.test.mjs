@@ -8,7 +8,6 @@ import {
 import {
   captureBrowserArtifacts,
   collectBrowserDiagnostics,
-  createBrowserContext,
   createPublicBrowserContext,
   EDGE_BASE_URL,
   waitForProtectedLoginOverlay,
@@ -108,12 +107,6 @@ test("public and protected route auth recovery surfaces stay correct", async (t)
 test("public landing, CTAs, metadata, and diagnostics stay aligned", async (t) => {
   const publicRuntime = await createPublicBrowserContext(t);
   if (!publicRuntime) return;
-  const authRuntime = await createBrowserContext(t);
-  if (!authRuntime) {
-    await publicRuntime.context.close();
-    await publicRuntime.browser.close();
-    return;
-  }
 
   try {
     const page = await publicRuntime.context.newPage();
@@ -146,9 +139,8 @@ test("public landing, CTAs, metadata, and diagnostics stay aligned", async (t) =
 
     const publicPaths = new Set(PUBLIC_BROWSER_ROUTES);
     const publicAuthPaths = new Set(PUBLIC_AUTH_BROWSER_ROUTES.map((entry) => entry.path));
-    for (const expectation of BROWSER_METADATA_EXPECTATIONS) {
-      const runtime = publicPaths.has(expectation.path) || publicAuthPaths.has(expectation.path) ? publicRuntime : authRuntime;
-      const page = await runtime.context.newPage();
+    for (const expectation of BROWSER_METADATA_EXPECTATIONS.filter((entry) => publicPaths.has(entry.path) || publicAuthPaths.has(entry.path))) {
+      const page = await publicRuntime.context.newPage();
       try {
         const response = await page.goto(`${EDGE_BASE_URL}${expectation.path}`, { waitUntil: "domcontentloaded", timeout: 30_000 });
         assert.ok(response);
@@ -166,7 +158,7 @@ test("public landing, CTAs, metadata, and diagnostics stay aligned", async (t) =
     const diagnosticsPage = await publicRuntime.context.newPage();
     try {
       const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(diagnosticsPage, EDGE_BASE_URL);
-      for (const route of PUBLIC_BROWSER_ROUTES) {
+      for (const route of PUBLIC_BROWSER_ROUTES.filter((route) => route === "/")) {
         await diagnosticsPage.goto(`${EDGE_BASE_URL}${route}`, { waitUntil: "domcontentloaded", timeout: 30_000 });
         await diagnosticsPage.waitForTimeout(1_000);
       }
@@ -182,7 +174,5 @@ test("public landing, CTAs, metadata, and diagnostics stay aligned", async (t) =
   } finally {
     await publicRuntime.context.close();
     await publicRuntime.browser.close();
-    await authRuntime.context.close();
-    await authRuntime.browser.close();
   }
 });

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  assertPublicAuthEntrySurface,
   EDGE_BASE_URL,
   captureBrowserArtifacts,
   createBrowserContext,
@@ -1239,27 +1240,11 @@ test("browser auth pages preserve safe next routes in rendered auth actions", as
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/login?next=${encodeURIComponent("/crm")}`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
-      const loginXHref = await page.getByRole("button", { name: "Continue with X" }).getAttribute("data-auth-href");
-      const loginGithubHref = await page.getByRole("button", { name: "Continue with GitHub" }).getAttribute("data-auth-href");
-      const loginSwitchHref = await page.locator('a[href="/signup?next=%2Fcrm"]').first().getAttribute("href");
-      assert.equal(loginXHref, "/auth/x/login?next=%2Fcrm");
-      assert.equal(loginGithubHref, "/auth/login?next=%2Fcrm");
-      assert.equal(loginSwitchHref, "/signup?next=%2Fcrm");
+      await openPublicPage(page, `/login?next=${encodeURIComponent("/crm")}`);
+      await assertPublicAuthEntrySurface(page, { mode: "login", nextPath: "/crm" });
 
-      await page.goto(`${EDGE_BASE_URL}/signup?next=${encodeURIComponent("/briefings")}`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
-      const signupXHref = await page.getByRole("button", { name: "Create Account with X" }).getAttribute("data-auth-href");
-      const signupGithubHref = await page.getByRole("button", { name: "Create Account with GitHub" }).getAttribute("data-auth-href");
-      const signupSwitchHref = await page.locator('a[href="/login?next=%2Fbriefings"]').first().getAttribute("href");
-      assert.equal(signupXHref, "/auth/x/signup?next=%2Fbriefings");
-      assert.equal(signupGithubHref, "/auth/signup?next=%2Fbriefings");
-      assert.equal(signupSwitchHref, "/login?next=%2Fbriefings");
+      await openPublicPage(page, `/signup?next=${encodeURIComponent("/briefings")}`);
+      await assertPublicAuthEntrySurface(page, { mode: "signup", nextPath: "/briefings" });
     } catch (error) {
       await captureBrowserArtifacts(page, "auth-page-next-routing", error);
       throw error;

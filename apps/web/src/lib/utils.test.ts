@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  countBySeverity,
   formatAgeAgoAt,
   formatDateTime,
   formatLongDateTime,
@@ -54,4 +55,22 @@ test("isInitialResourceLoading only flags empty refreshing resources", () => {
   assert.equal(isInitialResourceLoading("refreshing", 0), true);
   assert.equal(isInitialResourceLoading("ready", 0), false);
   assert.equal(isInitialResourceLoading("refreshing", 3), false);
+});
+
+test("countBySeverity aggregates per-severity totals", () => {
+  assert.deepEqual(
+    countBySeverity([
+      { severity: "critical" as const },
+      { severity: "high" as const },
+      { severity: "high" as const },
+      { severity: "low" as const },
+      { severity: "" as const },
+    ]),
+    {
+      critical: 1,
+      high: 2,
+      medium: 0,
+      low: 1,
+    },
+  );
 });

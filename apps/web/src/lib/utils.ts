@@ -1,5 +1,9 @@
 import type { Severity } from "./types";
 
+type SeverityCarrier = {
+  severity: Severity | "";
+};
+
 export function severityColor(severity: Severity | ""): string {
   switch (severity) {
     case "critical": return "text-red-400";
@@ -120,4 +124,13 @@ export function formatLongDateTime(timestamp: string): string {
 
 export function formatPrice(price: number): string {
   return `${(price * 100).toFixed(0)}¢`;
+}
+
+export function countBySeverity<T extends SeverityCarrier>(items: T[]): Record<Severity, number> {
+  return {
+    critical: items.filter((item) => item.severity === "critical").length,
+    high: items.filter((item) => item.severity === "high").length,
+    medium: items.filter((item) => item.severity === "medium").length,
+    low: items.filter((item) => item.severity === "low").length,
+  };
 }

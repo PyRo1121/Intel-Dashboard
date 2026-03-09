@@ -126,7 +126,7 @@ test("owner-admin CRM keyboard navigation stays intact", async (t) => {
     const page = await context.newPage();
     try {
       await page.goto(`${EDGE_BASE_URL}/crm`, {
-        waitUntil: "domcontentloaded",
+        waitUntil: "networkidle",
         timeout: 45_000,
       });
 

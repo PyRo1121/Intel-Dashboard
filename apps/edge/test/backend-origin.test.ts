@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   INTERNAL_BACKEND_ORIGIN,
+  resolveBackendApiToken,
+  resolveBackendFetch,
   resolveBackendEndpointUrl,
   usesBackendServiceBinding,
 } from "../src/backend-origin.ts";
@@ -80,5 +82,43 @@ describe("resolveBackendEndpointUrl", () => {
       () => resolveBackendEndpointUrl({}, "/api/intel-dashboard/user-info"),
       /intel_backend_binding_required/,
     );
+  });
+});
+
+describe("resolveBackendApiToken", () => {
+  it("prefers usage token and falls back to intel api token", () => {
+    assert.equal(
+      resolveBackendApiToken({
+        USAGE_DATA_SOURCE_TOKEN: " usage-token ",
+        INTEL_API_TOKEN: "intel-token",
+      }),
+      "usage-token",
+    );
+    assert.equal(
+      resolveBackendApiToken({
+        INTEL_API_TOKEN: " intel-token ",
+      }),
+      "intel-token",
+    );
+    assert.equal(resolveBackendApiToken({}), "");
+  });
+});
+
+describe("resolveBackendFetch", () => {
+  it("returns the bound service fetch when a binding exists", async () => {
+    let capturedThis: unknown = null;
+    const binding = {
+      async fetch(this: unknown) {
+        capturedThis = this;
+        return new Response("ok");
+      },
+      connect: (() => {
+        throw new Error("not_used_in_test");
+      }) as never,
+    };
+    const fetchImpl = resolveBackendFetch({ INTEL_BACKEND: binding });
+    const response = await fetchImpl("https://example.com");
+    assert.equal(await response.text(), "ok");
+    assert.equal(capturedThis, binding);
   });
 });

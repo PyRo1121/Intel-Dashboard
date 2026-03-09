@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { captureBrowserArtifacts, createBrowserContext, EDGE_BASE_URL, waitForCrmDashboard } from "./browser-test-helpers.mjs";
+import { captureBrowserArtifacts, createBrowserContext, EDGE_BASE_URL, waitForBillingDashboard, waitForCrmDashboard } from "./browser-test-helpers.mjs";
 
 test("owner-admin billing actions surface owner bypass notices", async (t) => {
   const runtime = await createBrowserContext(t);
@@ -12,14 +12,11 @@ test("owner-admin billing actions surface owner bypass notices", async (t) => {
     const page = await context.newPage();
     try {
       await page.goto(`${EDGE_BASE_URL}/billing`, {
-        waitUntil: "domcontentloaded",
+        waitUntil: "networkidle",
         timeout: 45_000,
       });
 
-      await page.getByTestId("billing-status-surface").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("billing-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("billing-summary-plan").waitFor({ state: "visible", timeout: 30_000 });
-      const notice = page.getByTestId("billing-notice");
+      const notice = await waitForBillingDashboard(page);
 
       await page.getByTestId("billing-start-trial").click();
       await notice.waitFor({ state: "visible", timeout: 30_000 });

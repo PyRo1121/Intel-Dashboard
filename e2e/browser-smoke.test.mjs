@@ -4,7 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { chromium } from "@playwright/test";
 import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
-import { waitForCrmDashboard } from "./browser-test-helpers.mjs";
+import { waitForBillingDashboard, waitForCrmDashboard } from "./browser-test-helpers.mjs";
 import {
   AUTHENTICATED_BROWSER_NOERROR_ROUTES,
   AUTHENTICATED_BROWSER_ROUTES,
@@ -392,10 +392,7 @@ test("browser-authenticated billing actions surface owner bypass notices", async
         timeout: 45_000,
       });
 
-      await page.getByTestId("billing-status-surface").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("billing-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("billing-summary-plan").waitFor({ state: "visible", timeout: 30_000 });
-      const notice = page.getByTestId("billing-notice");
+      const notice = await waitForBillingDashboard(page);
 
       await page.getByTestId("billing-start-trial").click();
       await notice.waitFor({ state: "visible", timeout: 30_000 });

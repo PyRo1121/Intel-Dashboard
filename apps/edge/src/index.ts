@@ -1,9 +1,7 @@
 import { IntelCacheDO } from "./intel-cache-do";
 import {
   applyDefaultSecurityHeaders,
-  buildCorsHeaders,
   decodeAndValidateMediaKey,
-  DEFAULT_APP_ORIGIN,
   isTrustedRequestOrigin,
   verifySignedAdminRequest,
   verifyStripeWebhookSignature,
@@ -16,6 +14,7 @@ import { buildClientXProfileDiagnostics, type XProfileSyncDiagnostics } from "./
 import { normalizeSafeAuthRedirectLocation } from "./auth-redirect";
 import { summarizeCrmDataQuality } from "./crm-quality";
 import { buildOwnerCrmAiTelemetryFailureResponse } from "./crm-ai-telemetry-proxy";
+import { corsHeaders, mergeVary, privateApiHeaders } from "./private-api-headers";
 import { getDashboardAppRoutePrefixes, normalizeSafePostAuthPath } from "./post-auth-path";
 import { createTurnstileGateToken, type TurnstileMode, verifyTurnstileGateToken } from "./turnstile";
 import { DASHBOARD_HOME_PATH, DEFAULT_POST_AUTH_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
@@ -1026,20 +1025,6 @@ function fromBase64Url(s: string): Uint8Array {
   return bytes;
 }
 
-function privateApiHeaders(origin: string | null, existingVary: string | null = null): Headers {
-  const headers = new Headers({
-    "Content-Type": "application/json",
-    "Cache-Control": "private, no-store, no-cache, must-revalidate",
-    "CDN-Cache-Control": "no-store",
-    ...corsHeaders(origin),
-  });
-  headers.set(
-    "Vary",
-    mergeVary(existingVary, ["Origin", "Cookie", "Authorization"]),
-  );
-  return headers;
-}
-
 function unauthorizedApiResponse(origin: string | null): Response {
   return new Response(
     JSON.stringify({ error: "Unauthorized", login_url: "/login" }),
@@ -1058,29 +1043,6 @@ function misconfiguredApiResponse(origin: string | null): Response {
       headers: privateApiHeaders(origin),
     },
   );
-}
-
-// ============================================================================
-// CORS
-// ============================================================================
-
-function corsHeaders(origin?: string | null): Record<string, string> {
-  return buildCorsHeaders({ origin, fallbackOrigin: ORIGIN });
-}
-
-function mergeVary(existing: string | null, values: string[]): string {
-  const set = new Set<string>();
-  if (existing) {
-    for (const part of existing.split(",")) {
-      const key = part.trim();
-      if (key) set.add(key);
-    }
-  }
-  for (const value of values) {
-    const key = value.trim();
-    if (key) set.add(key);
-  }
-  return [...set].join(", ");
 }
 
 function normalizeString(value: unknown): string | null {

@@ -1,6 +1,5 @@
 import { betterAuth } from "better-auth";
 import { withCloudflare } from "better-auth-cloudflare";
-import type { DrizzleConfig } from "better-auth-cloudflare";
 import { drizzle } from "drizzle-orm/d1";
 import type { IncomingRequestCfProperties, KVNamespace } from "@cloudflare/workers-types";
 import { authSchema } from "./auth-schema";
@@ -51,6 +50,9 @@ type XResolvedProfile = {
   profileImageUrl: string | null;
   confirmedEmail: string | null;
 };
+
+type CloudflarePluginOptions = Parameters<typeof withCloudflare>[0];
+type CloudflareD1Config = NonNullable<CloudflarePluginOptions["d1"]>;
 
 function normalizeString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -406,8 +408,10 @@ function createTwitterUserInfoResolver(db: D1Database) {
 export function createEdgeAuth(env: AuthEnv, cf: IncomingRequestCfProperties | null | undefined) {
   const db = drizzle(env.INTEL_DB, { schema: authSchema });
   const getTwitterUserInfo = createTwitterUserInfoResolver(env.INTEL_DB);
-  const d1Config: DrizzleConfig<typeof drizzle> = {
-    db,
+  const d1Config: CloudflareD1Config = {
+    // better-auth-cloudflare currently bundles drizzle-orm@0.44.x types,
+    // so assert through the plugin boundary until the package updates.
+    db: db as unknown as CloudflareD1Config["db"],
     options: {
       usePlural: false,
     },

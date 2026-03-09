@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  openCrmSelectedUserPanel,
   assertOwnerBillingBypassNotices,
   captureBrowserArtifacts,
   CRM_AI_WINDOWS,
@@ -73,9 +74,11 @@ test("owner-admin CRM controls filter, export, and enforce refund guardrails", a
       const csv = await readFile(downloadPath, "utf8");
       assert.match(csv, /PyRo1121/i);
 
-      await matchingRow.getByRole("button", { name: /Manage /i }).click();
-      await page.getByTestId("crm-selected-user-panel").waitFor({ state: "visible", timeout: 30_000 });
-      assert.match((await page.getByTestId("crm-selected-user-panel").textContent()) || "", /PyRo1121/i);
+      const selectedPanel = await openCrmSelectedUserPanel(
+        matchingRow.getByRole("button", { name: /Manage /i }),
+        page,
+      );
+      assert.match((await selectedPanel.textContent()) || "", /PyRo1121/i);
 
       const refundAmount = page.locator('input[placeholder="Amount USD \\(blank=full\\)"]').first();
       await refundAmount.fill("0");

@@ -256,6 +256,13 @@ export async function waitForMissingBillingState(page) {
   }, MISSING_BILLING_STATE_PATTERN.source, { timeout: 30_000 });
 }
 
+export async function openCrmSelectedUserPanel(trigger, page) {
+  await trigger.click();
+  const selectedPanel = page.getByTestId("crm-selected-user-panel");
+  await selectedPanel.waitFor({ state: "visible", timeout: 30_000 });
+  return selectedPanel;
+}
+
 export function collectBrowserDiagnostics(page, baseUrl) {
   const pageErrors = [];
   const consoleErrors = [];

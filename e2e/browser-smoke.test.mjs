@@ -5,6 +5,7 @@ import test from "node:test";
 import { chromium } from "@playwright/test";
 import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 import {
+  openCrmSelectedUserPanel,
   assertOwnerBillingBypassNotices,
   CRM_AI_WINDOWS,
   MISSING_BILLING_STATE_PATTERN,
@@ -452,9 +453,11 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
       assert.match(csv, /user_id,name,login,email,providers,plan_status/i, "CRM export should include the expected headers");
       assert.match(csv, /PyRo1121/i, "CRM export should include the owner record");
 
-      await matchingRow.getByRole("button", { name: /Manage /i }).click();
-      await page.getByTestId("crm-selected-user-panel").waitFor({ state: "visible", timeout: 30_000 });
-      assert.match((await page.getByTestId("crm-selected-user-panel").textContent()) || "", /PyRo1121/i, "CRM selected-user panel should render the owner record");
+      const selectedPanel = await openCrmSelectedUserPanel(
+        matchingRow.getByRole("button", { name: /Manage /i }),
+        page,
+      );
+      assert.match((await selectedPanel.textContent()) || "", /PyRo1121/i, "CRM selected-user panel should render the owner record");
       await waitForMissingBillingState(page);
       assert.match(
         (await page.textContent("body")) || "",
@@ -1186,10 +1189,7 @@ test("browser-authenticated CRM and sidebar support keyboard-only navigation", a
       const refreshCustomer = page.getByTestId("crm-refresh-customer");
       await refreshCustomer.focus();
       await refreshCustomer.press("Enter");
-      await page.waitForFunction(() => {
-        const text = document.body.textContent || "";
-        return /Target user has no Stripe customer id yet\.|Billing account not found for target user\./i.test(text);
-      }, { timeout: 30_000 });
+      await waitForMissingBillingState(page);
 
       await page.goto(`${EDGE_BASE_URL}/osint`, {
         waitUntil: "networkidle",

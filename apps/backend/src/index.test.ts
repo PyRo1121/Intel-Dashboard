@@ -1412,7 +1412,7 @@ describe("intel-dashboard backend worker", () => {
       },
     });
 
-    const getCalls = [];
+    const getCalls: string[] = [];
     const originalGet = kv.binding.get;
     kv.binding.get = async (key) => {
       getCalls.push(key);
@@ -3947,7 +3947,7 @@ describe("intel-dashboard backend worker", () => {
       },
     });
 
-    const listCalls = [];
+    const listCalls: string[] = [];
     const originalList = kv.binding.list;
     kv.binding.list = async (options) => {
       listCalls.push(options?.prefix ?? "");

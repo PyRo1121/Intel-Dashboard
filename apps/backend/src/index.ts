@@ -750,6 +750,7 @@ export type WorkerEnv = {
   NEWS_HOT_OVERLAY_LIMIT?: string;
   NEWS_HOT_OVERLAY_SHARD_FANOUT?: string;
   NEWS_HOT_OVERLAY_TIMEOUT_MS?: string;
+  NEWS_HOT_OVERLAY_CACHE_MS?: string;
   OUTBOUND_ASYNC?: string;
   BILLING_ALLOW_RETRIAL?: string;
   REQUIRE_SIGNED_USER_ID?: string;

@@ -1,5 +1,6 @@
 import { For, Show, createMemo, createSignal, createResource } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
+import { A } from "@solidjs/router";
 import { formatTitleLabel } from "~/lib/event-label";
 import { fetchOsintItems } from "~/lib/osint-client";
 import { readLatestArray } from "~/lib/resource-latest";
@@ -51,6 +52,14 @@ export default function OsintFeed() {
   const seoDesc = OSINT_DESCRIPTION;
 
   const severityCounts = () => countBySeverity(items());
+  const providerHref = (source: string) =>
+    `/osint/source/${encodeURIComponent(
+      source
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, ""),
+    )}`;
 
   return (
     <>
@@ -201,7 +210,9 @@ export default function OsintFeed() {
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2 mb-2 flex-wrap">
                         <SeverityBadge severity={item.severity} />
-                        <span class="text-[11px] text-zinc-600 uppercase tracking-wider font-semibold">{item.source}</span>
+                        <A href={providerHref(item.source)} class="text-[11px] text-zinc-600 uppercase tracking-wider font-semibold no-underline hover:text-blue-300">
+                          {item.source}
+                        </A>
                         <Show when={item.region}>
                           <span class="text-[11px] text-zinc-700">&middot;</span>
                           <span class="text-[11px] text-zinc-600 capitalize">{(item.region || "").replace("_", " ")}</span>

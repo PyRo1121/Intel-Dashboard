@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isAuthUserOwner, resolveAuthUserDisplay, resolveAuthUserEntitlementView, resolveAuthUserRole } from "./auth-user.ts";
+import {
+  isAuthUserOwner,
+  resolveAuthUserDisplay,
+  resolveAuthUserEntitlementView,
+  resolveAuthUserFeedSurfaceLimit,
+  resolveAuthUserRole,
+} from "./auth-user.ts";
 
 test("resolveAuthUserRole falls back from role to tier to free", () => {
   assert.equal(resolveAuthUserRole({ entitlement: { role: "owner", tier: "subscriber" } }), "owner");
@@ -35,6 +41,25 @@ test("resolveAuthUserEntitlementView reuses the shared entitlement view contract
     planLabel: "Free",
     planTone: "text-zinc-500",
   });
+});
+
+test("resolveAuthUserFeedSurfaceLimit reuses shared per-surface entitlement limits", () => {
+  const user = {
+    entitlement: {
+      limits: {
+        intelMaxItems: 20,
+        briefingsMaxItems: 8,
+        airSeaMaxItems: 12,
+        telegramTotalMessagesMax: 50,
+      },
+    },
+  };
+
+  assert.equal(resolveAuthUserFeedSurfaceLimit(user, "OSINT"), 20);
+  assert.equal(resolveAuthUserFeedSurfaceLimit(user, "Briefings"), 8);
+  assert.equal(resolveAuthUserFeedSurfaceLimit(user, "Air-Sea"), 12);
+  assert.equal(resolveAuthUserFeedSurfaceLimit(user, "Telegram"), 50);
+  assert.equal(resolveAuthUserFeedSurfaceLimit(undefined, "OSINT"), undefined);
 });
 
 test("resolveAuthUserDisplay normalizes name, login, and avatar fallbacks", () => {

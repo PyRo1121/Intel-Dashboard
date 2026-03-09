@@ -1,9 +1,9 @@
 import { Meta, Title } from "@solidjs/meta";
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
-import { computeAiCacheHitRatePercent, getAiTelemetryMaxValue, getAiTelemetryTopEntryBy } from "~/lib/ai-telemetry";
+import { computeAiCacheHitRatePercent, getAiTelemetryMaxValue, getAiTelemetryTopEntryBy, readAiTelemetryItems } from "~/lib/ai-telemetry";
 import { useAuth } from "~/lib/auth";
 import { isAuthUserOwner } from "~/lib/auth-user";
-import { fetchCrmAiTelemetry, fetchCrmOverview, postCrmAction } from "~/lib/crm-client";
+import { fetchCrmAiTelemetry, fetchCrmOverview, postCrmAction, readCrmItems } from "~/lib/crm-client";
 import { buildCrmAccountStatusMap, filterCrmDirectoryUsers, findCrmDirectoryUserById, formatCrmProviders } from "~/lib/crm-directory";
 import { buildCrmLatestEventMap, escapeCsvCell } from "~/lib/crm-export";
 import { getCrmCustomerCacheSourceLabel } from "~/lib/crm-customer-cache";
@@ -710,7 +710,7 @@ export default function CrmRoute() {
                           <span class="text-[11px] text-zinc-500">top lanes by total tokens</span>
                         </div>
                         <div class="mt-3 space-y-2">
-                          <For each={aiTelemetry()?.result?.lanes ?? []}>
+                          <For each={readAiTelemetryItems(aiTelemetry()?.result?.lanes)}>
                             {(item) => {
                               const width = `${Math.max(8, ((item.totalTokens ?? 0) / aiLaneMaxTokens()) * 100)}%`;
                               return (
@@ -741,7 +741,7 @@ export default function CrmRoute() {
                         <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                           <h3 class="text-sm font-semibold text-zinc-100">Model Spend</h3>
                           <div class="mt-3 space-y-2">
-                            <For each={aiTelemetry()?.result?.models ?? []}>
+                            <For each={readAiTelemetryItems(aiTelemetry()?.result?.models)}>
                               {(item) => (
                                 <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
                                   <span class="text-zinc-300">{formatEventLabel(item.label)}</span>
@@ -755,7 +755,7 @@ export default function CrmRoute() {
                         <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                           <h3 class="text-sm font-semibold text-zinc-100">Cache + Outcomes</h3>
                           <div class="mt-3 grid gap-2">
-                            <For each={aiTelemetry()?.result?.cacheStatuses ?? []}>
+                            <For each={readAiTelemetryItems(aiTelemetry()?.result?.cacheStatuses)}>
                               {(item) => (
                                 <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
                                   <span class="text-zinc-300">{formatEventLabel(item.label)}</span>
@@ -763,7 +763,7 @@ export default function CrmRoute() {
                                 </div>
                               )}
                             </For>
-                            <For each={aiTelemetry()?.result?.outcomes ?? []}>
+                            <For each={readAiTelemetryItems(aiTelemetry()?.result?.outcomes)}>
                               {(item) => (
                                 <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
                                   <span class="text-zinc-300">{formatEventLabel(item.label)}</span>
@@ -782,7 +782,7 @@ export default function CrmRoute() {
                         <span class="text-[11px] text-zinc-500">generated {formatTime(aiTelemetry()?.result?.generatedAtMs)}</span>
                       </div>
                       <div class="mt-3 grid gap-2">
-                        <For each={aiTelemetry()?.result?.series ?? []}>
+                        <For each={readAiTelemetryItems(aiTelemetry()?.result?.series)}>
                           {(point) => {
                             const width = `${Math.max(4, ((point.calls ?? 0) / aiSeriesMaxCalls()) * 100)}%`;
                             return (
@@ -1028,7 +1028,7 @@ export default function CrmRoute() {
                     <div class="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
                       <p class="text-xs uppercase tracking-[0.11em] text-zinc-500">Recent Charges</p>
                       <div class="mt-2 space-y-2">
-                        <For each={selectedCustomerOps()?.result?.stripe?.charges ?? []}>
+                        <For each={readCrmItems(selectedCustomerOps()?.result?.stripe?.charges)}>
                           {(charge) => (
                             <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
                               <div>
@@ -1055,7 +1055,7 @@ export default function CrmRoute() {
               <section class="intel-panel mt-4 p-4">
                 <h2 class="text-base font-semibold text-zinc-100">Telemetry Event Mix (7d)</h2>
                 <div class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <For each={crm()?.result?.telemetry?.topKinds7d ?? []}>
+                  <For each={readCrmItems(crm()?.result?.telemetry?.topKinds7d)}>
                     {(item) => (
                       <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
                         <p class="text-xs text-zinc-500">{formatEventLabel(item.kind)}</p>

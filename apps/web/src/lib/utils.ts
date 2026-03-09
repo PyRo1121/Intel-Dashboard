@@ -94,6 +94,16 @@ export function formatAgeAgoAt(atMs: number | undefined, nowMs: number): string 
   return `${formatAgeCompactFromMs(Math.max(0, nowMs - atMs))} ago`;
 }
 
+export function truncateText(value: string, maxChars: number, ellipsis = "..."): string {
+  if (!Number.isFinite(maxChars) || maxChars <= 0) {
+    return "";
+  }
+  if (value.length <= maxChars) {
+    return value;
+  }
+  return `${value.slice(0, maxChars)}${ellipsis}`;
+}
+
 export function isInitialResourceLoading(resourceState: string | undefined, itemCount: number): boolean {
   return resourceState === "refreshing" && itemCount === 0;
 }

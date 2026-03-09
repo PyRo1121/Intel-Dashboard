@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fetchCrmAiTelemetry, fetchCrmOverview, postCrmAction } from "./crm-client.ts";
+import { fetchCrmAiTelemetry, fetchCrmOverview, postCrmAction, readCrmItems } from "./crm-client.ts";
 
 test("crm client helpers normalize overview, action, and telemetry responses", async () => {
   const originalFetch = globalThis.fetch;
@@ -59,4 +59,9 @@ test("crm client helpers normalize overview, action, and telemetry responses", a
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("readCrmItems returns a stable array fallback", () => {
+  assert.deepEqual(readCrmItems([{ id: 1 }]), [{ id: 1 }]);
+  assert.deepEqual(readCrmItems(undefined), []);
 });

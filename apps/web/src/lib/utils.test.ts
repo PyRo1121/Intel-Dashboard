@@ -13,6 +13,7 @@ import {
   severityColor,
   severityDot,
   severityHexColor,
+  truncateText,
   formatUsd,
   formatWholeNumber,
   isInitialResourceLoading,
@@ -63,6 +64,13 @@ test("parseTimestampMs returns NaN for invalid timestamps", () => {
 test("formatAgeAgoAt formats elapsed time and handles missing values safely", () => {
   assert.equal(formatAgeAgoAt(9_000, 10_000), "1s ago");
   assert.equal(formatAgeAgoAt(undefined, 10_000), "Unknown");
+});
+
+test("truncateText preserves short strings and appends ellipsis to long ones", () => {
+  assert.equal(truncateText("short", 10), "short");
+  assert.equal(truncateText("abcdefghijklmnopqrstuvwxyz", 5), "abcde...");
+  assert.equal(truncateText("abcdefghijklmnopqrstuvwxyz", 5, "…"), "abcde…");
+  assert.equal(truncateText("text", 0), "");
 });
 
 test("isInitialResourceLoading only flags empty refreshing resources", () => {

@@ -12,9 +12,6 @@ type AuthAccessCardProps = {
 
 export default function AuthAccessCard(props: AuthAccessCardProps) {
   const copy = () => getAuthCopy(props.mode);
-  const xHref = () => buildAuthProviderHref("x", props.mode, props.nextPath ?? null);
-  const githubHref = () => buildAuthProviderHref("github", props.mode, props.nextPath ?? null);
-  const switchHref = () => buildAuthModeSwitchHref(props.mode, props.nextPath ?? null);
   const surfaceTestId = () => `auth-access-${props.mode}`;
   const titleTestId = () => `${surfaceTestId()}-title`;
   const xLinkTestId = () => `${surfaceTestId()}-x`;
@@ -37,14 +34,14 @@ export default function AuthAccessCard(props: AuthAccessCardProps) {
 
         <div class="mt-6 space-y-3">
           <a
-            href={xHref()}
+            href={buildAuthProviderHref("x", props.mode, props.nextPath ?? null)}
             data-testid={xLinkTestId()}
             class="intel-btn intel-btn-primary w-full"
           >
             {copy().xLabel}
           </a>
           <a
-            href={githubHref()}
+            href={buildAuthProviderHref("github", props.mode, props.nextPath ?? null)}
             data-testid={githubLinkTestId()}
             class="intel-btn intel-btn-ghost w-full"
           >
@@ -54,7 +51,11 @@ export default function AuthAccessCard(props: AuthAccessCardProps) {
 
         <div class="mt-6 flex items-center justify-between gap-3 text-xs text-zinc-500">
           <span>Secured by Cloudflare Workers</span>
-          <a class="font-medium text-cyan-300 hover:text-cyan-200" href={switchHref()} data-testid={switchLinkTestId()}>
+          <a
+            class="font-medium text-cyan-300 hover:text-cyan-200"
+            href={buildAuthModeSwitchHref(props.mode, props.nextPath ?? null)}
+            data-testid={switchLinkTestId()}
+          >
             {copy().switchLabel}
           </a>
         </div>

@@ -3,6 +3,10 @@ export type AiTelemetryCacheStatsLike = {
   cacheMisses?: number;
 } | null | undefined;
 
+export function readAiTelemetryItems<T>(items: readonly T[] | null | undefined): T[] {
+  return items ? (items as T[]) : [];
+}
+
 export function getAiTelemetryMaxValue<T>(
   items: readonly T[] | null | undefined,
   select: (item: T) => number | null | undefined,

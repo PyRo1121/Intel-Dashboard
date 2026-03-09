@@ -28,6 +28,7 @@ import {
   severityBg,
   severityDot,
   severityHexColor,
+  truncateText,
 } from "~/lib/utils";
 import type { Severity } from "~/lib/types";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
@@ -419,7 +420,7 @@ export default function AirSeaOps() {
                       </div>
 
                       {/* Report text */}
-                      <p class="text-sm text-zinc-300 leading-relaxed">{report.text.length > 500 ? report.text.slice(0, 500) + "..." : report.text}</p>
+                      <p class="text-sm text-zinc-300 leading-relaxed">{truncateText(report.text, 500)}</p>
 
                       {/* Tags + meta */}
                       <div class="flex items-center flex-wrap gap-1.5">

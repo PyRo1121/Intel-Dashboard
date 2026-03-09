@@ -440,7 +440,7 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
       const download = await downloadPromise;
       assert.match(
         download.suggestedFilename(),
-        /^sentinelstream-crm-customers-\d+\.csv$/,
+        /^intel-dashboard-crm-customers-\d+\.csv$/,
         "CRM export should use the expected filename pattern",
       );
       const downloadPath = await download.path();
@@ -466,6 +466,14 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
       await refundAmount.fill("0");
       await page.getByRole("button", { name: "Refund Latest" }).click();
       await page.waitForSelector("text=Refund amount must be a positive number.", { timeout: 10_000 });
+
+      await page.getByRole("button", { name: "15m" }).click();
+      await page.getByRole("button", { name: "Refresh AI" }).click();
+      await page.waitForSelector("text=AI Command Surface", { timeout: 30_000 });
+      const pageText = (await page.textContent("body")) || "";
+      assert.match(pageText, /Lane Spend/i, "CRM should render the AI lane breakdown");
+      assert.match(pageText, /Model Spend/i, "CRM should render the AI model breakdown");
+      assert.match(pageText, /Failure Hotspot/i, "CRM should render AI hotspot cards");
     } catch (error) {
       await captureBrowserArtifacts(page, "authenticated-crm-controls", error);
       throw error;

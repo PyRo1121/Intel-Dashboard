@@ -1859,6 +1859,15 @@ describe("intel-dashboard backend worker", () => {
           cacheHits: 8,
           cacheMisses: 4,
         },
+        lanes: [
+          {
+            label: "unknown",
+            outputInputRatio: 0.4,
+            p95DurationMs: 480.2,
+            cacheHits: 8,
+            cacheMisses: 4,
+          },
+        ],
       },
     });
     expect(analyticsFetch).toHaveBeenCalled();

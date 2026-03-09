@@ -4,6 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { chromium } from "@playwright/test";
 import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
+import { waitForCrmDashboard } from "./browser-test-helpers.mjs";
 import {
   AUTHENTICATED_BROWSER_NOERROR_ROUTES,
   AUTHENTICATED_BROWSER_ROUTES,
@@ -432,11 +433,7 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
         timeout: 45_000,
       });
 
-      await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("crm-summary-mrr").waitFor({ state: "visible", timeout: 30_000 });
-
-      const search = page.getByTestId("crm-user-search");
+      const search = await waitForCrmDashboard(page);
       await search.fill("PyRo1121");
 
       const matchingRow = page.locator("tbody tr").filter({ hasText: /PyRo1121/i }).first();
@@ -1192,7 +1189,7 @@ test("browser-authenticated CRM and sidebar support keyboard-only navigation", a
         timeout: 45_000,
       });
 
-      const crmSearch = page.getByTestId("crm-user-search");
+      const crmSearch = await waitForCrmDashboard(page);
       await crmSearch.focus();
       await page.keyboard.type("PyRo1121");
 

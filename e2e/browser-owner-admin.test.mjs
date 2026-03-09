@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { captureBrowserArtifacts, createBrowserContext, EDGE_BASE_URL } from "./browser-test-helpers.mjs";
+import { captureBrowserArtifacts, createBrowserContext, EDGE_BASE_URL, waitForCrmDashboard } from "./browser-test-helpers.mjs";
 
 test("owner-admin billing actions surface owner bypass notices", async (t) => {
   const runtime = await createBrowserContext(t);
@@ -57,11 +57,7 @@ test("owner-admin CRM controls filter, export, and enforce refund guardrails", a
         timeout: 45_000,
       });
 
-      await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("crm-summary-mrr").waitFor({ state: "visible", timeout: 30_000 });
-
-      const search = page.getByTestId("crm-user-search");
+      const search = await waitForCrmDashboard(page);
       await search.fill("PyRo1121");
 
       const matchingRow = page.locator("tbody tr").filter({ hasText: /PyRo1121/i }).first();
@@ -130,11 +126,7 @@ test("owner-admin CRM keyboard navigation stays intact", async (t) => {
         timeout: 45_000,
       });
 
-      const crmSearch = page.getByTestId("crm-user-search");
-      await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("crm-summary-mrr").waitFor({ state: "visible", timeout: 30_000 });
-      await crmSearch.waitFor({ state: "visible", timeout: 30_000 });
+      const crmSearch = await waitForCrmDashboard(page);
       await crmSearch.focus();
       await page.keyboard.type("PyRo1121");
 

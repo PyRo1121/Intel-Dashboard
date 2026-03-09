@@ -193,6 +193,16 @@ export async function waitForProtectedLoginOverlay(page, { nextPath } = {}) {
   }
 }
 
+export async function waitForCrmDashboard(page) {
+  await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
+  await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
+  await page.getByTestId("crm-summary-mrr").waitFor({ state: "visible", timeout: 30_000 });
+
+  const crmSearch = page.getByTestId("crm-user-search");
+  await crmSearch.waitFor({ state: "visible", timeout: 30_000 });
+  return crmSearch;
+}
+
 export function collectBrowserDiagnostics(page, baseUrl) {
   const pageErrors = [];
   const consoleErrors = [];

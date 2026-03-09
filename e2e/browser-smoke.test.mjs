@@ -131,6 +131,10 @@ test("browser-authenticated billing actions surface owner bypass notices", async
       const activitySurface = page.getByTestId("billing-activity-surface");
       await activitySurface.waitFor({ state: "visible", timeout: 30_000 });
     } catch (error) {
+      if (error instanceof CloudflareChallengeError) {
+        t.skip(error.message);
+        return;
+      }
       await captureBrowserArtifacts(page, "authenticated-billing-actions", error);
       throw error;
     }
@@ -203,6 +207,10 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
         );
       }
     } catch (error) {
+      if (error instanceof CloudflareChallengeError) {
+        t.skip(error.message);
+        return;
+      }
       await captureBrowserArtifacts(page, "authenticated-crm-controls", error);
       throw error;
     }

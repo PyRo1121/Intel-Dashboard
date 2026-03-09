@@ -525,6 +525,40 @@ export async function openAndAssertRouteMetadata(page, expectation, options = {}
   return response;
 }
 
+export async function waitForSurfaceOrCloudflareChallenge(page, selector, challengeMessage, timeout = 30_000) {
+  const handle = await page.waitForFunction(
+    ({ selector, titlePattern, bodyPattern }) => {
+      const surface = document.querySelector(selector);
+      if (surface instanceof HTMLElement) {
+        const style = window.getComputedStyle(surface);
+        const visible = style.display !== "none" && style.visibility !== "hidden" && surface.getClientRects().length > 0;
+        if (visible) {
+          return "ready";
+        }
+      }
+
+      const title = document.title || "";
+      const body = document.body?.textContent || "";
+      if (new RegExp(titlePattern, "i").test(title) || new RegExp(bodyPattern, "i").test(body)) {
+        return "challenge";
+      }
+
+      return false;
+    },
+    {
+      selector,
+      titlePattern: CLOUDFLARE_CHALLENGE_TITLE_PATTERN.source,
+      bodyPattern: CLOUDFLARE_CHALLENGE_BODY_PATTERN.source,
+    },
+    { timeout },
+  );
+  const result = await handle.jsonValue();
+  await handle.dispose?.();
+  if (result === "challenge") {
+    throw new CloudflareChallengeError(challengeMessage);
+  }
+}
+
 export async function waitForCrmDashboard(page) {
   const sessionUnavailable = page.getByRole("heading", { name: "Session Check Unavailable" }).first();
   if (await sessionUnavailable.isVisible().catch(() => false)) {
@@ -534,7 +568,11 @@ export async function waitForCrmDashboard(page) {
     }
   }
 
-  await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
+  await waitForSurfaceOrCloudflareChallenge(
+    page,
+    '[data-testid="crm-customer-360"]',
+    'Cloudflare challenged /crm for the synthetic browser client',
+  );
   await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("crm-summary-mrr").waitFor({ state: "visible", timeout: 30_000 });
 
@@ -604,7 +642,11 @@ export async function openCrmDashboard(page) {
 }
 
 export async function waitForBillingDashboard(page) {
-  await page.getByTestId("billing-status-surface").waitFor({ state: "visible", timeout: 30_000 });
+  await waitForSurfaceOrCloudflareChallenge(
+    page,
+    '[data-testid="billing-status-surface"]',
+    'Cloudflare challenged /billing for the synthetic browser client',
+  );
   await page.getByTestId("billing-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("billing-summary-plan").waitFor({ state: "visible", timeout: 30_000 });
 

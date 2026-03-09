@@ -1,0 +1,65 @@
+name: Backend API Smoke
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-api-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend-api-smoke:
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.fork == false && github.actor != 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      E2E_BACKEND_BASE_URL: https://backend-e2e.pyro1121.com
+      E2E_BACKEND_TOKEN: ${{ secrets.E2E_BACKEND_TOKEN }}
+      E2E_CF_ACCESS_CLIENT_ID: ${{ secrets.E2E_CF_ACCESS_CLIENT_ID }}
+      E2E_CF_ACCESS_CLIENT_SECRET: ${{ secrets.E2E_CF_ACCESS_CLIENT_SECRET }}
+      E2E_USER_ID: ${{ secrets.E2E_USER_ID }}
+      E2E_NON_OWNER_USER_ID: ${{ secrets.E2E_NON_OWNER_USER_ID }}
+      E2E_REQUIRE_AUTH: "1"
+      E2E_STRICT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+
+      - name: Check required backend API secrets
+        id: secrets
+        shell: bash
+        run: |
+          if [ -n "${E2E_BACKEND_TOKEN}" ] && [ -n "${E2E_USER_ID}" ] && [ -n "${E2E_NON_OWNER_USER_ID}" ] && [ -n "${E2E_CF_ACCESS_CLIENT_ID}" ] && [ -n "${E2E_CF_ACCESS_CLIENT_SECRET}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Backend API smoke lane skipped: missing required secrets (E2E_BACKEND_TOKEN, E2E_USER_ID, E2E_NON_OWNER_USER_ID, E2E_CF_ACCESS_CLIENT_ID, E2E_CF_ACCESS_CLIENT_SECRET)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Install dependencies
+        if: steps.secrets.outputs.enabled == 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Save e2e secrets
+        if: steps.secrets.outputs.enabled == 'true'
+        run: bun run e2e:save-secrets
+
+      - name: Check backend API live e2e configuration
+        if: steps.secrets.outputs.enabled == 'true'
+        run: bun run check:e2e-backend-api-live
+
+      - name: Run backend API smoke lane
+        if: steps.secrets.outputs.enabled == 'true'
+        shell: bash
+        run: bun run test:e2e:backend-api

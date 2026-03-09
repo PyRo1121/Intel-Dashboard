@@ -1074,10 +1074,7 @@ test("browser public auth pages render current Intel Dashboard access UI", async
       const routes = PUBLIC_AUTH_BROWSER_ROUTES;
 
       for (const route of routes) {
-        const response = await page.goto(`${EDGE_BASE_URL}${route.path}`, {
-          waitUntil: "domcontentloaded",
-          timeout: 30_000,
-        });
+        const response = await openPublicPage(page, route.path);
         assert.ok(response, `${route.path} should return a response`);
         assert.equal(response.status(), 200, `${route.path} should render successfully`);
         const bodyText = (await page.textContent("body")) || "";

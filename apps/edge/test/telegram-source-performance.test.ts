@@ -93,6 +93,13 @@ test("isLeadTelegramSource treats near-simultaneous reporters as leaders", () =>
     }),
     false,
   );
+  assert.equal(
+    isLeadTelegramSource({
+      sourceDatetimeMs: Date.UTC(2026, 2, 9, 11, 59, 0),
+      earliestDatetimeMs: Date.UTC(2026, 2, 9, 12, 0, 30),
+    }),
+    false,
+  );
 });
 
 test("applyTelegramSourcePerformanceContribution preserves a neutral seed state", () => {

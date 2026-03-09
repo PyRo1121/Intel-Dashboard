@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BROWSER_METADATA_EXPECTATIONS } from "./coverage-manifest.mjs";
 import {
+  CloudflareChallengeError,
   assertNoBrowserDiagnostics,
+  isCloudflareChallengePage,
   openAndAssertRouteMetadata,
   openAndAssertNotFoundPage,
   openAndAssertPublicAuthEntry,
@@ -25,6 +27,10 @@ test("public auth entry pages render the current Intel Dashboard access contract
       await openAndAssertPublicAuthEntry(page, { mode: "login", nextPath: "/crm" });
       await openAndAssertPublicAuthEntry(page, { mode: "signup", nextPath: "/briefings" });
     } catch (error) {
+      if (error instanceof CloudflareChallengeError) {
+        t.skip(error.message);
+        return;
+      }
       await captureBrowserArtifacts(page, "public-auth-contract", error);
       throw error;
     } finally {
@@ -44,8 +50,13 @@ test("public auth entry pages render the current Intel Dashboard access contract
           includeDescription: false,
           includeRobots: false,
           includeCanonical: false,
+          challengeMessage: `Cloudflare challenged ${expectation.path} for public auth metadata checks`,
         });
       } catch (error) {
+        if (error instanceof CloudflareChallengeError) {
+          t.skip(error.message);
+          return;
+        }
         await captureBrowserArtifacts(page, `public-auth-meta-${expectation.path}`, error);
         throw error;
       } finally {
@@ -78,7 +89,11 @@ test("public auth entry pages stay free of same-origin browser failures", async 
     try {
       const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL);
       for (const route of ["/login", "/signup"]) {
-        await openPublicPage(page, route);
+        const response = await openPublicPage(page, route);
+        if (await isCloudflareChallengePage(page, response)) {
+          t.skip(`Cloudflare challenged ${route} for the synthetic browser client`);
+          return;
+        }
         await page.waitForTimeout(500);
       }
       assertNoBrowserDiagnostics({ pageErrors, consoleErrors, requestFailures });

@@ -390,7 +390,7 @@ test("edge public auth pages render Intel Dashboard surfaces without legacy bran
   assert.doesNotMatch(signupBody, /PyRoBOT|PyRo1121Bot/i, "signup should not expose legacy branding");
 });
 
-test("edge auth pages preserve safe next routes in oauth actions and mode switch links", async () => {
+test("edge auth pages preserve safe next routes in oauth actions and mode switch links", async (t) => {
   const [login, signup] = await Promise.all([
     fetchWithRetry(`${EDGE_BASE_URL}/login?next=${encodeURIComponent("/crm")}`),
     fetchWithRetry(`${EDGE_BASE_URL}/signup?next=${encodeURIComponent("/briefings")}`),
@@ -401,6 +401,7 @@ test("edge auth pages preserve safe next routes in oauth actions and mode switch
     isCloudflareChallengeResponse(login, loginBody) ||
     isCloudflareChallengeResponse(signup, signupBody)
   ) {
+    t.skip("Cloudflare Bot Fight challenged login/signup next-route checks for the synthetic client");
     return;
   }
 

@@ -50,6 +50,11 @@ export function compareTelegramPremiumEntries<TEntry extends TelegramPremiumEntr
 }
 
 export function shouldHideTelegramPremiumNoise<TEntry extends TelegramPremiumEntryLike>(entry: TEntry): boolean {
+  const hasRankSignal =
+    typeof entry.dedupe?.rankScore === "number" || typeof entry.dedupe?.subscriberValueScore === "number";
+  if (!hasRankSignal) {
+    return false;
+  }
   const rank = entry.dedupe?.rankScore ?? entry.dedupe?.subscriberValueScore ?? 0;
   const sourceCount = entry.dedupe?.sourceCount ?? 1;
   const duplicateCount = entry.dedupe?.duplicateCount ?? 0;

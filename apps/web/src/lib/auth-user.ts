@@ -1,4 +1,10 @@
-import { isOwnerRole, resolveEntitlementRole, resolveEntitlementView, resolveFeedSurfaceLimit } from "@intel-dashboard/shared/entitlement.ts";
+import {
+  isEntitledRole,
+  isOwnerRole,
+  resolveEntitlementRole,
+  resolveEntitlementView,
+  resolveFeedSurfaceLimit,
+} from "@intel-dashboard/shared/entitlement.ts";
 
 export type AuthUserLike = {
   login?: string;
@@ -27,8 +33,7 @@ export function isAuthUserOwner(user: AuthUserLike): boolean {
 }
 
 export function isAuthUserSignalSubscriber(user: AuthUserLike): boolean {
-  const role = resolveAuthUserRole(user);
-  return role === "owner" || role === "subscriber";
+  return isEntitledRole(resolveAuthUserRole(user));
 }
 
 export function resolveAuthUserEntitlementView(user: AuthUserLike) {

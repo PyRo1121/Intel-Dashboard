@@ -66,4 +66,11 @@ test("shouldHideTelegramPremiumNoise removes low-signal stale duplicate chatter"
     }),
     false,
   );
+
+  assert.equal(
+    shouldHideTelegramPremiumNoise({
+      message: { datetime: "2026-03-09T12:05:00.000Z" },
+    }),
+    false,
+  );
 });

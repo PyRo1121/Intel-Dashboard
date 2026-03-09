@@ -243,14 +243,9 @@ export default function TelegramMessageCard(props: {
                     Rank {props.entry.dedupe?.rankScore}
                   </span>
                 </Show>
-                <Show when={props.entry.dedupe?.subscriberValueScore}>
+                <Show when={typeof props.entry.dedupe?.subscriberValueScore === "number"}>
                   <span class="rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-sky-200">
                     Signal {props.entry.dedupe?.subscriberValueScore}
-                  </span>
-                </Show>
-                <Show when={firstReporterLabel()}>
-                  <span class="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-2 py-0.5 text-cyan-200">
-                    First Reporter {firstReporterLabel()}
                   </span>
                 </Show>
                 <Show when={props.entry.dedupe?.verificationState}>

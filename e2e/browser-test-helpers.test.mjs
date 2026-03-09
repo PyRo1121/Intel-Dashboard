@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  CloudflareChallengeError,
+  assertNoCloudflareChallengePage,
   buildCloudflareAccessHeaders,
   collectBrowserDiagnostics,
+  isEdgeOriginRequestUrl,
   isIgnorableConsoleError,
+  isCloudflareChallengePage,
   parseCookieHeader,
   sanitizeArtifactName,
   trim,
@@ -16,6 +20,12 @@ test("buildCloudflareAccessHeaders returns undefined unless both values are pres
     "CF-Access-Client-Id": "client",
     "CF-Access-Client-Secret": "secret",
   });
+});
+
+test("isEdgeOriginRequestUrl only matches the configured dashboard origin", () => {
+  assert.equal(isEdgeOriginRequestUrl("https://intel.pyro1121.com/login"), true);
+  assert.equal(isEdgeOriginRequestUrl("https://challenges.cloudflare.com/turnstile/v0/api.js"), false);
+  assert.equal(isEdgeOriginRequestUrl("::not-a-url::"), false);
 });
 
 test("parseCookieHeader parses valid cookie headers and rejects malformed values", () => {
@@ -98,4 +108,38 @@ test("collectBrowserDiagnostics tolerates malformed request URLs", () => {
   });
 
   assert.deepEqual(diagnostics.requestFailures, []);
+});
+
+test("isCloudflareChallengePage detects challenge content without a response object", async () => {
+  const page = {
+    title: async () => "Just a moment...",
+    textContent: async (selector) => (selector === "body" ? "Performing security verification" : ""),
+  };
+
+  assert.equal(await isCloudflareChallengePage(page, undefined), true);
+});
+
+test("isCloudflareChallengePage does not treat a generic 403 as a challenge without Cloudflare markers", async () => {
+  const page = {
+    title: async () => "Forbidden",
+    textContent: async (selector) => (selector === "body" ? "You do not have permission to access this resource." : ""),
+  };
+  const response = {
+    headers: () => ({}),
+    status: () => 403,
+  };
+
+  assert.equal(await isCloudflareChallengePage(page, response), false);
+});
+
+test("assertNoCloudflareChallengePage throws a dedicated challenge error", async () => {
+  const page = {
+    title: async () => "Just a moment...",
+    textContent: async (selector) => (selector === "body" ? "Enable JavaScript and cookies to continue" : ""),
+  };
+
+  await assert.rejects(
+    () => assertNoCloudflareChallengePage(page, undefined, "Cloudflare challenged /login"),
+    (error) => error instanceof CloudflareChallengeError && error.message === "Cloudflare challenged /login",
+  );
 });

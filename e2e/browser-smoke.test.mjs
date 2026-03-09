@@ -21,6 +21,7 @@ import {
   createBrowserContext,
   createBrowserContextWithCookie,
   createPublicBrowserContext,
+  CloudflareChallengeError,
   installMockClock,
   parseTrailingCount,
   trim,
@@ -1069,14 +1070,13 @@ test("browser public auth pages render current Intel Dashboard access UI", async
       const routes = PUBLIC_AUTH_BROWSER_ROUTES;
 
       for (const route of routes) {
-        const response = await openPublicPage(page, route.path);
-        if (await isCloudflareChallengePage(page, response)) {
-          t.skip(`Cloudflare challenged ${route.path} for the synthetic browser client`);
-          return;
-        }
         await openAndAssertPublicAuthRoute(page, route);
       }
     } catch (error) {
+      if (error instanceof CloudflareChallengeError) {
+        t.skip(error.message);
+        return;
+      }
       await captureBrowserArtifacts(page, "public-auth-pages", error);
       throw error;
     }
@@ -1094,14 +1094,13 @@ test("browser auth pages preserve safe next routes in rendered auth actions", as
   try {
     const page = await context.newPage();
     try {
-      const probe = await openPublicPage(page, "/login");
-      if (await isCloudflareChallengePage(page, probe)) {
-        t.skip("Cloudflare challenged /login for the synthetic browser client");
-        return;
-      }
       await openAndAssertPublicAuthEntry(page, { mode: "login", nextPath: "/crm" });
       await openAndAssertPublicAuthEntry(page, { mode: "signup", nextPath: "/briefings" });
     } catch (error) {
+      if (error instanceof CloudflareChallengeError) {
+        t.skip(error.message);
+        return;
+      }
       await captureBrowserArtifacts(page, "auth-page-next-routing", error);
       throw error;
     }
@@ -1232,32 +1231,31 @@ test("browser public landing CTAs navigate to the intended auth surfaces", async
 
   try {
     const page = await context.newPage();
+    try {
+      await assertLandingCtaDestination(page, {
+        ctaName: "Login",
+        expectedUrl: `${EDGE_BASE_URL}/login`,
+        accessMessage: "login CTA should land on a public auth surface",
+      });
 
-    const loginResult = await assertLandingCtaDestination(page, {
-      ctaName: "Login",
-      expectedUrl: `${EDGE_BASE_URL}/login`,
-      accessMessage: "login CTA should land on a public auth surface",
-    });
-    if (loginResult?.challenged) {
-      t.skip("Cloudflare challenged the landing CTA auth destination for the synthetic browser client");
-      return;
+      await assertLandingCtaDestination(page, {
+        ctaName: /Start 7-Day Trial|Start Trial with OAuth/i,
+        expectedUrl: `${EDGE_BASE_URL}/signup`,
+        accessMessage: "trial CTA should land on a public auth surface",
+      });
+
+      await assertLandingCtaDestination(page, {
+        ctaName: /Open Live Dashboard|Open Dashboard/i,
+        expectedUrl: `${EDGE_BASE_URL}/overview`,
+        protectedNextPath: "/overview",
+      });
+    } catch (error) {
+      if (error instanceof CloudflareChallengeError) {
+        t.skip(error.message);
+        return;
+      }
+      throw error;
     }
-
-    const trialResult = await assertLandingCtaDestination(page, {
-      ctaName: /Start 7-Day Trial|Start Trial with OAuth/i,
-      expectedUrl: `${EDGE_BASE_URL}/signup`,
-      accessMessage: "trial CTA should land on a public auth surface",
-    });
-    if (trialResult?.challenged) {
-      t.skip("Cloudflare challenged the landing trial CTA auth destination for the synthetic browser client");
-      return;
-    }
-
-    await assertLandingCtaDestination(page, {
-      ctaName: /Open Live Dashboard|Open Dashboard/i,
-      expectedUrl: `${EDGE_BASE_URL}/overview`,
-      protectedNextPath: "/overview",
-    });
   } finally {
     await context.close();
     await browser.close();
@@ -1285,19 +1283,12 @@ test("browser route metadata stays aligned with production titles and canonical 
       const page = await runtime.context.newPage();
       try {
         if (publicAuthPaths.has(expectation.path)) {
-          const response = await openPage(page, expectation.path, {
-            waitUntil: "domcontentloaded",
-            timeout: 30_000,
-          });
-          if (await isCloudflareChallengePage(page, response)) {
-            t.skip(`Cloudflare challenged ${expectation.path} for route metadata checks`);
-            return;
-          }
           await openAndAssertRouteMetadata(page, expectation, {
             waitUntil: "domcontentloaded",
             timeout: 30_000,
             titleWaitMs: 750,
             maxStatusExclusive: 500,
+            challengeMessage: `Cloudflare challenged ${expectation.path} for route metadata checks`,
           });
         } else {
           await openAndAssertRouteMetadata(page, expectation, {
@@ -1308,6 +1299,10 @@ test("browser route metadata stays aligned with production titles and canonical 
           });
         }
       } catch (error) {
+        if (error instanceof CloudflareChallengeError) {
+          t.skip(error.message);
+          return;
+        }
         await captureBrowserArtifacts(page, `route-metadata-${expectation.path}`, error);
         throw error;
       } finally {
@@ -1333,7 +1328,7 @@ test("browser authenticated sidebar navigation opens the expected routes", async
 
     await page.getByRole("link", { name: "Intel Dashboard home" }).click();
     await page.waitForURL(/\/overview$/, { timeout: 30_000 });
-    assert.match((await page.textContent("body")) || "", /Intel Dashboard Overview/i);
+    await page.getByRole("heading", { name: /Intel Dashboard Overview/i }).waitFor({ state: "visible", timeout: 30_000 });
     await openDashboardPage(page, "/osint");
 
     const checks = [
@@ -1373,7 +1368,7 @@ test("browser mobile sidebar brand link returns to overview", async (t) => {
       await mobileSidebar.getByRole("link", { name: "Intel Dashboard home" }).waitFor({ state: "visible", timeout: 30_000 });
       await mobileSidebar.getByRole("link", { name: "Intel Dashboard home" }).click();
       await page.waitForURL(/\/overview$/, { timeout: 30_000 });
-      assert.match((await page.textContent("body")) || "", /Intel Dashboard Overview/i);
+      await page.getByRole("heading", { name: /Intel Dashboard Overview/i }).waitFor({ state: "visible", timeout: 30_000 });
       assert.equal(await openNavigation.getAttribute("aria-expanded"), "false", "mobile drawer should close after brand navigation");
     } catch (error) {
       await captureBrowserArtifacts(page, "mobile-sidebar-brand-home", error);

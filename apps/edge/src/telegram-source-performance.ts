@@ -121,7 +121,7 @@ export function isLeadTelegramSource(args: {
   const earliestDatetimeMs = Number.isFinite(args.earliestDatetimeMs) ? Math.max(0, args.earliestDatetimeMs) : 0;
   const leadWindowMs = Math.max(0, Math.floor(args.leadWindowMs ?? 3 * 60 * 1000));
   if (sourceDatetimeMs <= 0 || earliestDatetimeMs <= 0) return false;
-  return sourceDatetimeMs - earliestDatetimeMs <= leadWindowMs;
+  return sourceDatetimeMs >= earliestDatetimeMs && sourceDatetimeMs - earliestDatetimeMs <= leadWindowMs;
 }
 
 export function applyTelegramSourcePerformanceContribution(args: {

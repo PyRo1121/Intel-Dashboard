@@ -20,6 +20,7 @@ import { resolveAiGatewayToken } from "./gateway-token";
 import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
 import {
+  isLeadTelegramSource,
   updateTelegramSourcePerformanceStats,
   type TelegramSourcePerformanceStats,
 } from "./telegram-source-performance";
@@ -1158,12 +1159,17 @@ export class TelegramScraperDO extends DurableObject<Env> {
           }
         }
         const sortedSources = [...cluster.sources].sort((left, right) => right.datetimeMs - left.datetimeMs);
-        const sourceRepresentatives = [...cluster.sources]
-          .sort((left, right) => left.datetimeMs - right.datetimeMs)
-          .filter((source, index, allSources) =>
-            allSources.findIndex((candidate) => candidate.channel === source.channel) === index,
-          );
-        const firstReporter = sourceRepresentatives[0] ?? cluster.primary;
+        const sourceRepresentatives: typeof cluster.sources = [];
+        const seenChannels = new Set<string>();
+        for (const source of [...cluster.sources].sort((left, right) => left.datetimeMs - right.datetimeMs)) {
+          if (seenChannels.has(source.channel)) continue;
+          seenChannels.add(source.channel);
+          sourceRepresentatives.push(source);
+        }
+        const firstReporter =
+          sourceRepresentatives.find((source) => Number.isFinite(source.datetimeMs) && source.datetimeMs > 0) ??
+          sourceRepresentatives[0] ??
+          cluster.primary;
         const mediaSeen = new Set<string>();
         const mergedMedia = sortedSources
           .flatMap((source) => source.media)
@@ -1210,9 +1216,11 @@ export class TelegramScraperDO extends DurableObject<Env> {
           );
           const leadSource =
             sourceCount > 1 &&
-            Number.isFinite(earliestSourceMs) &&
-            earliestSourceMs > 0 &&
-            source.datetimeMs - earliestSourceMs <= 3 * 60 * 1000;
+            isLeadTelegramSource({
+              sourceDatetimeMs: source.datetimeMs,
+              earliestDatetimeMs: earliestSourceMs,
+              leadWindowMs: 3 * 60 * 1000,
+            });
           const nextStats = updateTelegramSourcePerformanceStats({
             previous: sourcePerformanceStats.get(source.channel) ?? null,
             contribution: {

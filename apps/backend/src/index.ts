@@ -87,6 +87,8 @@ const MAX_NEWS_HOT_OVERLAY_LIMIT = 1000;
 const DEFAULT_NEWS_HOT_OVERLAY_SHARD_FANOUT = 1;
 const DEFAULT_NEWS_HOT_OVERLAY_TIMEOUT_MS = 350;
 const MAX_NEWS_HOT_OVERLAY_TIMEOUT_MS = 5000;
+const DEFAULT_NEWS_HOT_OVERLAY_CACHE_MS = 750;
+const MAX_NEWS_HOT_OVERLAY_CACHE_MS = 10_000;
 const DEFAULT_OUTBOUND_ASYNC = true;
 const DEFAULT_STRIPE_API_BASE = "https://api.stripe.com";
 const DEFAULT_CRM_STRIPE_LIVE_ENABLED = true;
@@ -96,6 +98,10 @@ const DEFAULT_CRM_STRIPE_MAX_SUBSCRIPTIONS = 5_000;
 const MAX_CRM_STRIPE_MAX_SUBSCRIPTIONS = 25_000;
 const DEFAULT_CRM_STRIPE_CACHE_TTL_SECONDS = 5 * 60;
 const MAX_CRM_STRIPE_CACHE_TTL_SECONDS = 24 * 60 * 60;
+const DEFAULT_CRM_CUSTOMER_CACHE_TTL_SECONDS = 60;
+const MAX_CRM_CUSTOMER_CACHE_TTL_SECONDS = 15 * 60;
+const DEFAULT_CRM_SUMMARY_CACHE_TTL_SECONDS = 60;
+const MAX_CRM_SUMMARY_CACHE_TTL_SECONDS = 30 * 60;
 const DEFAULT_AI_GATEWAY_TIMEOUT_MS = 3_000;
 const DEFAULT_AI_GATEWAY_MODEL = "cerebras/gpt-oss-120b";
 const DEFAULT_AI_GATEWAY_MEDIA_MODEL = "groq/meta-llama/llama-4-scout-17b-16e-instruct";
@@ -202,6 +208,7 @@ type RpcMethod = (typeof RPC_METHODS)[number];
 type KvLike = {
   get(key: string): Promise<string | null>;
   put?(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  delete?(key: string): Promise<void>;
   list?(options?: {
     prefix?: string;
     cursor?: string;
@@ -295,6 +302,72 @@ type CrmTelemetrySummary = {
   cancellations7d: number;
   cancellations30d: number;
   topKinds7d: Array<{ kind: string; count: number }>;
+};
+
+type CrmStatusCounts = {
+  active: number;
+  trialing: number;
+  canceled: number;
+  expired: number;
+  none: number;
+};
+
+type CrmSummarySnapshot = {
+  generatedAtMs: number;
+  billing: {
+    trackedUsers: number;
+    statuses: CrmStatusCounts;
+    mrrActiveUsd: number;
+    arrActiveUsd: number;
+    accounts: CrmAccountSnapshot[];
+  };
+  telemetry: CrmTelemetrySummary;
+  latestEvents: BillingActivityEvent[];
+};
+
+type CrmCustomerStripeSnapshot = {
+  fetchedAtMs: number;
+  accountUpdatedAtMs: number;
+  stripe: {
+    customer: {
+      id: string;
+      email: string | null;
+      name: string | null;
+      currency: string;
+      delinquent: boolean;
+      createdAtMs: number | null;
+      balanceUsd: number;
+    };
+    subscription: {
+      id: string | null;
+      status: string | null;
+      cancelAtPeriodEnd: boolean;
+      cancelAtMs: number | null;
+      currentPeriodEndMs: number | null;
+      canceledAtMs: number | null;
+    } | null;
+    invoices: Array<{
+      id: string;
+      status: string;
+      amountDueUsd: number;
+      amountPaidUsd: number;
+      paid: boolean;
+      createdAtMs: number;
+      hostedInvoiceUrl: string | null;
+      invoicePdf: string | null;
+    }>;
+    charges: Array<{
+      id: string;
+      status: string;
+      amountUsd: number;
+      refundedUsd: number;
+      paid: boolean;
+      refunded: boolean;
+      createdAtMs: number;
+      receiptUrl: string | null;
+      paymentIntentId: string | null;
+    }>;
+  };
 };
 
 type StripeCrmStatusCounts = {
@@ -497,6 +570,21 @@ type AiBatchState = {
   error?: string;
 };
 
+type AiBatchStateMeta = {
+  id: string;
+  status: AiBatchStatus;
+  createdAtMs: number;
+  updatedAtMs: number;
+  provider: AiBatchProvider;
+  maxConnections: number;
+  pollAttempts: number;
+  totalJobs: number;
+  externalBatchId?: string;
+  outputFileId?: string;
+  results?: AiBatchJobResult[];
+  error?: string;
+};
+
 type AiJobRequest =
   | {
       type: "dedupe";
@@ -554,6 +642,7 @@ export type WorkerEnv = {
   FEATURE_GATES_PATH?: string;
   USER_INFO_PATH?: string;
   ADMIN_CRM_SUMMARY_PATH?: string;
+  CRM_SUMMARY_CACHE_TTL_SECONDS?: string;
   ADMIN_CRM_AI_TELEMETRY_PATH?: string;
   ADMIN_CRM_CUSTOMER_PATH?: string;
   ADMIN_CRM_CANCEL_SUBSCRIPTION_PATH?: string;
@@ -586,6 +675,7 @@ export type WorkerEnv = {
   CRM_STRIPE_SYNC_TIMEOUT_MS?: string;
   CRM_STRIPE_MAX_SUBSCRIPTIONS?: string;
   CRM_STRIPE_CACHE_TTL_SECONDS?: string;
+  CRM_CUSTOMER_CACHE_TTL_SECONDS?: string;
   OUTBOUND_NAMESPACE_PREFIX?: string;
   OUTBOUND_DEDUPE_TTL_SECONDS?: string;
   OUTBOUND_DELIVERY_TIMEOUT_MS?: string;
@@ -660,6 +750,7 @@ export type WorkerEnv = {
   NEWS_HOT_OVERLAY_LIMIT?: string;
   NEWS_HOT_OVERLAY_SHARD_FANOUT?: string;
   NEWS_HOT_OVERLAY_TIMEOUT_MS?: string;
+  NEWS_HOT_OVERLAY_CACHE_MS?: string;
   OUTBOUND_ASYNC?: string;
   BILLING_ALLOW_RETRIAL?: string;
   REQUIRE_SIGNED_USER_ID?: string;
@@ -674,6 +765,8 @@ export type WorkerEnv = {
 type JsonRecord = Record<string, unknown>;
 
 const newsFeedMemoryCache = new Map<string, NewsFeedCacheEntry>();
+const newsFeedMergedMemoryCache = new Map<string, NewsFeedCacheEntry>();
+const newsHotOverlayMemoryCache = new Map<string, NewsFeedCacheEntry>();
 const kvBindingCacheIds = new WeakMap<object, string>();
 let kvBindingCacheIdCounter = 0;
 
@@ -894,6 +987,22 @@ function normalizeCrmStripeCacheTtlSeconds(rawValue: string | undefined): number
   return clamp(Math.floor(parsed), 0, MAX_CRM_STRIPE_CACHE_TTL_SECONDS);
 }
 
+function normalizeCrmCustomerCacheTtlSeconds(rawValue: string | undefined): number {
+  const parsed = parseFiniteNumber(rawValue);
+  if (parsed === undefined) {
+    return DEFAULT_CRM_CUSTOMER_CACHE_TTL_SECONDS;
+  }
+  return clamp(Math.floor(parsed), 0, MAX_CRM_CUSTOMER_CACHE_TTL_SECONDS);
+}
+
+function normalizeCrmSummaryCacheTtlSeconds(rawValue: string | undefined): number {
+  const parsed = parseFiniteNumber(rawValue);
+  if (parsed === undefined) {
+    return DEFAULT_CRM_SUMMARY_CACHE_TTL_SECONDS;
+  }
+  return clamp(Math.floor(parsed), 0, MAX_CRM_SUMMARY_CACHE_TTL_SECONDS);
+}
+
 function normalizeNewsLimit(rawValue: unknown): number {
   const parsed = parseFiniteNumber(rawValue);
   if (parsed === undefined) {
@@ -948,6 +1057,14 @@ function normalizeNewsHotOverlayTimeoutMs(rawValue: string | undefined): number 
     return DEFAULT_NEWS_HOT_OVERLAY_TIMEOUT_MS;
   }
   return clamp(Math.floor(parsed), 50, MAX_NEWS_HOT_OVERLAY_TIMEOUT_MS);
+}
+
+function normalizeNewsHotOverlayCacheMs(rawValue: string | undefined): number {
+  const parsed = parseFiniteNumber(rawValue);
+  if (parsed === undefined) {
+    return DEFAULT_NEWS_HOT_OVERLAY_CACHE_MS;
+  }
+  return clamp(Math.floor(parsed), 0, MAX_NEWS_HOT_OVERLAY_CACHE_MS);
 }
 
 function resolveTierPolicies(env: WorkerEnv): TierPolicies {
@@ -1450,6 +1567,14 @@ function resolveAiBatchStateKey(env: WorkerEnv, batchId: string): string {
   return `${normalizeAiBatchNamespacePrefix(env.AI_BATCH_NAMESPACE_PREFIX)}:state:${batchId}`;
 }
 
+function resolveAiBatchMetaKey(env: WorkerEnv, batchId: string): string {
+  return `${normalizeAiBatchNamespacePrefix(env.AI_BATCH_NAMESPACE_PREFIX)}:meta:${batchId}`;
+}
+
+function resolveAiBatchPendingKey(env: WorkerEnv, batchId: string): string {
+  return `${normalizeAiBatchNamespacePrefix(env.AI_BATCH_NAMESPACE_PREFIX)}:pending:${batchId}`;
+}
+
 function resolveAiBatchIdempotencyKey(env: WorkerEnv, idempotencyKey: string): string {
   return `${normalizeAiBatchNamespacePrefix(env.AI_BATCH_NAMESPACE_PREFIX)}:idempotency:${idempotencyKey}`;
 }
@@ -1590,7 +1715,7 @@ function resolveNewsFeedStorageKeysForRead(env: WorkerEnv): string[] {
     return [baseKey];
   }
 
-  const keys = new Set<string>([baseKey]);
+  const keys = new Set<string>();
   for (const shardName of shardNames) {
     keys.add(resolveNewsFeedStorageKey(env, shardName));
   }
@@ -3901,6 +4026,11 @@ async function saveBillingAccount(env: WorkerEnv, account: BillingAccount): Prom
     throw new Error("USAGE_KV binding with put() is required for billing updates.");
   }
   await kv.put(buildBillingKey(env, account.userId), JSON.stringify(account));
+  await Promise.all([
+    deleteCachedCrmSummary(env),
+    deleteCachedStripeCrmSummary(env),
+    deleteCachedCrmCustomerStripeSnapshot(env, account.userId),
+  ]);
 }
 
 function buildCrmStripeSummaryKey(env: WorkerEnv): string {
@@ -3997,6 +4127,274 @@ async function saveCachedStripeCrmSummary(env: WorkerEnv, summary: StripeCrmLive
   });
 }
 
+function buildCrmSummaryKey(env: WorkerEnv): string {
+  return `${normalizeBillingNamespacePrefix(env.BILLING_NAMESPACE_PREFIX)}:crm:summary`;
+}
+
+async function deleteCachedCrmSummary(env: WorkerEnv): Promise<void> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.delete !== "function") {
+    return;
+  }
+  await kv.delete(buildCrmSummaryKey(env));
+}
+
+function createEmptyCrmStatusCounts(): CrmStatusCounts {
+  return {
+    active: 0,
+    trialing: 0,
+    canceled: 0,
+    expired: 0,
+    none: 0,
+  };
+}
+
+function normalizeCrmSummarySnapshot(value: unknown): CrmSummarySnapshot | null {
+  if (!isRecord(value) || !isRecord(value.billing) || !isRecord(value.telemetry) || !Array.isArray(value.latestEvents)) {
+    return null;
+  }
+  const generatedAtMs = parseFiniteNumber(value.generatedAtMs);
+  if (generatedAtMs === undefined) {
+    return null;
+  }
+  const billingStatuses = isRecord(value.billing.statuses) ? value.billing.statuses : {};
+  const statuses = createEmptyCrmStatusCounts();
+  for (const key of Object.keys(statuses) as Array<keyof CrmStatusCounts>) {
+    statuses[key] = Math.max(0, Math.floor(parseFiniteNumber(billingStatuses[key]) ?? 0));
+  }
+  const trackedUsers = parseFiniteNumber(value.billing.trackedUsers);
+  const mrrActiveUsd = parseFiniteNumber(value.billing.mrrActiveUsd);
+  const arrActiveUsd = parseFiniteNumber(value.billing.arrActiveUsd);
+  if (trackedUsers === undefined || mrrActiveUsd === undefined || arrActiveUsd === undefined) {
+    return null;
+  }
+
+  const accountsRaw = Array.isArray(value.billing.accounts) ? value.billing.accounts : [];
+  const accounts = accountsRaw
+    .map((entry) => {
+      if (!isRecord(entry)) return null;
+      const userId = trimString(entry.userId);
+      const status = trimString(entry.status);
+      const monthlyPriceUsd = parseFiniteNumber(entry.monthlyPriceUsd);
+      const updatedAtMs = parseFiniteNumber(entry.updatedAtMs);
+      const trialEndsAtMs = parseFiniteNumber(entry.trialEndsAtMs);
+      if (!userId || !status || monthlyPriceUsd === undefined || updatedAtMs === undefined) {
+        return null;
+      }
+      return {
+        userId,
+        status: normalizeBillingStatus(status) ?? "none",
+        monthlyPriceUsd: Number(monthlyPriceUsd.toFixed(2)),
+        updatedAtMs: Math.max(0, Math.floor(updatedAtMs)),
+        ...(trialEndsAtMs === undefined ? {} : { trialEndsAtMs: Math.max(0, Math.floor(trialEndsAtMs)) }),
+      } satisfies CrmAccountSnapshot;
+    })
+    .filter((entry): entry is CrmAccountSnapshot => entry !== null);
+
+  const telemetry: CrmTelemetrySummary = {
+    events24h: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.events24h) ?? 0)),
+    events7d: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.events7d) ?? 0)),
+    uniqueUsers24h: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.uniqueUsers24h) ?? 0)),
+    uniqueUsers7d: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.uniqueUsers7d) ?? 0)),
+    trialStarts7d: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.trialStarts7d) ?? 0)),
+    paidStarts7d: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.paidStarts7d) ?? 0)),
+    cancellations7d: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.cancellations7d) ?? 0)),
+    cancellations30d: Math.max(0, Math.floor(parseFiniteNumber(value.telemetry.cancellations30d) ?? 0)),
+    topKinds7d: Array.isArray(value.telemetry.topKinds7d)
+      ? value.telemetry.topKinds7d
+          .map((entry) => {
+            if (!isRecord(entry)) return null;
+            const kind = trimString(entry.kind);
+            const count = parseFiniteNumber(entry.count);
+            if (!kind || count === undefined) return null;
+            return { kind, count: Math.max(0, Math.floor(count)) };
+          })
+          .filter((entry): entry is { kind: string; count: number } => entry !== null)
+      : [],
+  };
+
+  const latestEvents = value.latestEvents
+    .map((entry) => normalizeBillingActivityEvent(entry, trimString((entry as Record<string, unknown>)?.userId) ?? "unknown"))
+    .filter((entry): entry is BillingActivityEvent => entry !== null)
+    .sort((left, right) => right.atMs - left.atMs)
+    .slice(0, 60);
+
+  return {
+    generatedAtMs: Math.max(0, Math.floor(generatedAtMs)),
+    billing: {
+      trackedUsers: Math.max(0, Math.floor(trackedUsers)),
+      statuses,
+      mrrActiveUsd: Number(mrrActiveUsd.toFixed(2)),
+      arrActiveUsd: Number(arrActiveUsd.toFixed(2)),
+      accounts,
+    },
+    telemetry,
+    latestEvents,
+  };
+}
+
+async function loadCachedCrmSummary(env: WorkerEnv): Promise<CrmSummarySnapshot | null> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.get !== "function") {
+    return null;
+  }
+  const raw = await kv.get(buildCrmSummaryKey(env));
+  if (!raw) {
+    return null;
+  }
+  try {
+    return normalizeCrmSummarySnapshot(JSON.parse(raw) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+async function saveCachedCrmSummary(env: WorkerEnv, summary: CrmSummarySnapshot): Promise<void> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.put !== "function") {
+    return;
+  }
+  const ttlSeconds = normalizeCrmSummaryCacheTtlSeconds(env.CRM_SUMMARY_CACHE_TTL_SECONDS);
+  await kv.put(buildCrmSummaryKey(env), JSON.stringify(summary), {
+    expirationTtl: ttlSeconds > 0 ? ttlSeconds * 3 : undefined,
+  });
+}
+
+async function deleteCachedStripeCrmSummary(env: WorkerEnv): Promise<void> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.delete !== "function") {
+    return;
+  }
+  await kv.delete(buildCrmStripeSummaryKey(env));
+}
+
+function buildCrmCustomerSnapshotKey(env: WorkerEnv, userId: string): string {
+  return `${normalizeBillingNamespacePrefix(env.BILLING_NAMESPACE_PREFIX)}:crm:customer:${userId}`;
+}
+
+function normalizeCrmCustomerStripeSnapshot(value: unknown): CrmCustomerStripeSnapshot | null {
+  if (!isRecord(value) || !isRecord(value.stripe) || !isRecord(value.stripe.customer)) {
+    return null;
+  }
+  const fetchedAtMs = parseFiniteNumber(value.fetchedAtMs);
+  const accountUpdatedAtMs = parseFiniteNumber(value.accountUpdatedAtMs);
+  const customerId = trimString(value.stripe.customer.id);
+  if (fetchedAtMs === undefined || accountUpdatedAtMs === undefined || !customerId) {
+    return null;
+  }
+
+  const invoicesRaw = Array.isArray(value.stripe.invoices) ? value.stripe.invoices : [];
+  const chargesRaw = Array.isArray(value.stripe.charges) ? value.stripe.charges : [];
+
+  return {
+    fetchedAtMs: Math.max(0, Math.floor(fetchedAtMs)),
+    accountUpdatedAtMs: Math.max(0, Math.floor(accountUpdatedAtMs)),
+    stripe: {
+      customer: {
+        id: customerId,
+        email: trimString(value.stripe.customer.email) ?? null,
+        name: trimString(value.stripe.customer.name) ?? null,
+        currency: trimString(value.stripe.customer.currency) ?? "usd",
+        delinquent: value.stripe.customer.delinquent === true,
+        createdAtMs: normalizeOptionalTimestampMs(value.stripe.customer.createdAtMs),
+        balanceUsd: Number((parseFiniteNumber(value.stripe.customer.balanceUsd) ?? 0).toFixed(2)),
+      },
+      subscription: isRecord(value.stripe.subscription)
+        ? {
+            id: trimString(value.stripe.subscription.id) ?? null,
+            status: trimString(value.stripe.subscription.status) ?? null,
+            cancelAtPeriodEnd: value.stripe.subscription.cancelAtPeriodEnd === true,
+            cancelAtMs: normalizeOptionalTimestampMs(value.stripe.subscription.cancelAtMs),
+            currentPeriodEndMs: normalizeOptionalTimestampMs(value.stripe.subscription.currentPeriodEndMs),
+            canceledAtMs: normalizeOptionalTimestampMs(value.stripe.subscription.canceledAtMs),
+          }
+        : null,
+      invoices: invoicesRaw
+        .map((entry) => {
+          if (!isRecord(entry)) return null;
+          const id = trimString(entry.id);
+          const status = trimString(entry.status) ?? "unknown";
+          const amountDueUsd = parseFiniteNumber(entry.amountDueUsd);
+          const amountPaidUsd = parseFiniteNumber(entry.amountPaidUsd);
+          const createdAtMs = parseFiniteNumber(entry.createdAtMs);
+          if (!id || amountDueUsd === undefined || amountPaidUsd === undefined || createdAtMs === undefined) {
+            return null;
+          }
+          return {
+            id,
+            status,
+            amountDueUsd: Number(amountDueUsd.toFixed(2)),
+            amountPaidUsd: Number(amountPaidUsd.toFixed(2)),
+            paid: entry.paid === true,
+            createdAtMs: Math.max(0, Math.floor(createdAtMs)),
+            hostedInvoiceUrl: trimString(entry.hostedInvoiceUrl) ?? null,
+            invoicePdf: trimString(entry.invoicePdf) ?? null,
+          };
+        })
+        .filter((entry): entry is CrmCustomerStripeSnapshot["stripe"]["invoices"][number] => entry !== null),
+      charges: chargesRaw
+        .map((entry) => {
+          if (!isRecord(entry)) return null;
+          const id = trimString(entry.id);
+          const status = trimString(entry.status) ?? "unknown";
+          const amountUsd = parseFiniteNumber(entry.amountUsd);
+          const refundedUsd = parseFiniteNumber(entry.refundedUsd);
+          const createdAtMs = parseFiniteNumber(entry.createdAtMs);
+          if (!id || amountUsd === undefined || refundedUsd === undefined || createdAtMs === undefined) {
+            return null;
+          }
+          return {
+            id,
+            status,
+            amountUsd: Number(amountUsd.toFixed(2)),
+            refundedUsd: Number(refundedUsd.toFixed(2)),
+            paid: entry.paid === true,
+            refunded: entry.refunded === true,
+            createdAtMs: Math.max(0, Math.floor(createdAtMs)),
+            receiptUrl: trimString(entry.receiptUrl) ?? null,
+            paymentIntentId: trimString(entry.paymentIntentId) ?? null,
+          };
+        })
+        .filter((entry): entry is CrmCustomerStripeSnapshot["stripe"]["charges"][number] => entry !== null),
+    },
+  };
+}
+
+async function loadCachedCrmCustomerStripeSnapshot(env: WorkerEnv, userId: string): Promise<CrmCustomerStripeSnapshot | null> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.get !== "function") {
+    return null;
+  }
+  const raw = await kv.get(buildCrmCustomerSnapshotKey(env, userId));
+  if (!raw) {
+    return null;
+  }
+  try {
+    return normalizeCrmCustomerStripeSnapshot(JSON.parse(raw) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+async function saveCachedCrmCustomerStripeSnapshot(env: WorkerEnv, userId: string, snapshot: CrmCustomerStripeSnapshot): Promise<void> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.put !== "function") {
+    return;
+  }
+  const ttlSeconds = normalizeCrmCustomerCacheTtlSeconds(env.CRM_CUSTOMER_CACHE_TTL_SECONDS);
+  await kv.put(buildCrmCustomerSnapshotKey(env, userId), JSON.stringify(snapshot), {
+    expirationTtl: ttlSeconds > 0 ? ttlSeconds * 3 : undefined,
+  });
+}
+
+async function deleteCachedCrmCustomerStripeSnapshot(env: WorkerEnv, userId: string): Promise<void> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.delete !== "function") {
+    return;
+  }
+  await kv.delete(buildCrmCustomerSnapshotKey(env, userId));
+}
+
 async function loadBillingActivityEvents(env: WorkerEnv, userId: string): Promise<BillingActivityEvent[]> {
   const kv = env.USAGE_KV;
   if (!kv || typeof kv.get !== "function") {
@@ -4013,8 +4411,7 @@ async function loadBillingActivityEvents(env: WorkerEnv, userId: string): Promis
     }
     return decoded
       .map((entry) => normalizeBillingActivityEvent(entry, userId))
-      .filter((entry): entry is BillingActivityEvent => entry !== null)
-      .sort((left, right) => right.atMs - left.atMs);
+      .filter((entry): entry is BillingActivityEvent => entry !== null);
   } catch {
     return [];
   }
@@ -4205,6 +4602,59 @@ async function summarizeCrmTelemetry(env: WorkerEnv): Promise<{
     },
     latestEvents: latestEvents.slice(0, 60),
   };
+}
+
+async function buildCrmSummarySnapshot(env: WorkerEnv): Promise<CrmSummarySnapshot> {
+  const accounts = await loadCrmAccountSnapshots(env);
+  const statuses = createEmptyCrmStatusCounts();
+  let mrrActiveUsd = 0;
+  for (const account of accounts) {
+    if (account.status === "active") {
+      statuses.active += 1;
+      mrrActiveUsd += account.monthlyPriceUsd;
+      continue;
+    }
+    if (account.status === "trialing") {
+      statuses.trialing += 1;
+      continue;
+    }
+    if (account.status === "canceled") {
+      statuses.canceled += 1;
+      continue;
+    }
+    if (account.status === "expired") {
+      statuses.expired += 1;
+      continue;
+    }
+    statuses.none += 1;
+  }
+
+  const { telemetry, latestEvents } = await summarizeCrmTelemetry(env);
+  const normalizedMrr = Number(mrrActiveUsd.toFixed(2));
+
+  return {
+    generatedAtMs: Date.now(),
+    billing: {
+      trackedUsers: accounts.length,
+      statuses,
+      mrrActiveUsd: normalizedMrr,
+      arrActiveUsd: Number((normalizedMrr * 12).toFixed(2)),
+      accounts,
+    },
+    telemetry,
+    latestEvents,
+  };
+}
+
+async function resolveCrmSummarySnapshot(env: WorkerEnv): Promise<CrmSummarySnapshot> {
+  const ttlMs = normalizeCrmSummaryCacheTtlSeconds(env.CRM_SUMMARY_CACHE_TTL_SECONDS) * 1000;
+  const cached = await loadCachedCrmSummary(env);
+  if (cached && (ttlMs <= 0 || Date.now() - cached.generatedAtMs <= ttlMs)) {
+    return cached;
+  }
+  const built = await buildCrmSummarySnapshot(env);
+  await saveCachedCrmSummary(env, built);
+  return built;
 }
 
 type AiTelemetryWindowKey = "15m" | "1h" | "24h" | "7d" | "30d";
@@ -4890,9 +5340,13 @@ async function resolveStripeSubscriptionIdForTarget(args: {
   env: WorkerEnv;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  cachedSnapshot?: CrmCustomerStripeSnapshot | null;
 }): Promise<string | null> {
   if (args.stripeSubscriptionId) {
     return args.stripeSubscriptionId;
+  }
+  if (args.cachedSnapshot?.stripe.subscription?.id) {
+    return args.cachedSnapshot.stripe.subscription.id;
   }
   if (!args.stripeCustomerId) {
     return null;
@@ -4926,6 +5380,7 @@ async function handleAdminCrmCustomer(args: {
   if (!context.stripeCustomerId) {
     return errorJson(409, "Target user has no Stripe customer id yet.");
   }
+  const cachedSnapshot = await loadCachedCrmCustomerStripeSnapshot(args.env, context.targetUserId);
 
   const subscriptionId =
     trimString((isRecord(args.body) ? args.body.subscriptionId : undefined)) ??
@@ -4933,6 +5388,7 @@ async function handleAdminCrmCustomer(args: {
       env: args.env,
       stripeCustomerId: context.stripeCustomerId,
       stripeSubscriptionId: context.stripeSubscriptionId,
+      cachedSnapshot,
     }));
 
   const [customerResult, invoicesResult, chargesResult, subscriptionResult] = await Promise.all([
@@ -5008,31 +5464,38 @@ async function handleAdminCrmCustomer(args: {
         id: trimString(subscriptionResult.data.id) ?? subscriptionId ?? null,
         status: trimString(subscriptionResult.data.status) ?? null,
         cancelAtPeriodEnd: subscriptionResult.data.cancel_at_period_end === true,
-        cancelAtMs: Math.floor((parseFiniteNumber(subscriptionResult.data.cancel_at) ?? 0) * 1000) || null,
-        currentPeriodEndMs: Math.floor((parseFiniteNumber(subscriptionResult.data.current_period_end) ?? 0) * 1000) || null,
-        canceledAtMs: Math.floor((parseFiniteNumber(subscriptionResult.data.canceled_at) ?? 0) * 1000) || null,
+        cancelAtMs: normalizeOptionalTimestampMs(subscriptionResult.data.cancel_at, 1000),
+        currentPeriodEndMs: normalizeOptionalTimestampMs(subscriptionResult.data.current_period_end, 1000),
+        canceledAtMs: normalizeOptionalTimestampMs(subscriptionResult.data.canceled_at, 1000),
       }
     : null;
+
+  const snapshot: CrmCustomerStripeSnapshot = {
+    fetchedAtMs: Date.now(),
+    accountUpdatedAtMs: context.account.updatedAtMs,
+    stripe: {
+      customer: {
+        id: trimString(customerResult.data.id) ?? context.stripeCustomerId,
+        email: trimString(customerResult.data.email) ?? null,
+        name: trimString(customerResult.data.name) ?? null,
+        currency: trimString(customerResult.data.currency) ?? "usd",
+        delinquent: customerResult.data.delinquent === true,
+        createdAtMs: normalizeOptionalTimestampMs(customerResult.data.created, 1000),
+        balanceUsd: Number(((parseFiniteNumber(customerResult.data.balance) ?? 0) / 100).toFixed(2)),
+      },
+      subscription,
+      invoices,
+      charges,
+    },
+  };
+  await saveCachedCrmCustomerStripeSnapshot(args.env, context.targetUserId, snapshot);
 
   return responseJson(200, {
     ok: true,
     result: {
       targetUserId: context.targetUserId,
       account: context.account,
-      stripe: {
-        customer: {
-          id: trimString(customerResult.data.id) ?? context.stripeCustomerId,
-          email: trimString(customerResult.data.email) ?? null,
-          name: trimString(customerResult.data.name) ?? null,
-          currency: trimString(customerResult.data.currency) ?? "usd",
-          delinquent: customerResult.data.delinquent === true,
-          createdAtMs: Math.floor((parseFiniteNumber(customerResult.data.created) ?? 0) * 1000) || null,
-          balanceUsd: Number(((parseFiniteNumber(customerResult.data.balance) ?? 0) / 100).toFixed(2)),
-        },
-        subscription,
-        invoices,
-        charges,
-      },
+      stripe: snapshot.stripe,
     },
   });
 }
@@ -5051,12 +5514,14 @@ async function handleAdminCrmCancelSubscription(args: {
 
   const body = isRecord(args.body) ? args.body : {};
   const atPeriodEnd = body.atPeriodEnd !== false;
+  const cachedSnapshot = await loadCachedCrmCustomerStripeSnapshot(args.env, context.targetUserId);
   const subscriptionId =
     trimString(body.subscriptionId) ??
     (await resolveStripeSubscriptionIdForTarget({
       env: args.env,
       stripeCustomerId: context.stripeCustomerId,
       stripeSubscriptionId: context.stripeSubscriptionId,
+      cachedSnapshot,
     }));
   if (!subscriptionId) {
     return errorJson(409, "No Stripe subscription id was found for this customer.");
@@ -5103,6 +5568,7 @@ async function handleAdminCrmCancelSubscription(args: {
       : `Owner ${context.actingUserId} canceled subscription immediately.`,
     atMs: nowMs,
   });
+  await deleteCachedCrmCustomerStripeSnapshot(args.env, context.targetUserId);
 
   return responseJson(200, {
     ok: true,
@@ -5112,8 +5578,8 @@ async function handleAdminCrmCancelSubscription(args: {
       atPeriodEnd,
       status: trimString(stripeResult.data.status) ?? next.status,
       canceled: stripeResult.data.canceled === true || !atPeriodEnd,
-      cancelAtMs: Math.floor((parseFiniteNumber(stripeResult.data.cancel_at) ?? 0) * 1000) || null,
-      currentPeriodEndMs: Math.floor((parseFiniteNumber(stripeResult.data.current_period_end) ?? 0) * 1000) || null,
+      cancelAtMs: normalizeOptionalTimestampMs(stripeResult.data.cancel_at, 1000),
+      currentPeriodEndMs: normalizeOptionalTimestampMs(stripeResult.data.current_period_end, 1000),
       updatedAtMs: nowMs,
     },
   });
@@ -5134,22 +5600,26 @@ async function handleAdminCrmRefund(args: {
   const body = isRecord(args.body) ? args.body : {};
   let chargeId = trimString(body.chargeId) ?? null;
   const paymentIntentId = trimString(body.paymentIntentId) ?? null;
+  const cachedSnapshot = await loadCachedCrmCustomerStripeSnapshot(args.env, context.targetUserId);
   if (!chargeId && !paymentIntentId) {
-    const latestCharge = await stripeApiJson({
-      env: args.env,
-      method: "GET",
-      path: `/v1/charges?${new URLSearchParams({
-        customer: context.stripeCustomerId,
-        limit: "1",
-      }).toString()}`,
-    });
-    if (!latestCharge.ok) {
-      return latestCharge.response;
+    chargeId = cachedSnapshot?.stripe.charges[0]?.id ?? null;
+    if (!chargeId) {
+      const latestCharge = await stripeApiJson({
+        env: args.env,
+        method: "GET",
+        path: `/v1/charges?${new URLSearchParams({
+          customer: context.stripeCustomerId,
+          limit: "1",
+        }).toString()}`,
+      });
+      if (!latestCharge.ok) {
+        return latestCharge.response;
+      }
+      const first = Array.isArray(latestCharge.data.data)
+        ? latestCharge.data.data.find((entry) => isRecord(entry)) as Record<string, unknown> | undefined
+        : undefined;
+      chargeId = first ? trimString(first.id) ?? null : null;
     }
-    const first = Array.isArray(latestCharge.data.data)
-      ? latestCharge.data.data.find((entry) => isRecord(entry)) as Record<string, unknown> | undefined
-      : undefined;
-    chargeId = first ? trimString(first.id) ?? null : null;
   }
   if (!chargeId && !paymentIntentId) {
     return errorJson(409, "No refundable Stripe charge/payment intent was found.");
@@ -5188,6 +5658,7 @@ async function handleAdminCrmRefund(args: {
     note: `Owner ${context.actingUserId} created Stripe refund ${refundId ?? "unknown"} for $${refundAmountUsd.toFixed(2)}.`,
     atMs: nowMs,
   });
+  await deleteCachedCrmCustomerStripeSnapshot(args.env, context.targetUserId);
 
   return responseJson(200, {
     ok: true,
@@ -5239,6 +5710,7 @@ async function appendBillingActivityEvent(args: {
       .sort((left, right) => right.atMs - left.atMs)
       .slice(0, maxEvents);
     await kv.put(activityKey, JSON.stringify(next));
+    await deleteCachedCrmSummary(args.env);
   } catch {
     // billing activity writes are best-effort and should not block entitlements
   }
@@ -5306,9 +5778,17 @@ async function readNewsFeedFromStorageKey(env: WorkerEnv, storageKey: string): P
 async function readNewsFeed(env: WorkerEnv): Promise<NewsItem[]> {
   const storageKeys = resolveNewsFeedStorageKeysForRead(env);
   const maxFeedItems = normalizeNewsFeedMaxItems(env.NEWS_FEED_MAX_ITEMS);
+  const cacheTtlMs = normalizeNewsReadCacheMs(env.NEWS_READ_CACHE_MS);
 
   if (storageKeys.length <= 1) {
     return readNewsFeedFromStorageKey(env, storageKeys[0]);
+  }
+
+  const mergedCacheKey = `${normalizeBillingNamespacePrefix(env.BILLING_NAMESPACE_PREFIX)}:news-merged:${storageKeys.join("|")}:${maxFeedItems}`;
+  const nowMs = Date.now();
+  const mergedEntry = newsFeedMergedMemoryCache.get(mergedCacheKey);
+  if (cacheTtlMs > 0 && mergedEntry && nowMs - mergedEntry.cachedAtMs <= cacheTtlMs) {
+    return mergedEntry.items;
   }
 
   const shardFeeds = await Promise.all(
@@ -5318,6 +5798,12 @@ async function readNewsFeed(env: WorkerEnv): Promise<NewsItem[]> {
   let merged: NewsItem[] = [];
   for (const shardFeed of shardFeeds) {
     merged = mergeNewsStreamsDescending(merged, shardFeed, maxFeedItems);
+  }
+  if (cacheTtlMs > 0) {
+    newsFeedMergedMemoryCache.set(mergedCacheKey, {
+      cachedAtMs: nowMs,
+      items: merged,
+    });
   }
   return merged;
 }
@@ -5335,6 +5821,8 @@ async function writeNewsFeed(env: WorkerEnv, items: NewsItem[], storageKey?: str
     cachedAtMs: Date.now(),
     items: trimmed,
   });
+  newsFeedMergedMemoryCache.clear();
+  newsHotOverlayMemoryCache.clear();
 }
 
 function mergeNewsStreamsDescending(primary: NewsItem[], secondary: NewsItem[], maxItems: number): NewsItem[] {
@@ -5491,6 +5979,13 @@ async function readCoordinatorHotFeed(env: WorkerEnv, limit: number): Promise<Ne
   const maxLimit = normalizeNewsHotOverlayLimit(env.NEWS_HOT_OVERLAY_LIMIT);
   const finalLimit = Math.min(limit, maxLimit);
   const perShardLimit = Math.max(1, Math.ceil(finalLimit / Math.max(1, shardNames.length)) + 2);
+  const overlayCacheTtlMs = normalizeNewsHotOverlayCacheMs(env.NEWS_HOT_OVERLAY_CACHE_MS);
+  const overlayCacheKey = `${normalizeBillingNamespacePrefix(env.BILLING_NAMESPACE_PREFIX)}:news-hot:${shardNames.join("|")}:${finalLimit}:${perShardLimit}`;
+  const cached = newsHotOverlayMemoryCache.get(overlayCacheKey);
+  const nowMs = Date.now();
+  if (overlayCacheTtlMs > 0 && cached && nowMs - cached.cachedAtMs <= overlayCacheTtlMs) {
+    return cached.items;
+  }
 
   const results = await Promise.all(
     shardNames.map(async (coordinatorName) => {
@@ -5534,7 +6029,14 @@ async function readCoordinatorHotFeed(env: WorkerEnv, limit: number): Promise<Ne
   for (const shardItems of results) {
     merged = mergeNewsStreamsDescending(merged, shardItems, finalLimit);
   }
-  return merged.slice(0, finalLimit);
+  const output = merged.slice(0, finalLimit);
+  if (overlayCacheTtlMs > 0) {
+    newsHotOverlayMemoryCache.set(overlayCacheKey, {
+      cachedAtMs: nowMs,
+      items: output,
+    });
+  }
+  return output;
 }
 
 function resolveNewsFeedCacheKey(env: WorkerEnv, storageKey?: string): string {
@@ -5755,6 +6257,14 @@ function normalizeAiMediaCount(value: unknown): number {
   if (normalized.toLowerCase() === "false") return 0;
   const parsed = parseFiniteNumber(normalized);
   return parsed === undefined ? 0 : Math.max(0, Math.floor(parsed));
+}
+
+function normalizeOptionalTimestampMs(value: unknown, multiplier = 1): number | null {
+  const parsed = parseFiniteNumber(value);
+  if (parsed === undefined) {
+    return null;
+  }
+  return Math.max(0, Math.floor(parsed * multiplier));
 }
 
 function writeAiTelemetry(args: {
@@ -6589,37 +7099,12 @@ async function handleAdminCrmSummary(args: {
     return errorJson(403, "Forbidden.");
   }
 
-  const accounts = await loadCrmAccountSnapshots(args.env);
-  const statusCounts = {
-    active: 0,
-    trialing: 0,
-    canceled: 0,
-    expired: 0,
-    none: 0,
-  };
-  let kvMrrActiveUsd = 0;
-  for (const account of accounts) {
-    if (account.status === "active") {
-      statusCounts.active += 1;
-      kvMrrActiveUsd += account.monthlyPriceUsd;
-      continue;
-    }
-    if (account.status === "trialing") {
-      statusCounts.trialing += 1;
-      continue;
-    }
-    if (account.status === "canceled") {
-      statusCounts.canceled += 1;
-      continue;
-    }
-    if (account.status === "expired") {
-      statusCounts.expired += 1;
-      continue;
-    }
-    statusCounts.none += 1;
-  }
-
-  const { telemetry, latestEvents } = await summarizeCrmTelemetry(args.env);
+  const summarySnapshot = await resolveCrmSummarySnapshot(args.env);
+  const accounts = summarySnapshot.billing.accounts;
+  const statusCounts = summarySnapshot.billing.statuses;
+  const kvMrrActiveUsd = summarySnapshot.billing.mrrActiveUsd;
+  const telemetry = summarySnapshot.telemetry;
+  const latestEvents = summarySnapshot.latestEvents;
   let stripeLive: StripeCrmLiveSummary | StripeCrmLiveFallback | undefined;
   const stripeResult = await resolveStripeCrmSummary(args.env);
   if ("live" in stripeResult) {
@@ -6655,9 +7140,9 @@ async function handleAdminCrmSummary(args: {
   return responseJson(200, {
     ok: true,
     result: {
-      generatedAtMs: Date.now(),
+      generatedAtMs: summarySnapshot.generatedAtMs,
       billing: {
-        trackedUsers,
+        trackedUsers: summarySnapshot.billing.trackedUsers,
         statuses: statusCounts,
         mrrActiveUsd: Number(revenueMrrActiveUsd.toFixed(2)),
         arrActiveUsd: revenueArrActiveUsd,
@@ -7463,13 +7948,110 @@ async function loadAiBatchState(env: WorkerEnv, batchId: string): Promise<AiBatc
   }
 }
 
+function normalizeAiBatchStateMeta(value: unknown, batchId: string): AiBatchStateMeta | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const statusRaw = trimString(value.status);
+  const status =
+    statusRaw === "queued" ||
+    statusRaw === "running" ||
+    statusRaw === "submitted" ||
+    statusRaw === "polling" ||
+    statusRaw === "completed" ||
+    statusRaw === "failed"
+      ? (statusRaw as AiBatchStatus)
+      : null;
+  const provider = normalizeAiBatchProvider(trimString(value.provider));
+  const createdAtMs = parseFiniteNumber(value.createdAtMs);
+  const updatedAtMs = parseFiniteNumber(value.updatedAtMs);
+  const maxConnections = parseFiniteNumber(value.maxConnections);
+  const pollAttempts = parseFiniteNumber(value.pollAttempts);
+  const totalJobs = parseFiniteNumber(value.totalJobs);
+  if (
+    !status ||
+    createdAtMs === undefined ||
+    updatedAtMs === undefined ||
+    maxConnections === undefined ||
+    pollAttempts === undefined ||
+    totalJobs === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    id: trimString(value.id) ?? batchId,
+    status,
+    createdAtMs: Math.floor(createdAtMs),
+    updatedAtMs: Math.floor(updatedAtMs),
+    provider,
+    maxConnections: clamp(Math.floor(maxConnections), 1, MAX_AI_PIPELINE_MAX_CONNECTIONS),
+    pollAttempts: Math.max(0, Math.floor(pollAttempts)),
+    totalJobs: Math.max(0, Math.floor(totalJobs)),
+    ...(trimString(value.externalBatchId) ? { externalBatchId: trimString(value.externalBatchId) } : {}),
+    ...(trimString(value.outputFileId) ? { outputFileId: trimString(value.outputFileId) } : {}),
+    ...(Array.isArray(value.results) ? { results: value.results as AiBatchJobResult[] } : {}),
+    ...(trimString(value.error) ? { error: trimString(value.error) } : {}),
+  };
+}
+
+async function loadAiBatchStateMeta(env: WorkerEnv, batchId: string): Promise<AiBatchStateMeta | null> {
+  const kv = getAiBatchKv(env);
+  if (!kv) {
+    return null;
+  }
+  const raw = await kv.get(resolveAiBatchMetaKey(env, batchId));
+  if (!raw) {
+    return null;
+  }
+  try {
+    return normalizeAiBatchStateMeta(JSON.parse(raw) as unknown, batchId);
+  } catch {
+    return null;
+  }
+}
+
 async function saveAiBatchState(env: WorkerEnv, state: AiBatchState): Promise<void> {
   const kv = getAiBatchKv(env);
   if (!kv || typeof kv.put !== "function") {
     throw new Error("USAGE_KV binding with get()/put() is required for AI batch jobs.");
   }
   const ttl = normalizeAiBatchStatusTtlSeconds(env.AI_BATCH_STATUS_TTL_SECONDS);
-  await kv.put(resolveAiBatchStateKey(env, state.id), JSON.stringify(state), { expirationTtl: ttl });
+  const meta: AiBatchStateMeta = {
+    id: state.id,
+    status: state.status,
+    createdAtMs: state.createdAtMs,
+    updatedAtMs: state.updatedAtMs,
+    provider: state.provider,
+    maxConnections: state.maxConnections,
+    pollAttempts: state.pollAttempts,
+    totalJobs: state.jobs.length,
+    ...(state.externalBatchId ? { externalBatchId: state.externalBatchId } : {}),
+    ...(state.outputFileId ? { outputFileId: state.outputFileId } : {}),
+    ...(state.results ? { results: state.results } : {}),
+    ...(state.error ? { error: state.error } : {}),
+  };
+  const writes = [
+    kv.put(resolveAiBatchStateKey(env, state.id), JSON.stringify(state), { expirationTtl: ttl }),
+    kv.put(resolveAiBatchMetaKey(env, state.id), JSON.stringify(meta), { expirationTtl: ttl }),
+  ];
+
+  const terminal = state.status === "completed" || state.status === "failed";
+  if (terminal) {
+    if (typeof kv.delete === "function") {
+      writes.push(kv.delete(resolveAiBatchPendingKey(env, state.id)));
+    }
+  } else {
+    writes.push(
+      kv.put(
+        resolveAiBatchPendingKey(env, state.id),
+        JSON.stringify({ id: state.id, updatedAtMs: state.updatedAtMs, status: state.status }),
+        { expirationTtl: ttl },
+      ),
+    );
+  }
+
+  await Promise.all(writes);
 }
 
 async function loadAiBatchIdempotency(env: WorkerEnv, idempotencyKey: string): Promise<string | null> {
@@ -7499,6 +8081,23 @@ function aiBatchStateResponse(state: AiBatchState): Record<string, unknown> {
     maxConnections: state.maxConnections,
     pollAttempts: state.pollAttempts,
     totalJobs: state.jobs.length,
+    ...(state.externalBatchId ? { externalBatchId: state.externalBatchId } : {}),
+    ...(state.outputFileId ? { outputFileId: state.outputFileId } : {}),
+    ...(state.results ? { jobs: state.results } : {}),
+    ...(state.error ? { error: state.error } : {}),
+  };
+}
+
+function aiBatchMetaResponse(state: AiBatchStateMeta): Record<string, unknown> {
+  return {
+    id: state.id,
+    status: state.status,
+    provider: state.provider,
+    createdAtMs: state.createdAtMs,
+    updatedAtMs: state.updatedAtMs,
+    maxConnections: state.maxConnections,
+    pollAttempts: state.pollAttempts,
+    totalJobs: state.totalJobs,
     ...(state.externalBatchId ? { externalBatchId: state.externalBatchId } : {}),
     ...(state.outputFileId ? { outputFileId: state.outputFileId } : {}),
     ...(state.results ? { jobs: state.results } : {}),
@@ -8046,12 +8645,6 @@ async function processAiBatchPoll(args: {
     MAX_AI_BATCH_POLL_DELAY_SECONDS,
     Math.floor(baseDelay * Math.pow(2, Math.min(6, Math.max(0, nextAttempt - 1)))),
   );
-  await saveAiBatchState(args.env, {
-    ...state,
-    status: "polling",
-    updatedAtMs: Date.now(),
-    pollAttempts: nextAttempt,
-  });
   await enqueueAiBatchMessage({
     env: args.env,
     body: {
@@ -8059,6 +8652,12 @@ async function processAiBatchPoll(args: {
       batchId: state.id,
     },
     delaySeconds: exponentialDelay,
+  });
+  await saveAiBatchState(args.env, {
+    ...state,
+    status: "polling",
+    updatedAtMs: Date.now(),
+    pollAttempts: nextAttempt,
   });
 }
 
@@ -8075,7 +8674,7 @@ async function recoverStaleAiBatches(args: {
     DEFAULT_AI_BATCH_RECOVERY_STALE_SECONDS * 1000,
     normalizeAiBatchPollDelaySeconds(args.env.AI_BATCH_POLL_DELAY_SECONDS) * 2000,
   );
-  const prefix = `${normalizeAiBatchNamespacePrefix(args.env.AI_BATCH_NAMESPACE_PREFIX)}:state:`;
+  const prefix = `${normalizeAiBatchNamespacePrefix(args.env.AI_BATCH_NAMESPACE_PREFIX)}:pending:`;
 
   let recovered = 0;
   let cursor: string | undefined;
@@ -8107,41 +8706,41 @@ async function recoverStaleAiBatches(args: {
 
       if (state.provider === "groq") {
         if (state.externalBatchId && (state.status === "submitted" || state.status === "polling" || state.status === "running")) {
-          await saveAiBatchState(args.env, {
-            ...state,
-            status: "polling",
-            updatedAtMs: args.nowMs,
-          });
           await enqueueAiBatchMessage({
             env: args.env,
             body: { kind: "ai-batch-poll", batchId: state.id },
             delaySeconds: 5,
           });
+          await saveAiBatchState(args.env, {
+            ...state,
+            status: "polling",
+            updatedAtMs: args.nowMs,
+          });
           recovered += 1;
           continue;
         }
 
+        await enqueueAiBatchMessage({
+          env: args.env,
+          body: { kind: "ai-batch-run", batchId: state.id },
+        });
         await saveAiBatchState(args.env, {
           ...state,
           status: "queued",
           updatedAtMs: args.nowMs,
         });
-        await enqueueAiBatchMessage({
-          env: args.env,
-          body: { kind: "ai-batch-run", batchId: state.id },
-        });
         recovered += 1;
         continue;
       }
 
+      await enqueueAiBatchMessage({
+        env: args.env,
+        body: { kind: "ai-batch-run", batchId: state.id },
+      });
       await saveAiBatchState(args.env, {
         ...state,
         status: "queued",
         updatedAtMs: args.nowMs,
-      });
-      await enqueueAiBatchMessage({
-        env: args.env,
-        body: { kind: "ai-batch-run", batchId: state.id },
       });
       recovered += 1;
     }
@@ -8159,13 +8758,13 @@ async function handleAiJobsStatus(args: {
   env: WorkerEnv;
   batchId: string;
 }): Promise<Response> {
-  const state = await loadAiBatchState(args.env, args.batchId);
-  if (!state) {
+  const stateMeta = await loadAiBatchStateMeta(args.env, args.batchId);
+  if (!stateMeta) {
     return errorJson(404, "AI batch job not found.");
   }
   return responseJson(200, {
     ok: true,
-    result: aiBatchStateResponse(state),
+    result: aiBatchMetaResponse(stateMeta),
   });
 }
 
@@ -8233,11 +8832,11 @@ async function handleAiJobs(args: {
   if (idempotencyKey) {
     const existingBatchId = await loadAiBatchIdempotency(args.env, idempotencyKey);
     if (existingBatchId) {
-      const existingState = await loadAiBatchState(args.env, existingBatchId);
+      const existingState = await loadAiBatchStateMeta(args.env, existingBatchId);
       if (existingState) {
         return responseJson(202, {
           ok: true,
-          result: aiBatchStateResponse(existingState),
+          result: aiBatchMetaResponse(existingState),
         });
       }
     }
@@ -8275,12 +8874,21 @@ async function handleAiJobs(args: {
     }
   }
 
-  const currentState = (await loadAiBatchState(args.env, batchId)) ?? queuedState;
+  const currentState = (await loadAiBatchStateMeta(args.env, batchId)) ?? {
+    id: queuedState.id,
+    status: queuedState.status,
+    createdAtMs: queuedState.createdAtMs,
+    updatedAtMs: queuedState.updatedAtMs,
+    provider: queuedState.provider,
+    maxConnections: queuedState.maxConnections,
+    pollAttempts: queuedState.pollAttempts,
+    totalJobs: queuedState.jobs.length,
+  };
   return responseJson(202, {
     ok: true,
     result: {
       mode: "async",
-      ...aiBatchStateResponse(currentState),
+      ...aiBatchMetaResponse(currentState),
     },
   });
 }
@@ -11114,6 +11722,8 @@ const worker = {
     if (isCrmStripeLiveEnabled(env) && trimString(env.STRIPE_SECRET_KEY)) {
       const crmStartedAt = Date.now();
       try {
+        const crmSummary = await buildCrmSummarySnapshot(env);
+        await saveCachedCrmSummary(env, crmSummary);
         const stripeResult = await fetchStripeLiveCrmSummary(env);
         if (stripeResult.ok) {
           await saveCachedStripeCrmSummary(env, stripeResult.summary);

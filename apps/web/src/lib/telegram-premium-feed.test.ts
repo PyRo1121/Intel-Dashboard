@@ -4,6 +4,7 @@ import {
   applyTelegramPremiumFeed,
   isFirstReportTelegramEntry,
   isHighSignalTelegramEntry,
+  resolveTelegramPremiumDefaultState,
   shouldHideTelegramPremiumNoise,
 } from "./telegram-premium-feed.ts";
 
@@ -98,4 +99,15 @@ test("high signal and first-report helpers use signal metadata", () => {
     }),
     true,
   );
+});
+
+test("telegram premium defaults stay freshness-first", () => {
+  assert.deepEqual(resolveTelegramPremiumDefaultState(true), {
+    signalFirst: false,
+    hideNoise: false,
+  });
+  assert.deepEqual(resolveTelegramPremiumDefaultState(false), {
+    signalFirst: false,
+    hideNoise: false,
+  });
 });

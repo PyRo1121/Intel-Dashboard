@@ -44,6 +44,7 @@ interface Env extends Cloudflare.Env {
   ALLOW_CF_API_TOKEN_AS_AIG?: string;
   CF_ACCOUNT_ID?: string;
   AI_GATEWAY_NAME?: string;
+  SCRAPE_FETCH_TIMEOUT_MS?: string;
   SCRAPE_WORKER_CONCURRENCY?: string;
   CHANNEL_BUILD_CONCURRENCY?: string;
   MAX_MESSAGES_PER_CHANNEL?: string;
@@ -252,8 +253,8 @@ const MAX_SCRAPE_INTERVAL_MS = 120_000;
 const DEFAULT_ROTATION_WINDOW_SECONDS = 60;
 const MIN_ROTATION_WINDOW_SECONDS = 10;
 const MAX_ROTATION_WINDOW_SECONDS = 3600;
-const DEFAULT_SCRAPE_WORKER_CONCURRENCY = 20;
-const DEFAULT_CHANNEL_BUILD_CONCURRENCY = 20;
+const DEFAULT_SCRAPE_WORKER_CONCURRENCY = 48;
+const DEFAULT_CHANNEL_BUILD_CONCURRENCY = 40;
 const MAX_CONCURRENCY = 50;
 const DEFAULT_HOT_CHANNELS_PER_CYCLE = 64;
 const MIN_HOT_CHANNELS_PER_CYCLE = 8;
@@ -282,7 +283,9 @@ const USER_AGENT =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 const R2_MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const R2_MAX_VIDEO_BYTES = 20 * 1024 * 1024;
-const FETCH_TIMEOUT_MS = 15_000;
+const DEFAULT_SCRAPE_FETCH_TIMEOUT_MS = 8_000;
+const MIN_SCRAPE_FETCH_TIMEOUT_MS = 3_000;
+const MAX_SCRAPE_FETCH_TIMEOUT_MS = 15_000;
 const LATEST_TELEGRAM_STATE_KV_KEY = "latest-telegram-intel";
 const LATEST_TELEGRAM_STATE_DO_KEY = "latest_state_json";
 const TELEGRAM_STREAM_WS_TAG = "telegram-stream";
@@ -546,6 +549,15 @@ export class TelegramScraperDO extends DurableObject<Env> {
       DEFAULT_CHANNEL_BUILD_CONCURRENCY,
       1,
       MAX_CONCURRENCY,
+    );
+  }
+
+  private getScrapeFetchTimeoutMs(): number {
+    return normalizeBoundedInt(
+      this.env.SCRAPE_FETCH_TIMEOUT_MS,
+      DEFAULT_SCRAPE_FETCH_TIMEOUT_MS,
+      MIN_SCRAPE_FETCH_TIMEOUT_MS,
+      MAX_SCRAPE_FETCH_TIMEOUT_MS,
     );
   }
 
@@ -2437,7 +2449,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
     try {
       const res = await fetch(`https://t.me/s/${username}`, {
         headers: { "User-Agent": USER_AGENT },
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        signal: AbortSignal.timeout(this.getScrapeFetchTimeoutMs()),
       });
 
       if (!res.ok) {

@@ -95,6 +95,18 @@ export function isFirstReportTelegramEntry<TEntry extends TelegramPremiumEntryLi
   return Array.isArray(entry.dedupe?.signalReasons) && entry.dedupe.signalReasons.includes("first");
 }
 
+export function resolveTelegramPremiumDefaultState(_isSubscriber: boolean): {
+  signalFirst: boolean;
+  hideNoise: boolean;
+} {
+  // Freshness-first keeps the feed aligned with live Telegram ingress.
+  // Premium ranking/noise suppression stays available as an explicit opt-in.
+  return {
+    signalFirst: false,
+    hideNoise: false,
+  };
+}
+
 export function applyTelegramPremiumFeed<TEntry extends TelegramPremiumEntryLike>(args: {
   entries: TEntry[];
   signalFirst: boolean;

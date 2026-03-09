@@ -4355,112 +4355,12 @@ async function saveCachedCrmSummary(env: WorkerEnv, summary: CrmSummarySnapshot)
   });
 }
 
-function buildCrmAccountSnapshot(account: BillingAccount): CrmAccountSnapshot {
-  return {
-    userId: account.userId,
-    status: account.status,
-    monthlyPriceUsd: account.monthlyPriceUsd,
-    updatedAtMs: account.updatedAtMs,
-    ...(account.trialEndsAtMs === undefined ? {} : { trialEndsAtMs: account.trialEndsAtMs }),
-  };
-}
-
-function createEmptyCrmTelemetryKindCounts(): Record<string, number> {
-  return {};
-}
-
-function buildCrmTopKinds7d(kindCounts7d: Record<string, number>): Array<{ kind: string; count: number }> {
-  return Object.entries(kindCounts7d)
-    .map(([kind, count]) => ({ kind, count }))
-    .filter((entry) => entry.count > 0)
-    .sort((left, right) => right.count - left.count)
-    .slice(0, 8);
-}
-
-function computeCrmActivityContribution(events: BillingActivityEvent[], nowMs: number): {
-  events24h: number;
-  events7d: number;
-  hasUser24h: boolean;
-  hasUser7d: boolean;
-  trialStarts7d: number;
-  paidStarts7d: number;
-  cancellations7d: number;
-  cancellations30d: number;
-  kindCounts7d: Record<string, number>;
-} {
-  const min24h = nowMs - DAY_MS;
-  const min7d = nowMs - 7 * DAY_MS;
-  const min30d = nowMs - 30 * DAY_MS;
-  let events24h = 0;
-  let events7d = 0;
-  let trialStarts7d = 0;
-  let paidStarts7d = 0;
-  let cancellations7d = 0;
-  let cancellations30d = 0;
-  const kindCounts7d: Record<string, number> = {};
-
-  for (const event of events) {
-    if (event.atMs >= min24h) {
-      events24h += 1;
-    }
-    if (event.atMs >= min7d) {
-      events7d += 1;
-      kindCounts7d[event.kind] = (kindCounts7d[event.kind] ?? 0) + 1;
-      if (event.kind === "trial_started" || event.kind === "trial_restarted") {
-        trialStarts7d += 1;
-      }
-      if (
-        event.kind === "subscription_set_active" ||
-        event.kind === "stripe_checkout_completed" ||
-        event.kind === "stripe_subscription_updated"
-      ) {
-        paidStarts7d += 1;
-      }
-      if (event.kind.includes("canceled") || event.kind.includes("deleted")) {
-        cancellations7d += 1;
-      }
-    }
-    if (event.atMs >= min30d && (event.kind.includes("canceled") || event.kind.includes("deleted"))) {
-      cancellations30d += 1;
-    }
-  }
-
-  return {
-    events24h,
-    events7d,
-    hasUser24h: events24h > 0,
-    hasUser7d: events7d > 0,
-    trialStarts7d,
-    paidStarts7d,
-    cancellations7d,
-    cancellations30d,
-    kindCounts7d,
-  };
-}
-
 async function refreshCachedCrmSummaryForBillingAccount(args: {
   env: WorkerEnv;
   next: BillingAccount;
 }): Promise<void> {
-  const cached = await loadCachedCrmSummary(args.env);
-  if (!cached) {
-    return;
-  }
-  const nextSnapshot = buildCrmAccountSnapshot(args.next);
-  const accounts = cached.billing.accounts
-    .filter((account) => account.userId !== args.next.userId)
-    .concat(nextSnapshot)
-    .sort((left, right) => right.updatedAtMs - left.updatedAtMs);
-  const billing = summarizeCrmAccounts(accounts);
-  await saveCachedCrmSummary(args.env, {
-    ...cached,
-    generatedAtMs: Date.now(),
-    billing: {
-      ...billing,
-      accounts,
-    },
-    degraded: createCrmSummaryDegradedState(),
-  });
+  void args.next;
+  await deleteCachedCrmSummary(args.env);
 }
 
 async function refreshCachedCrmSummaryForActivityEvent(args: {
@@ -4470,72 +4370,11 @@ async function refreshCachedCrmSummaryForActivityEvent(args: {
   nextEvents: BillingActivityEvent[];
   event: BillingActivityEvent;
 }): Promise<void> {
-  const cached = await loadCachedCrmSummary(args.env);
-  if (!cached) {
-    return;
-  }
-  const nowMs = Date.now();
-  const previousContribution = computeCrmActivityContribution(args.previousEvents, nowMs);
-  const nextContribution = computeCrmActivityContribution(args.nextEvents, nowMs);
-  const kindCounts7d = {
-    ...createEmptyCrmTelemetryKindCounts(),
-    ...(cached.telemetryKindCounts7d ??
-      Object.fromEntries(cached.telemetry.topKinds7d.map((entry) => [entry.kind, entry.count]))),
-  };
-  const touchedKinds = new Set([
-    ...Object.keys(previousContribution.kindCounts7d),
-    ...Object.keys(nextContribution.kindCounts7d),
-  ]);
-  for (const kind of touchedKinds) {
-    const nextCount =
-      (kindCounts7d[kind] ?? 0) -
-      (previousContribution.kindCounts7d[kind] ?? 0) +
-      (nextContribution.kindCounts7d[kind] ?? 0);
-    if (nextCount > 0) {
-      kindCounts7d[kind] = nextCount;
-    } else {
-      delete kindCounts7d[kind];
-    }
-  }
-  const latestEvents = [args.event, ...cached.latestEvents.filter((entry) => entry.id !== args.event.id)]
-    .sort((left, right) => right.atMs - left.atMs)
-    .slice(0, 60);
-  await saveCachedCrmSummary(args.env, {
-    ...cached,
-    generatedAtMs: nowMs,
-    telemetry: {
-      events24h: Math.max(0, cached.telemetry.events24h - previousContribution.events24h + nextContribution.events24h),
-      events7d: Math.max(0, cached.telemetry.events7d - previousContribution.events7d + nextContribution.events7d),
-      uniqueUsers24h: Math.max(
-        0,
-        cached.telemetry.uniqueUsers24h - Number(previousContribution.hasUser24h) + Number(nextContribution.hasUser24h),
-      ),
-      uniqueUsers7d: Math.max(
-        0,
-        cached.telemetry.uniqueUsers7d - Number(previousContribution.hasUser7d) + Number(nextContribution.hasUser7d),
-      ),
-      trialStarts7d: Math.max(
-        0,
-        cached.telemetry.trialStarts7d - previousContribution.trialStarts7d + nextContribution.trialStarts7d,
-      ),
-      paidStarts7d: Math.max(
-        0,
-        cached.telemetry.paidStarts7d - previousContribution.paidStarts7d + nextContribution.paidStarts7d,
-      ),
-      cancellations7d: Math.max(
-        0,
-        cached.telemetry.cancellations7d - previousContribution.cancellations7d + nextContribution.cancellations7d,
-      ),
-      cancellations30d: Math.max(
-        0,
-        cached.telemetry.cancellations30d - previousContribution.cancellations30d + nextContribution.cancellations30d,
-      ),
-      topKinds7d: buildCrmTopKinds7d(kindCounts7d),
-    },
-    latestEvents,
-    degraded: createCrmSummaryDegradedState(),
-    telemetryKindCounts7d: kindCounts7d,
-  });
+  void args.userId;
+  void args.previousEvents;
+  void args.nextEvents;
+  void args.event;
+  await deleteCachedCrmSummary(args.env);
 }
 
 async function deleteCachedStripeCrmSummary(env: WorkerEnv): Promise<void> {
@@ -4701,7 +4540,7 @@ async function listKvKeyNamesByPrefix(args: {
   maxKeys?: number;
 }): Promise<{ keys: string[]; truncated: boolean }> {
   if (typeof args.kv.list !== "function") {
-    return { keys: [], truncated: false };
+    return { keys: [], truncated: true };
   }
 
   const collected: string[] = [];
@@ -4742,7 +4581,7 @@ async function loadCrmAccountSnapshots(env: WorkerEnv): Promise<{
   if (!kv || typeof kv.get !== "function") {
     return {
       accounts: [],
-      truncated: false,
+      truncated: true,
     };
   }
 
@@ -4814,7 +4653,7 @@ async function summarizeCrmTelemetry(env: WorkerEnv): Promise<{
         topKinds7d: [],
       },
       latestEvents: [],
-      truncated: false,
+      truncated: true,
       kindCounts7d: {},
     };
   }
@@ -9281,7 +9120,7 @@ async function handleAiJobs(args: {
       deleteAiBatchState(args.env, batchId),
       ...(idempotencyKey ? [deleteAiBatchIdempotency(args.env, idempotencyKey)] : []),
     ]);
-    throw error;
+    return errorJson(500, `Failed to persist AI batch idempotency state: ${String(error)}`);
   }
 
   if (hasQueue) {
@@ -9298,7 +9137,7 @@ async function handleAiJobs(args: {
         deleteAiBatchState(args.env, batchId),
         ...(idempotencyKey ? [deleteAiBatchIdempotency(args.env, idempotencyKey)] : []),
       ]);
-      throw error;
+      return errorJson(503, `Failed to enqueue AI batch run: ${String(error)}`);
     }
   } else if (args.ctx) {
     args.ctx.waitUntil(

@@ -2122,7 +2122,7 @@ describe("intel-dashboard backend worker", () => {
     });
   });
 
-  it("maintains a fresh cached CRM summary across billing trial writes without KV enumeration", async () => {
+  it("invalidates cached CRM summary across billing trial writes so the next read rebuilds safely", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1_000_000);
     const kv = createKvMapBinding({
       "intel-dashboard:billing:crm:summary": {
@@ -2161,9 +2161,11 @@ describe("intel-dashboard backend worker", () => {
         telemetryKindCounts7d: {},
       },
     });
-    kv.binding.list = vi.fn(async () => {
-      throw new Error("crm summary should not enumerate KV when cache is maintained on writes");
-    });
+    const originalList = kv.binding.list;
+    const listSpy = vi.fn(async (options?: { prefix?: string; cursor?: string; limit?: number }) =>
+      originalList(options),
+    );
+    kv.binding.list = listSpy;
 
     const startTrial = await worker.fetch(
       new Request("https://backend.example.com/api/intel-dashboard/billing/start-trial", {
@@ -2182,6 +2184,7 @@ describe("intel-dashboard backend worker", () => {
       },
     );
     expect(startTrial.status).toBe(200);
+    expect(kv.data.has("intel-dashboard:billing:crm:summary")).toBe(false);
 
     const response = await worker.fetch(
       new Request("https://backend.example.com/api/intel-dashboard/admin/crm/summary", {
@@ -2217,6 +2220,41 @@ describe("intel-dashboard backend worker", () => {
         },
         degraded: {
           partial: false,
+        },
+      },
+    });
+    expect(listSpy).toHaveBeenCalled();
+  });
+
+  it("marks CRM summary as degraded when KV enumeration support is unavailable", async () => {
+    const kv = createKvMapBinding();
+    (kv.binding as { list?: typeof kv.binding.list }).list = undefined;
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/admin/crm/summary", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "owner-id" }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+        BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+        USAGE_KV: kv.binding,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      result: {
+        degraded: {
+          partial: true,
+          accountsTruncated: true,
+          activityTruncated: true,
         },
       },
     });
@@ -3961,37 +3999,40 @@ describe("intel-dashboard backend worker", () => {
   it("rolls back queued ai batch state and idempotency when enqueue fails", async () => {
     const kv = createKvMapBinding();
 
-    await expect(
-      worker.fetch(
-        new Request("https://backend.example.com/api/intel-dashboard/ai/jobs", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: "Bearer admin-token",
-          },
-          body: JSON.stringify({
-            async: true,
-            idempotencyKey: "batch-retry-key",
-            jobs: [
-              {
-                type: "dedupe",
-                payload: { title: "Repeated update", url: "https://example.com/repeated" },
-              },
-            ],
-          }),
-        }),
-        {
-          BILLING_ADMIN_TOKEN: "admin-token",
-          AI_JOBS_PATH: "/api/intel-dashboard/ai/jobs",
-          USAGE_KV: kv.binding,
-          AI_JOB_QUEUE: {
-            send: async () => {
-              throw new Error("queue down");
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/ai/jobs", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer admin-token",
+        },
+        body: JSON.stringify({
+          async: true,
+          idempotencyKey: "batch-retry-key",
+          jobs: [
+            {
+              type: "dedupe",
+              payload: { title: "Repeated update", url: "https://example.com/repeated" },
             },
+          ],
+        }),
+      }),
+      {
+        BILLING_ADMIN_TOKEN: "admin-token",
+        AI_JOBS_PATH: "/api/intel-dashboard/ai/jobs",
+        USAGE_KV: kv.binding,
+        AI_JOB_QUEUE: {
+          send: async () => {
+            throw new Error("queue down");
           },
         },
-      ),
-    ).rejects.toThrow("queue down");
+      },
+    );
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringContaining("Failed to enqueue AI batch run"),
+    });
     expect(kv.data.size).toBe(0);
   });
 
@@ -4449,9 +4490,10 @@ describe("intel-dashboard backend worker", () => {
       return originalGet(key);
     };
 
+    const send = vi.fn(async () => undefined);
     await worker.scheduled({} as ScheduledController, {
       USAGE_KV: kv.binding,
-      AI_JOB_QUEUE: { send: async () => undefined },
+      AI_JOB_QUEUE: { send },
       AI_BATCH_PROVIDER: "internal",
       AI_BATCH_POLL_DELAY_SECONDS: "60",
       NEWS_RSS_INGEST_ENABLED: "false",
@@ -4460,6 +4502,7 @@ describe("intel-dashboard backend worker", () => {
 
     expect(getCalls).toContain("intel-dashboard:ai-batch:pending:batch-fresh");
     expect(getCalls).not.toContain("intel-dashboard:ai-batch:state:batch-fresh");
+    expect(send).not.toHaveBeenCalled();
   });
 
   it("starts trial with delayed news access", async () => {

@@ -49,3 +49,18 @@ export function buildRegionSummaries(items: IntelItem[]): RegionSummary[] {
     };
   });
 }
+
+export function sumRegionSeverity(
+  summaries: readonly RegionSummary[],
+  severity: "critical" | "high" | "medium" | "low",
+): number {
+  return summaries.reduce((sum, summary) => sum + summary[severity], 0);
+}
+
+export function findRegionSummary(
+  summaries: readonly RegionSummary[],
+  region: IntelRegion | null | undefined,
+): RegionSummary | null {
+  if (!region) return null;
+  return summaries.find((summary) => summary.region === region) ?? null;
+}

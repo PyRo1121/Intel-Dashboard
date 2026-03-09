@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { REGION_ORDER, buildRegionSummaries } from "./region-summary.ts";
+import { REGION_ORDER, buildRegionSummaries, findRegionSummary, sumRegionSeverity } from "./region-summary.ts";
 
 test("buildRegionSummaries groups intel items by region and preserves region order", () => {
   const items = [
@@ -57,4 +57,8 @@ test("buildRegionSummaries groups intel items by region and preserves region ord
   const global = summaries.find((item) => item.region === "global");
   assert.equal(global?.eventCount, 1);
   assert.equal(global?.low, 1);
+  assert.equal(sumRegionSeverity(summaries, "critical"), 1);
+  assert.equal(sumRegionSeverity(summaries, "high"), 1);
+  assert.equal(findRegionSummary(summaries, "ukraine")?.region, "ukraine");
+  assert.equal(findRegionSummary(summaries, null), null);
 });

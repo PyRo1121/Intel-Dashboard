@@ -8,7 +8,7 @@ import {
   onCleanup,
   type JSX,
 } from "solid-js";
-import { resolveAuthUserDisplay, resolveAuthUserRole } from "~/lib/auth-user";
+import { resolveAuthUserDisplay, resolveAuthUserEntitlementView, resolveAuthUserRole } from "~/lib/auth-user";
 import {
   LayoutDashboard,
   Radio,
@@ -29,7 +29,6 @@ import {
 import { useAuth } from "~/lib/auth";
 import { DASHBOARD_HOME_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
 import { formatDelayMinutesShortLabel, UPGRADE_INSTANT_FEED_LABEL } from "@intel-dashboard/shared/access-offers.ts";
-import { resolveEntitlementRole, resolveEntitlementView } from "@intel-dashboard/shared/entitlement.ts";
 import { SITE_NAME, SITE_OPERATIONS_LABEL } from "@intel-dashboard/shared/site-config.ts";
 
 // ============================================================================
@@ -257,8 +256,7 @@ export default function Sidebar() {
                     {(() => {
                       const [avatarFailed, setAvatarFailed] = createSignal(false);
                       const userDisplay = () => resolveAuthUserDisplay(currentUser());
-                      const entitlement = () => currentUser().entitlement;
-                      const entitlementView = () => resolveEntitlementView(entitlement());
+                      const entitlementView = () => resolveAuthUserEntitlementView(currentUser());
                       const entitled = () => entitlementView().entitled;
                       const delayMinutes = () => entitlementView().delayMinutes;
                       const planLabel = () => entitlementView().planLabel;
@@ -338,9 +336,8 @@ export default function Sidebar() {
         {(() => {
           try {
             const current = auth.user();
-            const role = resolveEntitlementRole(current?.entitlement?.role, current?.entitlement?.tier);
-            const entitled = current?.entitlement?.entitled === true || role === "owner" || role === "subscriber";
-            if (compact() || entitled) return null;
+            const entitlementView = resolveAuthUserEntitlementView(current);
+            if (compact() || entitlementView.entitled) return null;
             return (
                               <A
                                 href="/billing"

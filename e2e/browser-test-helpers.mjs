@@ -380,8 +380,22 @@ export async function assertPublicLandingSurface(page) {
   assert.doesNotMatch(bodyText, /PyRoBOT|PyRo1121Bot/i, "landing should not render legacy branding");
 }
 
+export async function openAndAssertPublicLanding(page) {
+  const response = await openPublicPage(page, "/");
+  assertResponseStatus(response, 200);
+  await assertPublicLandingSurface(page);
+  return response;
+}
+
 export async function assertPublicAccessSurface(page, message = "expected a public access surface") {
   assert.match((await page.textContent("body")) || "", PUBLIC_ACCESS_SURFACE_PATTERN, message);
+}
+
+export async function openAndAssertNotFoundPage(page, path = "/this-page-should-not-exist-xyz") {
+  const response = await openPublicPage(page, path);
+  assertResponseStatus(response, 404);
+  await assertNotFoundPage(page);
+  return response;
 }
 
 export async function assertLandingCtaDestination(page, options) {

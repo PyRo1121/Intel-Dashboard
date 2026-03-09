@@ -6,8 +6,9 @@ import {
   assertNoBrowserDiagnostics,
   assertLandingCtaDestination,
   assertPublicAccessSurface,
-  assertPublicLandingSurface,
   assertSidebarRouteNavigation,
+  openAndAssertNotFoundPage,
+  openAndAssertPublicLanding,
   openAndAssertPublicAuthRoute,
   openAndAssertRouteMetadata,
   openAndAssertPublicAuthEntry,
@@ -1188,22 +1189,11 @@ test("browser public landing and 404 surfaces render expected production content
   try {
     const page = await context.newPage();
     try {
-      const landingResponse = await openPublicPage(page, "/");
-      assert.ok(landingResponse, "landing page should return a response");
-      assert.equal(landingResponse.status(), 200, "landing page should render successfully");
-      await assertPublicLandingSurface(page);
+      await openAndAssertPublicLanding(page);
 
-      const notFoundResponse = await openPublicPage(page, "/this-page-should-not-exist-xyz");
-      assert.ok(notFoundResponse, "404 page should return a response");
-      assert.equal(notFoundResponse.status(), 404, "missing page should return 404");
-      const notFoundText = (await page.textContent("body")) || "";
-      assert.match(notFoundText, /Not Found/i, "missing page should render not found copy");
+      await openAndAssertNotFoundPage(page);
 
-      const shadowedLandingResponse = await openPublicPage(page, "/landing");
-      assert.ok(shadowedLandingResponse, "shadowed landing route should return a response");
-      assert.equal(shadowedLandingResponse.status(), 404, "shadowed landing route should remain unavailable in production");
-      const shadowedLandingText = (await page.textContent("body")) || "";
-      assert.match(shadowedLandingText, /Not Found/i, "shadowed landing route should render not found copy");
+      await openAndAssertNotFoundPage(page, "/landing");
     } catch (error) {
       await captureBrowserArtifacts(page, "public-landing-and-404", error);
       throw error;

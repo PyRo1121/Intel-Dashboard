@@ -926,6 +926,11 @@ export class TelegramScraperDO extends DurableObject<Env> {
             thresholds,
           });
         } catch {
+          console.warn("[TelegramScraper] Failed to parse signal profile row", {
+            profileId: row.profile_id,
+            category,
+            error: "invalid_signal_profile_json",
+          });
           continue;
         }
       }

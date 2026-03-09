@@ -1,5 +1,7 @@
 import type { ChannelConfig } from "./channels";
 
+import { HIGH_SIGNAL_TELEGRAM_SCORE_THRESHOLD } from "@intel-dashboard/shared/telegram-signal.ts";
+
 export type TelegramSignalGrade = "A" | "B" | "C" | "D";
 
 export type TelegramSignalProfileWeights = {
@@ -176,5 +178,5 @@ export function computeTelegramSignalGrade(args: {
 }
 
 export function isHighSignalTelegramScore(score: number | null | undefined): boolean {
-  return normalizeScore(score) >= 70;
+  return normalizeScore(score) >= HIGH_SIGNAL_TELEGRAM_SCORE_THRESHOLD;
 }

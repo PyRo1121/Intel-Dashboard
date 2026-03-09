@@ -1,4 +1,5 @@
 import { parseTimestampMs } from "./utils.ts";
+import { HIGH_SIGNAL_TELEGRAM_SCORE_THRESHOLD } from "@intel-dashboard/shared/telegram-signal.ts";
 
 type TelegramPremiumEntryLike = {
   message: {
@@ -82,7 +83,7 @@ export function shouldHideTelegramPremiumNoise<TEntry extends TelegramPremiumEnt
 export function isHighSignalTelegramEntry<TEntry extends TelegramPremiumEntryLike>(entry: TEntry): boolean {
   const score = entry.dedupe?.signalScore;
   if (typeof score === "number") {
-    return score >= 70;
+    return score >= HIGH_SIGNAL_TELEGRAM_SCORE_THRESHOLD;
   }
   return entry.dedupe?.signalGrade === "A" || entry.dedupe?.signalGrade === "B";
 }

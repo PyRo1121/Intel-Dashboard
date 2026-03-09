@@ -4,11 +4,16 @@ import { A, useParams } from "@solidjs/router";
 import { Clock, ExternalLink, Shield } from "lucide-solid";
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 import type { TelegramSourceHistoryWindow } from "@intel-dashboard/shared/telegram-source-history.ts";
-import { TELEGRAM_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 import { useAuth } from "~/lib/auth";
 import { isAuthUserOwner, resolveAuthUserEntitlementView } from "~/lib/auth-user";
 import { useWallClock } from "~/lib/live-refresh";
 import { fetchTelegramSourceHistory } from "~/lib/telegram-client";
+import { fetchSubscriberFeedPreferences, saveSubscriberFeedPreferences } from "~/lib/my-feed-client";
+import {
+  cloneSubscriberFeedPreferences,
+  includesSubscriberPreferenceValue,
+  toggleSubscriberPreferenceValue,
+} from "~/lib/subscriber-feed-preferences";
 import { formatRelativeTimeAt, isInitialResourceLoading } from "~/lib/utils";
 
 const WINDOWS: TelegramSourceHistoryWindow[] = ["24h", "7d", "30d"];
@@ -19,9 +24,15 @@ export default function TelegramSourceHistoryPage() {
   const entitled = () => resolveAuthUserEntitlementView(auth.user()).entitled;
   const owner = () => isAuthUserOwner(auth.user());
   const [window, setWindow] = createSignal<TelegramSourceHistoryWindow>("24h");
+  const [saving, setSaving] = createSignal(false);
+  const [controlsSaved, setControlsSaved] = createSignal("");
   const nowMs = useWallClock(1000);
   const channel = () => (params.channel ?? "").trim().toLowerCase();
 
+  const [preferences, { refetch: refetchPreferences }] = createResource(
+    () => (entitled() ? "enabled" : null),
+    () => fetchSubscriberFeedPreferences(),
+  );
   const [history] = createResource(
     () => (entitled() && channel() ? { channel: channel(), window: window() } : null),
     (args) => fetchTelegramSourceHistory(args.channel, args.window),
@@ -29,6 +40,34 @@ export default function TelegramSourceHistoryPage() {
 
   const loadingInitial = () => isInitialResourceLoading(history.state, history()?.recentEvents?.length ?? 0);
   const title = () => history()?.source.label || channel() || "Telegram Source";
+  const favoriteChannel = () => includesSubscriberPreferenceValue(preferences()?.favoriteChannels ?? [], history()?.source.channel);
+  const watchCategory = () => includesSubscriberPreferenceValue(preferences()?.watchCategories ?? [], history()?.source.category);
+
+  const persistPreferences = async (updater: (current: ReturnType<typeof cloneSubscriberFeedPreferences>) => void) => {
+    const current = preferences();
+    if (!current) {
+      setControlsSaved("Preferences are still loading");
+      return;
+    }
+    setSaving(true);
+    setControlsSaved("");
+    try {
+      const next = cloneSubscriberFeedPreferences(current);
+      updater(next);
+      const saved = await saveSubscriberFeedPreferences(next);
+      if (!saved) {
+        setControlsSaved("Save failed");
+        return;
+      }
+      setControlsSaved("Saved");
+      await refetchPreferences();
+    } catch (error) {
+      console.error("Failed to save source quick actions", error);
+      setControlsSaved("Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <>
@@ -119,6 +158,34 @@ export default function TelegramSourceHistoryPage() {
                           <span class="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-200">{reason}</span>
                         )}
                       </For>
+                    </div>
+                  </section>
+
+                  <section class="surface-card p-4">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={saving()}
+                        onClick={() => void persistPreferences((next) => {
+                          next.favoriteChannels = toggleSubscriberPreferenceValue(next.favoriteChannels, payload().source.channel);
+                        })}
+                        class={`rounded-xl border px-3 py-2 text-sm ${favoriteChannel() ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
+                      >
+                        {favoriteChannel() ? "Favorited channel" : "Favorite channel"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving()}
+                        onClick={() => void persistPreferences((next) => {
+                          next.watchCategories = toggleSubscriberPreferenceValue(next.watchCategories, payload().source.category);
+                        })}
+                        class={`rounded-xl border px-3 py-2 text-sm ${watchCategory() ? "border-blue-400/30 bg-blue-500/10 text-blue-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
+                      >
+                        {watchCategory() ? "Watching category" : "Watch category"}
+                      </button>
+                      <Show when={controlsSaved()}>
+                        <span class="text-xs text-zinc-400">{controlsSaved()}</span>
+                      </Show>
                     </div>
                   </section>
 

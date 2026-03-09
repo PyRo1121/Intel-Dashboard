@@ -35,10 +35,7 @@ test("telegram dedupe helpers derive media signatures and message equality", () 
   assert.equal(isSameTelegramMessage(message, { ...message }), true);
   assert.equal(isSameTelegramMessage(message, { ...message, views: "1.3K" }), false);
   assert.equal(
-    isSameTelegramMessage(message, {
-      ...message,
-      text_original: "Different original",
-    }),
+    isSameTelegramMessage(message, { ...message, text_original: "Different original" }),
     false,
   );
   assert.equal(

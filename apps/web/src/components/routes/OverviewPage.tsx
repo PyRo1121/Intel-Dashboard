@@ -9,7 +9,7 @@ import {
   freshnessBannerTone,
   freshnessPillTone,
   freshnessTooltip,
-  maxIsoTimestamp,
+  maxIsoTimestampBy,
   STANDARD_FEED_FRESHNESS_THRESHOLDS,
   useFeedFreshness,
 } from "~/lib/freshness";
@@ -32,7 +32,7 @@ export default function OverviewPage(props: { canonicalHref: string }) {
   const intelItems = () => readLatestArray(intel.latest, intel());
   const loadingInitial = () => isInitialResourceLoading(intel.state, intelItems().length);
   const severityCounts = () => countBySeverity(intelItems());
-  const latestIntelTs = createMemo(() => maxIsoTimestamp(intelItems().map((item) => item.timestamp)));
+  const latestIntelTs = createMemo(() => maxIsoTimestampBy(intelItems(), (item) => item.timestamp));
   const freshness = useFeedFreshness({
     nowMs,
     latestTimestampMs: latestIntelTs,

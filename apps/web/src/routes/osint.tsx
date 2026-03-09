@@ -8,7 +8,7 @@ import {
   freshnessBannerTone,
   freshnessPillTone,
   freshnessTooltip,
-  maxIsoTimestamp,
+  maxIsoTimestampBy,
   STANDARD_FEED_FRESHNESS_THRESHOLDS,
   useFeedFreshness,
 } from "~/lib/freshness";
@@ -34,7 +34,7 @@ export default function OsintFeed() {
 
   const items = () => readLatestArray(osint.latest, osint());
   const loadingInitial = () => isInitialResourceLoading(osint.state, items().length);
-  const latestIntelTs = createMemo(() => maxIsoTimestamp(items().map((item) => item.timestamp)));
+  const latestIntelTs = createMemo(() => maxIsoTimestampBy(items(), (item) => item.timestamp));
   const freshness = useFeedFreshness({
     nowMs,
     latestTimestampMs: latestIntelTs,

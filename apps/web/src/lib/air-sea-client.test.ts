@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { EMPTY_AIR_SEA_PAYLOAD, fetchAirSeaPayload } from "./air-sea-client.ts";
+import { EMPTY_AIR_SEA_PAYLOAD, fetchAirSeaPayload, resolveAirSeaPayload } from "./air-sea-client.ts";
 
 test("fetchAirSeaPayload returns upstream payload or shared empty fallback", async () => {
   const originalFetch = globalThis.fetch;
@@ -50,4 +50,19 @@ test("fetchAirSeaPayload returns upstream payload or shared empty fallback", asy
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("resolveAirSeaPayload prefers latest, then current, then the shared empty fallback", () => {
+  const current = {
+    ...EMPTY_AIR_SEA_PAYLOAD,
+    timestamp: "2026-03-09T12:00:00.000Z",
+  };
+  const latest = {
+    ...EMPTY_AIR_SEA_PAYLOAD,
+    timestamp: "2026-03-09T12:05:00.000Z",
+  };
+
+  assert.equal(resolveAirSeaPayload(latest, current).timestamp, "2026-03-09T12:05:00.000Z");
+  assert.equal(resolveAirSeaPayload(null, current).timestamp, "2026-03-09T12:00:00.000Z");
+  assert.equal(resolveAirSeaPayload(undefined, undefined), EMPTY_AIR_SEA_PAYLOAD);
 });

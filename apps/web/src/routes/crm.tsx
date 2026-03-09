@@ -4,6 +4,7 @@ import { computeAiCacheHitRatePercent } from "~/lib/ai-telemetry";
 import { useAuth } from "~/lib/auth";
 import { isAuthUserOwner } from "~/lib/auth-user";
 import { fetchCrmAiTelemetry, fetchCrmOverview, postCrmAction } from "~/lib/crm-client";
+import { buildCrmLatestEventMap, escapeCsvCell } from "~/lib/crm-export";
 import { getCrmCustomerCacheSourceLabel } from "~/lib/crm-customer-cache";
 import { formatEventLabel } from "~/lib/event-label";
 import { formatSubscriptionStatus } from "@intel-dashboard/shared/entitlement.ts";
@@ -382,15 +383,7 @@ export default function CrmRoute() {
     setOpsBusy(false);
   };
 
-  const latestEventMap = () => {
-    const map = new Map<string, { atMs?: number; kind?: string }>();
-    for (const event of crm()?.result?.latestEvents ?? []) {
-      if (typeof event.userId === "string" && event.userId.trim().length > 0 && !map.has(event.userId)) {
-        map.set(event.userId, { atMs: event.atMs, kind: event.kind });
-      }
-    }
-    return map;
-  };
+  const latestEventMap = () => buildCrmLatestEventMap(crm()?.result?.latestEvents);
 
   const filteredUsers = createMemo(() => {
     const query = searchTerm().trim().toLowerCase();
@@ -423,13 +416,6 @@ export default function CrmRoute() {
       "created_at",
       "updated_at",
     ];
-    const escapeCell = (value: unknown): string => {
-      const text = String(value ?? "");
-      if (text.includes(",") || text.includes("\"") || text.includes("\n")) {
-        return `"${text.replaceAll("\"", "\"\"")}"`;
-      }
-      return text;
-    };
     const lines = [header.join(",")];
     for (const entry of rows) {
       const billing = accounts.get(entry.id);
@@ -446,7 +432,7 @@ export default function CrmRoute() {
         formatTime(latestEvent?.atMs),
         formatTime(entry.createdAtMs),
         formatTime(entry.updatedAtMs),
-      ].map(escapeCell).join(","));
+      ].map(escapeCsvCell).join(","));
     }
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);

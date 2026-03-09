@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isAuthUserOwner, resolveAuthUserDisplay, resolveAuthUserRole } from "./auth-user.ts";
+import { isAuthUserOwner, resolveAuthUserDisplay, resolveAuthUserEntitlementView, resolveAuthUserRole } from "./auth-user.ts";
 
 test("resolveAuthUserRole falls back from role to tier to free", () => {
   assert.equal(resolveAuthUserRole({ entitlement: { role: "owner", tier: "subscriber" } }), "owner");
@@ -14,6 +14,27 @@ test("isAuthUserOwner derives owner status from resolved auth role", () => {
   assert.equal(isAuthUserOwner({ entitlement: { tier: "owner" } }), true);
   assert.equal(isAuthUserOwner({ entitlement: { role: "subscriber" } }), false);
   assert.equal(isAuthUserOwner(undefined), false);
+});
+
+test("resolveAuthUserEntitlementView reuses the shared entitlement view contract", () => {
+  assert.deepEqual(
+    resolveAuthUserEntitlementView({ entitlement: { tier: "trial", entitled: false, delayMinutes: 15 } }),
+    {
+      role: "trial",
+      entitled: false,
+      delayMinutes: 15,
+      planLabel: "Trial",
+      planTone: "text-amber-300",
+    },
+  );
+
+  assert.deepEqual(resolveAuthUserEntitlementView(undefined), {
+    role: "free",
+    entitled: false,
+    delayMinutes: 0,
+    planLabel: "Free",
+    planTone: "text-zinc-500",
+  });
 });
 
 test("resolveAuthUserDisplay normalizes name, login, and avatar fallbacks", () => {

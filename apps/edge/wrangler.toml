@@ -52,6 +52,11 @@ new_sqlite_classes = ["TelegramScraperDO"]
 cpu_ms = 300000
 subrequests = 50000
 
+[vars]
+SCRAPE_INTERVAL_MS = "10000"
+SCRAPE_ROTATION_WINDOW_SECONDS = "60"
+HOT_CHANNELS_PER_CYCLE = "64"
+
 [assets]
 directory = "../web/.output/public"
 binding = "ASSETS"

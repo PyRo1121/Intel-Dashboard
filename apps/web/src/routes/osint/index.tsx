@@ -1,8 +1,10 @@
-import { For, Show, createMemo, createSignal, createResource } from "solid-js";
+import { For, Show, createMemo, createSignal, createResource, createEffect, onMount } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
 import { A } from "@solidjs/router";
 import { formatTitleLabel } from "~/lib/event-label";
+import { useAuth } from "~/lib/auth";
 import { fetchOsintItems } from "~/lib/osint-client";
+import { loadSessionSnapshot, saveSessionSnapshot } from "~/lib/feed-snapshot-cache";
 import { readLatestArray } from "~/lib/resource-latest";
 import SeverityBadge from "~/components/ui/SeverityBadge";
 import {
@@ -24,18 +26,45 @@ import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 const FILTERS: (Severity | "all")[] = ["all", "critical", "high", "medium", "low"];
 
 export default function OsintFeed() {
+  const OSINT_SNAPSHOT_CACHE_TTL_MS = 2 * 60 * 1000;
   const [filter, setFilter] = createSignal<Severity | "all">("all");
+  const auth = useAuth();
+  const sessionSnapshotKey = createMemo(() => {
+    const user = auth.user();
+    const login = (user?.login ?? "").trim().toLowerCase();
+    const tier = (user?.entitlement?.tier ?? "anon").trim().toLowerCase();
+    const role = (user?.entitlement?.role ?? "anon").trim().toLowerCase();
+    return `osint-feed-snapshot-v1:${login || "anon"}:${role}:${tier}`;
+  });
   const [osint, { refetch }] = createResource(fetchOsintItems, { initialValue: [] as IntelItem[] });
+  const [cachedItems, setCachedItems] = createSignal<IntelItem[]>([]);
   const feedThresholds = STANDARD_FEED_FRESHNESS_THRESHOLDS;
   const nowMs = useWallClock(1000);
+
+  onMount(() => {
+    const cached = loadSessionSnapshot<IntelItem[]>(sessionSnapshotKey(), OSINT_SNAPSHOT_CACHE_TTL_MS);
+    if (Array.isArray(cached) && cached.length > 0) {
+      setCachedItems(cached);
+    }
+  });
 
   useLiveRefresh(() => {
     void refetch();
   }, 10_000, { runImmediately: true });
 
-  const items = () => readLatestArray(osint.latest, osint());
+  const items = () => {
+    const latest = readLatestArray(osint.latest, osint());
+    return latest.length > 0 ? latest : cachedItems();
+  };
   const loadingInitial = () => isInitialResourceLoading(osint.state, items().length);
   const latestIntelTs = createMemo(() => maxIsoTimestampBy(items(), (item) => item.timestamp));
+  createEffect(() => {
+    const current = readLatestArray(osint.latest, osint());
+    if (current.length > 0) {
+      saveSessionSnapshot(sessionSnapshotKey(), current);
+      setCachedItems(current);
+    }
+  });
   const freshness = useFeedFreshness({
     nowMs,
     latestTimestampMs: latestIntelTs,

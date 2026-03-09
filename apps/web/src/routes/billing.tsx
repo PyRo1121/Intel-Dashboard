@@ -226,20 +226,20 @@ export default function BillingRoute() {
 
         <Show when={notice()}>
           {(value) => (
-            <div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            <div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200" data-testid="billing-notice">
               {value()}
             </div>
           )}
         </Show>
         <Show when={error()}>
           {(value) => (
-            <div class="rounded-2xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <div class="rounded-2xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-200" data-testid="billing-error">
               {value()}
             </div>
           )}
         </Show>
 
-        <section class="surface-card p-5 md:p-6 space-y-4">
+        <section class="surface-card p-5 md:p-6 space-y-4" data-testid="billing-status-surface">
           <Show
             when={status()}
             fallback={
@@ -249,24 +249,24 @@ export default function BillingRoute() {
             }
           >
             {(payload) => (
-              <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <article class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+              <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="billing-summary-grid">
+                <article class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4" data-testid="billing-summary-tier">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-600">Tier</p>
                   <p class="mt-1 text-base font-semibold text-white">{formatEntitlementTier(payload().result?.tier)}</p>
                 </article>
-                <article class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+                <article class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4" data-testid="billing-summary-status">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-600">Status</p>
                   <p class="mt-1 text-base font-semibold text-white">
                     {formatSubscriptionStatus(payload().result?.subscription?.status)}
                   </p>
                 </article>
-                <article class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+                <article class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4" data-testid="billing-summary-delay">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-600">Feed Delay</p>
                   <p class="mt-1 text-base font-semibold text-white">
                     {formatDelayMinutesShortLabel(Number(payload().result?.delayMinutes ?? 0))}
                   </p>
                 </article>
-                <article class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+                <article class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4" data-testid="billing-summary-plan">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-600">Plan</p>
                   <p class="mt-1 text-base font-semibold text-white">
                     ${Number(payload().result?.monthlyPriceUsd ?? PREMIUM_PRICE_USD)}/mo
@@ -281,6 +281,7 @@ export default function BillingRoute() {
               type="button"
               onClick={() => void runStartTrial()}
               disabled={busyAction() !== null}
+              data-testid="billing-start-trial"
               class="intel-btn intel-btn-ghost disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Show when={busyAction() === "trial"} fallback="Start Trial">
@@ -291,6 +292,7 @@ export default function BillingRoute() {
               type="button"
               onClick={() => void runCheckout()}
               disabled={busyAction() !== null}
+              data-testid="billing-open-checkout"
               class="intel-btn intel-btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Show when={busyAction() === "checkout"} fallback="Open Checkout">
@@ -301,6 +303,7 @@ export default function BillingRoute() {
               type="button"
               onClick={() => void runPortal()}
               disabled={busyAction() !== null || (!portalAvailable() && !ownerBypass())}
+              data-testid="billing-manage-subscription"
               class="intel-btn intel-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Show when={busyAction() === "portal"} fallback={portalAvailable() || ownerBypass() ? "Manage Subscription" : "Portal Pending"}>
@@ -314,19 +317,20 @@ export default function BillingRoute() {
                 void refetchActivity();
               }}
               disabled={busyAction() !== null}
+              data-testid="billing-refresh"
               class="intel-btn intel-btn-ghost disabled:cursor-not-allowed disabled:opacity-60"
             >
               Refresh
             </button>
           </div>
           <Show when={!portalAvailable() && !ownerBypass()}>
-            <p class="text-xs text-zinc-500">
+            <p class="text-xs text-zinc-500" data-testid="billing-portal-pending">
               Stripe portal unlocks automatically after first successful checkout webhook.
             </p>
           </Show>
         </section>
 
-        <section class="surface-card p-5 md:p-6 space-y-4">
+        <section class="surface-card p-5 md:p-6 space-y-4" data-testid="billing-activity-surface">
           <header class="flex items-center justify-between gap-3">
             <div>
               <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-600">Activity</p>
@@ -338,11 +342,11 @@ export default function BillingRoute() {
           </header>
           <Show
             when={(activity()?.result?.events?.length ?? 0) > 0}
-            fallback={<p class="text-sm text-zinc-500">No billing events recorded yet.</p>}
+            fallback={<p class="text-sm text-zinc-500" data-testid="billing-activity-empty">No billing events recorded yet.</p>}
           >
-            <div class="space-y-2">
+            <div class="space-y-2" data-testid="billing-activity-list">
               {(activity()?.result?.events || []).map((event) => (
-                <article class="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5">
+                <article class="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5" data-testid="billing-activity-item">
                   <div class="flex flex-wrap items-center gap-2">
                     <span class="inline-flex items-center rounded-full border border-zinc-600 bg-zinc-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-300">
                       {formatActivityKind(event.kind)}

@@ -707,7 +707,7 @@ export default function CrmRoute() {
               </section>
 
               <Show when={isOwner()}>
-              <section class="intel-panel mt-4 p-4">
+              <section class="intel-panel mt-4 p-4" data-testid="crm-ai-surface">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h2 class="text-base font-semibold text-zinc-100">AI Command Surface</h2>
@@ -733,6 +733,7 @@ export default function CrmRoute() {
                       type="button"
                       onClick={() => void refetchAiTelemetry()}
                       class="intel-btn intel-btn-secondary"
+                      data-testid="crm-ai-refresh"
                     >
                       Refresh AI
                     </button>
@@ -740,16 +741,16 @@ export default function CrmRoute() {
                 </div>
 
                 <Show when={!aiTelemetry.loading} fallback={
-                  <div class="mt-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 text-sm text-zinc-400">
+                  <div class="mt-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 text-sm text-zinc-400" data-testid="crm-ai-surface-loading">
                     Loading AI telemetry...
                   </div>
                 }>
                   <Show when={aiTelemetry() && aiTelemetry()?.ok !== false} fallback={
-                    <div class="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                    <div class="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" data-testid="crm-ai-surface-unavailable">
                       {aiTelemetry()?.error || "Unable to load AI telemetry."}
                     </div>
                   }>
-                    <section class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+                    <section class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6" data-testid="crm-ai-surface-configured">
                       <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Calls</p>
                         <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiTelemetry()?.result?.summary?.calls)}</p>

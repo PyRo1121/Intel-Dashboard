@@ -609,28 +609,28 @@ export default function CrmRoute() {
                 {crm()?.error || "Unable to load CRM data."}
               </div>
             }>
-              <section class="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-                <article class="intel-panel px-4 py-3">
+              <section class="grid gap-3 md:grid-cols-2 xl:grid-cols-6" data-testid="crm-summary-grid">
+                <article class="intel-panel px-4 py-3" data-testid="crm-summary-total-users">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Total Users</p>
                   <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(crm()?.result?.directory?.totalUsers)}</p>
                 </article>
-                <article class="intel-panel px-4 py-3">
+                <article class="intel-panel px-4 py-3" data-testid="crm-summary-subscribers">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Subscribers</p>
                   <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(crm()?.result?.billing?.stripe?.statuses?.active ?? crm()?.result?.billing?.statuses?.active)}</p>
                 </article>
-                <article class="intel-panel px-4 py-3">
+                <article class="intel-panel px-4 py-3" data-testid="crm-summary-mrr">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">MRR</p>
                   <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatUsd(crm()?.result?.commandCenter?.revenue?.mrrActiveUsd ?? crm()?.result?.billing?.mrrActiveUsd)}</p>
                 </article>
-                <article class="intel-panel px-4 py-3">
+                <article class="intel-panel px-4 py-3" data-testid="crm-summary-trial-paid-7d">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Trial→Paid 7d</p>
                   <p class="mt-1 text-2xl font-semibold text-emerald-300">{formatPercent(crm()?.result?.commandCenter?.funnel?.trialToPaidRate7dPct)}</p>
                 </article>
-                <article class="intel-panel px-4 py-3">
+                <article class="intel-panel px-4 py-3" data-testid="crm-summary-churn-30d">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Churn 30d</p>
                   <p class="mt-1 text-2xl font-semibold text-rose-300">{formatPercent(crm()?.result?.commandCenter?.risk?.churnRate30dPct)}</p>
                 </article>
-                <article class="intel-panel px-4 py-3">
+                <article class="intel-panel px-4 py-3" data-testid="crm-summary-unique-users-24h">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Unique Users 24h</p>
                   <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(crm()?.result?.commandCenter?.activity?.uniqueUsers24h ?? crm()?.result?.telemetry?.uniqueUsers24h)}</p>
                 </article>
@@ -719,6 +719,7 @@ export default function CrmRoute() {
                         <button
                           type="button"
                           onClick={() => setAiWindow(window)}
+                          data-testid={`crm-ai-window-${window}`}
                           class={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                             aiWindow() === window
                               ? "border-cyan-400/60 bg-cyan-500/12 text-cyan-200"
@@ -906,7 +907,7 @@ export default function CrmRoute() {
               </section>
               </Show>
 
-              <section class="intel-panel mt-4 overflow-x-auto p-4">
+              <section class="intel-panel mt-4 overflow-x-auto p-4" data-testid="crm-customer-360">
                 <h2 class="text-base font-semibold text-white">Customer 360</h2>
                 <p class="mt-1 text-xs text-zinc-500">
                   Updated {formatTime(crm()?.result?.generatedAtMs)} • New users 24h: {formatNumber(crm()?.result?.directory?.newUsers24h)} • New users 7d: {formatNumber(crm()?.result?.directory?.newUsers7d)} • Legacy billing-only identities: {formatNumber(crm()?.result?.directory?.orphanTrackedUsers)}
@@ -915,6 +916,7 @@ export default function CrmRoute() {
                   <input
                     type="search"
                     aria-label="CRM user search"
+                    data-testid="crm-user-search"
                     value={searchTerm()}
                     onInput={(event) => setSearchTerm(event.currentTarget.value)}
                     placeholder="Search name, login, email, provider"
@@ -922,6 +924,7 @@ export default function CrmRoute() {
                   />
                   <select
                     aria-label="CRM status filter"
+                    data-testid="crm-status-filter"
                     value={statusFilter()}
                     onChange={(event) => setStatusFilter(event.currentTarget.value as "all" | "active" | "trialing" | "canceled" | "expired" | "none")}
                     class="h-10 rounded-xl border border-white/10 bg-white/[0.02] px-3 text-sm text-zinc-100 outline-none transition focus:border-sky-400/60"
@@ -936,6 +939,7 @@ export default function CrmRoute() {
                   <button
                     type="button"
                     aria-label="Export CRM CSV"
+                    data-testid="crm-export-csv"
                     onClick={exportCustomerCsv}
                     class="intel-btn intel-btn-ghost"
                   >
@@ -997,7 +1001,7 @@ export default function CrmRoute() {
                 </table>
               </section>
 
-              <section class="intel-panel mt-4 p-4">
+              <section class="intel-panel mt-4 p-4" data-testid="crm-customer-operations">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h2 class="text-base font-semibold text-zinc-100">Customer Operations</h2>
@@ -1007,6 +1011,7 @@ export default function CrmRoute() {
                     <button
                       type="button"
                       aria-label={`Refresh customer ${selectedUser()?.name || "selection"}`}
+                      data-testid="crm-refresh-customer"
                       onClick={() => void loadCustomerOps(selectedUserId())}
                       disabled={opsBusy()}
                       class="intel-btn intel-btn-secondary"
@@ -1017,12 +1022,12 @@ export default function CrmRoute() {
                 </div>
 
                 <Show when={selectedUser()} fallback={
-                  <div class="mt-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 text-sm text-zinc-400">
+                  <div class="mt-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 text-sm text-zinc-400" data-testid="crm-no-selected-user">
                     Select a user from Customer 360 and click <span class="font-semibold text-zinc-200">Manage</span> to unlock Stripe operations.
                   </div>
                 }>
                   <div class="mt-3 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-                    <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                    <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3" data-testid="crm-selected-user-panel">
                       <p class="text-xs uppercase tracking-[0.11em] text-zinc-500">Selected User</p>
                       <p class="mt-1 text-sm font-semibold text-zinc-100">{selectedUser()?.name} <span class="text-zinc-400">({selectedUser()?.login})</span></p>
                       <p class="text-xs text-zinc-400">{selectedUser()?.email}</p>
@@ -1099,13 +1104,13 @@ export default function CrmRoute() {
                         </div>
                       </div>
                       <Show when={opsBusy()}>
-                        <p class="mt-2 text-xs text-cyan-200">Running Stripe operation...</p>
+                        <p class="mt-2 text-xs text-cyan-200" data-testid="crm-ops-busy">Running Stripe operation...</p>
                       </Show>
                       <Show when={opsError()}>
-                        <p class="mt-2 text-xs text-rose-300">{opsError()}</p>
+                        <p class="mt-2 text-xs text-rose-300" data-testid="crm-ops-error">{opsError()}</p>
                       </Show>
                       <Show when={opsNotice()}>
-                        <p class="mt-2 text-xs text-emerald-300">{opsNotice()}</p>
+                        <p class="mt-2 text-xs text-emerald-300" data-testid="crm-ops-notice">{opsNotice()}</p>
                       </Show>
                     </article>
                   </div>

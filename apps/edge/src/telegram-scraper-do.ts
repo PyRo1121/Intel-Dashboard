@@ -44,9 +44,6 @@ interface Env extends Cloudflare.Env {
   ALLOW_CF_API_TOKEN_AS_AIG?: string;
   CF_ACCOUNT_ID?: string;
   AI_GATEWAY_NAME?: string;
-  SCRAPE_INTERVAL_MS?: string;
-  SCRAPE_ROTATION_WINDOW_SECONDS?: string;
-  HOT_CHANNELS_PER_CYCLE?: string;
   SCRAPE_WORKER_CONCURRENCY?: string;
   CHANNEL_BUILD_CONCURRENCY?: string;
   MAX_MESSAGES_PER_CHANNEL?: string;

@@ -5,6 +5,7 @@ import test from "node:test";
 import { chromium } from "@playwright/test";
 import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 import {
+  navigateByKeyboard,
   openDashboardPage,
   openBillingDashboard,
   openCrmDashboard,
@@ -1169,14 +1170,10 @@ test("browser-authenticated CRM and sidebar support keyboard-only navigation", a
       await openDashboardPage(page, "/osint");
 
       const overviewLink = page.getByRole("link", { name: "Overview" }).first();
-      await overviewLink.focus();
-      await overviewLink.press("Enter");
-      await page.waitForURL(/\/overview$/, { timeout: 30_000 });
+      await navigateByKeyboard(overviewLink, page, /\/overview$/);
 
       const telegramLink = page.getByRole("link", { name: "Telegram" }).first();
-      await telegramLink.focus();
-      await telegramLink.press("Enter");
-      await page.waitForURL(/\/telegram$/, { timeout: 30_000 });
+      await navigateByKeyboard(telegramLink, page, /\/telegram$/);
     } catch (error) {
       await captureBrowserArtifacts(page, "authenticated-crm-sidebar-keyboard", error);
       throw error;

@@ -215,6 +215,16 @@ export async function openDashboardPage(page, path) {
   });
 }
 
+export async function activateByKeyboard(control) {
+  await control.focus();
+  await control.press("Enter");
+}
+
+export async function navigateByKeyboard(control, page, urlMatcher) {
+  await activateByKeyboard(control);
+  await page.waitForURL(urlMatcher, { timeout: 30_000 });
+}
+
 export async function openCrmDashboard(page) {
   await openDashboardPage(page, "/crm");
   return waitForCrmDashboard(page);
@@ -288,8 +298,7 @@ export async function openOwnerCrmPanelByKeyboard(page, crmSearch) {
   await ownerRow.waitFor({ state: "visible", timeout: 30_000 });
 
   const manageOwner = ownerRow.getByRole("button", { name: "Manage PyRo1121" });
-  await manageOwner.focus();
-  await manageOwner.press("Enter");
+  await activateByKeyboard(manageOwner);
 
   const selectedPanel = page.getByTestId("crm-selected-user-panel");
   await selectedPanel.waitFor({ state: "visible", timeout: 30_000 });

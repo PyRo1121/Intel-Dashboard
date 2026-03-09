@@ -165,6 +165,16 @@ export async function createPublicBrowserContext(t, options = {}) {
   }
 
   const context = await browser.newContext({ acceptDownloads: true, ...options });
+  if (ACCESS_CLIENT_ID && ACCESS_CLIENT_SECRET) {
+    await context.route(`${EDGE_BASE_URL}/**`, async (route) => {
+      const headers = {
+        ...route.request().headers(),
+        "CF-Access-Client-Id": ACCESS_CLIENT_ID,
+        "CF-Access-Client-Secret": ACCESS_CLIENT_SECRET,
+      };
+      await route.continue({ headers });
+    });
+  }
   return { browser, context };
 }
 

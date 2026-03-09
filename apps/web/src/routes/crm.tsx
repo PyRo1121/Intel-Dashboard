@@ -1,9 +1,10 @@
 import { Meta, Title } from "@solidjs/meta";
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
-import { computeAiCacheHitRatePercent } from "~/lib/ai-telemetry";
+import { computeAiCacheHitRatePercent, getAiTelemetryMaxValue, getAiTelemetryTopEntryBy } from "~/lib/ai-telemetry";
 import { useAuth } from "~/lib/auth";
 import { isAuthUserOwner } from "~/lib/auth-user";
 import { fetchCrmAiTelemetry, fetchCrmOverview, postCrmAction } from "~/lib/crm-client";
+import { buildCrmAccountStatusMap, filterCrmDirectoryUsers, findCrmDirectoryUserById, formatCrmProviders } from "~/lib/crm-directory";
 import { buildCrmLatestEventMap, escapeCsvCell } from "~/lib/crm-export";
 import { getCrmCustomerCacheSourceLabel } from "~/lib/crm-customer-cache";
 import { formatEventLabel } from "~/lib/event-label";
@@ -288,23 +289,10 @@ export default function CrmRoute() {
   const [refundAmountUsd, setRefundAmountUsd] = createSignal("");
   const [refundReason, setRefundReason] = createSignal<"requested_by_customer" | "duplicate" | "fraudulent">("requested_by_customer");
 
-  const accountStatusMap = () => {
-    const map = new Map<string, { status?: string; monthlyPriceUsd?: number }>();
-    for (const account of crm()?.result?.billing?.accounts ?? []) {
-      if (typeof account.userId === "string" && account.userId.trim().length > 0) {
-        map.set(account.userId, {
-          status: account.status,
-          monthlyPriceUsd: account.monthlyPriceUsd,
-        });
-      }
-    }
-    return map;
-  };
+  const accountStatusMap = () => buildCrmAccountStatusMap(crm()?.result?.billing?.accounts);
 
   const selectedUser = createMemo(() => {
-    const id = selectedUserId();
-    if (!id) return null;
-    return (crm()?.result?.directory?.users ?? []).find((entry) => entry.id === id) ?? null;
+    return findCrmDirectoryUserById(crm()?.result?.directory?.users, selectedUserId());
   });
 
   const loadCustomerOps = async (targetUserId: string, refresh = false) => {
@@ -386,16 +374,10 @@ export default function CrmRoute() {
   const latestEventMap = () => buildCrmLatestEventMap(crm()?.result?.latestEvents);
 
   const filteredUsers = createMemo(() => {
-    const query = searchTerm().trim().toLowerCase();
-    const status = statusFilter();
-    const accounts = accountStatusMap();
-    return (crm()?.result?.directory?.users ?? []).filter((entry) => {
-      const billingStatus = (accounts.get(entry.id)?.status || "none").trim().toLowerCase();
-      const matchesStatus = status === "all" ? true : billingStatus === status;
-      if (!matchesStatus) return false;
-      if (!query) return true;
-      const haystack = `${entry.name} ${entry.login} ${entry.email} ${(entry.providers ?? []).join(" ")}`.toLowerCase();
-      return haystack.includes(query);
+    return filterCrmDirectoryUsers(crm()?.result?.directory?.users, {
+      query: searchTerm(),
+      status: statusFilter(),
+      accounts: accountStatusMap(),
     });
   });
 
@@ -425,7 +407,7 @@ export default function CrmRoute() {
         entry.name,
         entry.login,
         entry.email,
-        (entry.providers ?? []).join("|"),
+        formatCrmProviders(entry.providers, "|", ""),
         formatSubscriptionStatus(billing?.status),
         String(billing?.monthlyPriceUsd ?? 0),
         formatEventLabel(latestEvent?.kind),
@@ -455,22 +437,12 @@ export default function CrmRoute() {
     return issues > 0 ? "text-amber-300 border-amber-500/40 bg-amber-500/10" : "text-emerald-300 border-emerald-500/40 bg-emerald-500/10";
   };
 
-  const aiLaneMaxTokens = createMemo(() =>
-    Math.max(...((aiTelemetry()?.result?.lanes ?? []).map((entry) => entry.totalTokens ?? 0)), 1),
-  );
-  const aiSeriesMaxCalls = createMemo(() =>
-    Math.max(...((aiTelemetry()?.result?.series ?? []).map((entry) => entry.calls ?? 0)), 1),
-  );
+  const aiLaneMaxTokens = createMemo(() => getAiTelemetryMaxValue(aiTelemetry()?.result?.lanes, (entry) => entry.totalTokens, 1));
+  const aiSeriesMaxCalls = createMemo(() => getAiTelemetryMaxValue(aiTelemetry()?.result?.series, (entry) => entry.calls, 1));
   const aiCacheHitPct = createMemo(() => computeAiCacheHitRatePercent(aiTelemetry()?.result?.summary));
-  const aiWorstFailureLane = createMemo(() =>
-    [...(aiTelemetry()?.result?.lanes ?? [])].sort((left, right) => (right.failures ?? 0) - (left.failures ?? 0))[0] ?? null,
-  );
-  const aiSlowestLane = createMemo(() =>
-    [...(aiTelemetry()?.result?.lanes ?? [])].sort((left, right) => (right.p95DurationMs ?? 0) - (left.p95DurationMs ?? 0))[0] ?? null,
-  );
-  const aiHungriestLane = createMemo(() =>
-    [...(aiTelemetry()?.result?.lanes ?? [])].sort((left, right) => (right.outputInputRatio ?? 0) - (left.outputInputRatio ?? 0))[0] ?? null,
-  );
+  const aiWorstFailureLane = createMemo(() => getAiTelemetryTopEntryBy(aiTelemetry()?.result?.lanes, (entry) => entry.failures));
+  const aiSlowestLane = createMemo(() => getAiTelemetryTopEntryBy(aiTelemetry()?.result?.lanes, (entry) => entry.p95DurationMs));
+  const aiHungriestLane = createMemo(() => getAiTelemetryTopEntryBy(aiTelemetry()?.result?.lanes, (entry) => entry.outputInputRatio));
   const crmDegraded = createMemo(() => crm()?.result?.degraded);
   const crmDegradedTone = createMemo(() => getCrmSummaryWarningTone(crmDegraded()));
   const crmDegradedMessage = createMemo(() => getCrmSummaryWarningMessage(crmDegraded()));
@@ -896,7 +868,7 @@ export default function CrmRoute() {
                               <p class="text-xs text-zinc-500">{entry.login}</p>
                             </td>
                             <td class="px-2 py-2 text-xs text-zinc-400">{entry.email}</td>
-                            <td class="px-2 py-2 text-xs text-zinc-400">{(entry.providers ?? []).join(", ") || "—"}</td>
+                            <td class="px-2 py-2 text-xs text-zinc-400">{formatCrmProviders(entry.providers)}</td>
                             <td class="px-2 py-2 text-xs text-zinc-200">{formatSubscriptionStatus(billing?.status)}</td>
                             <td class="px-2 py-2 text-xs text-zinc-200">{formatUsd(billing?.monthlyPriceUsd)}</td>
                             <td class="px-2 py-2 text-xs text-zinc-400">

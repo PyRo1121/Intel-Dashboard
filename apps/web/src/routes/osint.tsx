@@ -13,7 +13,7 @@ import {
 } from "~/lib/freshness";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import type { IntelItem, Severity } from "~/lib/types";
-import { formatRelativeTimeAt, isInitialResourceLoading } from "~/lib/utils";
+import { countBySeverity, formatRelativeTimeAt, isInitialResourceLoading } from "~/lib/utils";
 import { Radio, ExternalLink, Clock } from "lucide-solid";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { OSINT_DESCRIPTION, OSINT_TITLE } from "@intel-dashboard/shared/route-meta.ts";
@@ -125,15 +125,7 @@ export default function OsintFeed() {
   const seoTitle = OSINT_TITLE;
   const seoDesc = OSINT_DESCRIPTION;
 
-  const severityCounts = () => {
-    const all = items();
-    return {
-      critical: all.filter((i) => i.severity === "critical").length,
-      high: all.filter((i) => i.severity === "high").length,
-      medium: all.filter((i) => i.severity === "medium").length,
-      low: all.filter((i) => i.severity === "low").length,
-    };
-  };
+  const severityCounts = () => countBySeverity(items());
 
   return (
     <>

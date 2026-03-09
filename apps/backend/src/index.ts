@@ -206,6 +206,7 @@ type RpcMethod = (typeof RPC_METHODS)[number];
 type KvLike = {
   get(key: string): Promise<string | null>;
   put?(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  delete?(key: string): Promise<void>;
   list?(options?: {
     prefix?: string;
     cursor?: string;
@@ -1535,6 +1536,10 @@ function resolveAiBatchStateKey(env: WorkerEnv, batchId: string): string {
 
 function resolveAiBatchMetaKey(env: WorkerEnv, batchId: string): string {
   return `${normalizeAiBatchNamespacePrefix(env.AI_BATCH_NAMESPACE_PREFIX)}:meta:${batchId}`;
+}
+
+function resolveAiBatchPendingKey(env: WorkerEnv, batchId: string): string {
+  return `${normalizeAiBatchNamespacePrefix(env.AI_BATCH_NAMESPACE_PREFIX)}:pending:${batchId}`;
 }
 
 function resolveAiBatchIdempotencyKey(env: WorkerEnv, idempotencyKey: string): string {
@@ -4087,6 +4092,10 @@ async function saveCachedStripeCrmSummary(env: WorkerEnv, summary: StripeCrmLive
   await kv.put(buildCrmStripeSummaryKey(env), JSON.stringify(summary), {
     expirationTtl: ttlSeconds > 0 ? ttlSeconds * 3 : undefined,
   });
+}
+
+function buildCrmSummaryKey(env: WorkerEnv): string {
+  return `${normalizeBillingNamespacePrefix(env.BILLING_NAMESPACE_PREFIX)}:crm:summary`;
 }
 
 async function deleteCachedCrmSummary(env: WorkerEnv): Promise<void> {
@@ -7832,10 +7841,27 @@ async function saveAiBatchState(env: WorkerEnv, state: AiBatchState): Promise<vo
     ...(state.results ? { results: state.results } : {}),
     ...(state.error ? { error: state.error } : {}),
   };
-  await Promise.all([
+  const writes = [
     kv.put(resolveAiBatchStateKey(env, state.id), JSON.stringify(state), { expirationTtl: ttl }),
     kv.put(resolveAiBatchMetaKey(env, state.id), JSON.stringify(meta), { expirationTtl: ttl }),
-  ]);
+  ];
+
+  const terminal = state.status === "completed" || state.status === "failed";
+  if (terminal) {
+    if (typeof kv.delete === "function") {
+      writes.push(kv.delete(resolveAiBatchPendingKey(env, state.id)));
+    }
+  } else {
+    writes.push(
+      kv.put(
+        resolveAiBatchPendingKey(env, state.id),
+        JSON.stringify({ id: state.id, updatedAtMs: state.updatedAtMs, status: state.status }),
+        { expirationTtl: ttl },
+      ),
+    );
+  }
+
+  await Promise.all(writes);
 }
 
 async function loadAiBatchIdempotency(env: WorkerEnv, idempotencyKey: string): Promise<string | null> {
@@ -8429,12 +8455,6 @@ async function processAiBatchPoll(args: {
     MAX_AI_BATCH_POLL_DELAY_SECONDS,
     Math.floor(baseDelay * Math.pow(2, Math.min(6, Math.max(0, nextAttempt - 1)))),
   );
-  await saveAiBatchState(args.env, {
-    ...state,
-    status: "polling",
-    updatedAtMs: Date.now(),
-    pollAttempts: nextAttempt,
-  });
   await enqueueAiBatchMessage({
     env: args.env,
     body: {
@@ -8442,6 +8462,12 @@ async function processAiBatchPoll(args: {
       batchId: state.id,
     },
     delaySeconds: exponentialDelay,
+  });
+  await saveAiBatchState(args.env, {
+    ...state,
+    status: "polling",
+    updatedAtMs: Date.now(),
+    pollAttempts: nextAttempt,
   });
 }
 
@@ -8458,7 +8484,7 @@ async function recoverStaleAiBatches(args: {
     DEFAULT_AI_BATCH_RECOVERY_STALE_SECONDS * 1000,
     normalizeAiBatchPollDelaySeconds(args.env.AI_BATCH_POLL_DELAY_SECONDS) * 2000,
   );
-  const prefix = `${normalizeAiBatchNamespacePrefix(args.env.AI_BATCH_NAMESPACE_PREFIX)}:state:`;
+  const prefix = `${normalizeAiBatchNamespacePrefix(args.env.AI_BATCH_NAMESPACE_PREFIX)}:pending:`;
 
   let recovered = 0;
   let cursor: string | undefined;
@@ -8490,41 +8516,41 @@ async function recoverStaleAiBatches(args: {
 
       if (state.provider === "groq") {
         if (state.externalBatchId && (state.status === "submitted" || state.status === "polling" || state.status === "running")) {
-          await saveAiBatchState(args.env, {
-            ...state,
-            status: "polling",
-            updatedAtMs: args.nowMs,
-          });
           await enqueueAiBatchMessage({
             env: args.env,
             body: { kind: "ai-batch-poll", batchId: state.id },
             delaySeconds: 5,
           });
+          await saveAiBatchState(args.env, {
+            ...state,
+            status: "polling",
+            updatedAtMs: args.nowMs,
+          });
           recovered += 1;
           continue;
         }
 
+        await enqueueAiBatchMessage({
+          env: args.env,
+          body: { kind: "ai-batch-run", batchId: state.id },
+        });
         await saveAiBatchState(args.env, {
           ...state,
           status: "queued",
           updatedAtMs: args.nowMs,
         });
-        await enqueueAiBatchMessage({
-          env: args.env,
-          body: { kind: "ai-batch-run", batchId: state.id },
-        });
         recovered += 1;
         continue;
       }
 
+      await enqueueAiBatchMessage({
+        env: args.env,
+        body: { kind: "ai-batch-run", batchId: state.id },
+      });
       await saveAiBatchState(args.env, {
         ...state,
         status: "queued",
         updatedAtMs: args.nowMs,
-      });
-      await enqueueAiBatchMessage({
-        env: args.env,
-        body: { kind: "ai-batch-run", batchId: state.id },
       });
       recovered += 1;
     }

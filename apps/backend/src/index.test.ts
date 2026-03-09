@@ -24,6 +24,7 @@ describe("intel-dashboard backend worker", () => {
     binding: {
       get: (key: string) => Promise<string | null>;
       put: (key: string, value: string, options?: { expirationTtl?: number }) => Promise<void>;
+      delete: (key: string) => Promise<void>;
       list: (options?: { prefix?: string; cursor?: string; limit?: number }) => Promise<{
         keys: Array<{ name: string }>;
         list_complete: boolean;
@@ -43,6 +44,9 @@ describe("intel-dashboard backend worker", () => {
         get: async (key: string) => data.get(key) ?? null,
         put: async (key: string, value: string) => {
           data.set(key, value);
+        },
+        delete: async (key: string) => {
+          data.delete(key);
         },
         list: async (options) => {
           const prefix = options?.prefix ?? "";
@@ -2809,6 +2813,47 @@ describe("intel-dashboard backend worker", () => {
     );
     expect(cancelResponse.status).toBe(200);
 
+    kv.data.set(
+      "intel-dashboard:billing:crm:customer:user-a",
+      JSON.stringify({
+        fetchedAtMs: now,
+        accountUpdatedAtMs: now,
+        stripe: {
+          customer: {
+            id: "cus_123",
+            email: "customer@example.com",
+            name: "Customer A",
+            currency: "usd",
+            delinquent: false,
+            createdAtMs: now,
+            balanceUsd: 0,
+          },
+          subscription: {
+            id: "sub_123",
+            status: "active",
+            cancelAtPeriodEnd: false,
+            cancelAtMs: null,
+            currentPeriodEndMs: now + 10 * 24 * 60 * 60 * 1000,
+            canceledAtMs: null,
+          },
+          invoices: [],
+          charges: [
+            {
+              id: "ch_123",
+              status: "succeeded",
+              amountUsd: 29,
+              refundedUsd: 0,
+              paid: true,
+              refunded: false,
+              createdAtMs: now,
+              receiptUrl: "https://stripe.test/ch_123",
+              paymentIntentId: "pi_123",
+            },
+          ],
+        },
+      }),
+    );
+
     const refundResponse = await worker.fetch(
       new Request("https://backend.example.com/api/intel-dashboard/admin/crm/refund", {
         method: "POST",
@@ -3779,6 +3824,106 @@ describe("intel-dashboard backend worker", () => {
 
     expect(ack).not.toHaveBeenCalled();
     expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers stale AI batches from pending keys instead of scanning all state keys", async () => {
+    const kv = createKvMapBinding({
+      "intel-dashboard:ai-batch:state:batch-stale": {
+        id: "batch-stale",
+        status: "queued",
+        createdAtMs: 10,
+        updatedAtMs: 10,
+        provider: "internal",
+        jobs: [
+          {
+            type: "dedupe",
+            payload: { title: "One", url: "https://example.com/one" },
+          },
+        ],
+        maxConnections: 10,
+        pollAttempts: 0,
+      },
+      "intel-dashboard:ai-batch:pending:batch-stale": {
+        id: "batch-stale",
+        updatedAtMs: 10,
+        status: "queued",
+      },
+      "intel-dashboard:ai-batch:state:batch-finished": {
+        id: "batch-finished",
+        status: "completed",
+        createdAtMs: 10,
+        updatedAtMs: 10,
+        provider: "internal",
+        jobs: [],
+        maxConnections: 10,
+        pollAttempts: 0,
+        results: [],
+      },
+    });
+
+    const listCalls = [];
+    const originalList = kv.binding.list;
+    kv.binding.list = async (options) => {
+      listCalls.push(options?.prefix ?? "");
+      return originalList(options);
+    };
+    const send = vi.fn(async () => undefined);
+
+    await worker.scheduled({} as ScheduledController, {
+      USAGE_KV: kv.binding,
+      AI_JOB_QUEUE: { send },
+      AI_BATCH_PROVIDER: "internal",
+      AI_BATCH_POLL_DELAY_SECONDS: "60",
+      NEWS_RSS_INGEST_ENABLED: "false",
+      USAGE_CACHE_WARM_ENABLED: "false",
+    });
+
+    expect(listCalls).toContain("intel-dashboard:ai-batch:pending:");
+    expect(listCalls).not.toContain("intel-dashboard:ai-batch:state:");
+    expect(send).toHaveBeenCalledWith({ kind: "ai-batch-run", batchId: "batch-stale" }, undefined);
+  });
+
+  it("does not refresh AI batch updatedAtMs when queue send fails during recovery", async () => {
+    const kv = createKvMapBinding({
+      "intel-dashboard:ai-batch:state:batch-stale": {
+        id: "batch-stale",
+        status: "queued",
+        createdAtMs: 10,
+        updatedAtMs: 10,
+        provider: "internal",
+        jobs: [
+          {
+            type: "dedupe",
+            payload: { title: "One", url: "https://example.com/one" },
+          },
+        ],
+        maxConnections: 10,
+        pollAttempts: 0,
+      },
+      "intel-dashboard:ai-batch:pending:batch-stale": {
+        id: "batch-stale",
+        updatedAtMs: 10,
+        status: "queued",
+      },
+    });
+
+    await worker.scheduled({} as ScheduledController, {
+      USAGE_KV: kv.binding,
+      AI_JOB_QUEUE: {
+        send: async () => {
+          throw new Error("queue down");
+        },
+      },
+      AI_BATCH_PROVIDER: "internal",
+      AI_BATCH_POLL_DELAY_SECONDS: "60",
+      NEWS_RSS_INGEST_ENABLED: "false",
+      USAGE_CACHE_WARM_ENABLED: "false",
+    });
+
+    const persisted = kv.data.get("intel-dashboard:ai-batch:state:batch-stale");
+    expect(persisted).toBeTruthy();
+    const decoded = persisted ? JSON.parse(persisted) : null;
+    expect(decoded?.updatedAtMs).toBe(10);
   });
 
   it("starts trial with delayed news access", async () => {

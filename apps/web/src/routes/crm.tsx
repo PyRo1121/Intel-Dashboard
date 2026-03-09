@@ -522,6 +522,21 @@ export default function CrmRoute() {
     return issues > 0 ? "text-amber-300 border-amber-500/40 bg-amber-500/10" : "text-emerald-300 border-emerald-500/40 bg-emerald-500/10";
   };
 
+  const aiLaneMaxTokens = createMemo(() =>
+    Math.max(...((aiTelemetry()?.result?.lanes ?? []).map((entry) => entry.totalTokens ?? 0)), 1),
+  );
+  const aiSeriesMaxCalls = createMemo(() =>
+    Math.max(...((aiTelemetry()?.result?.series ?? []).map((entry) => entry.calls ?? 0)), 1),
+  );
+  const aiCacheTotal = createMemo(() =>
+    (aiTelemetry()?.result?.summary?.cacheHits ?? 0) + (aiTelemetry()?.result?.summary?.cacheMisses ?? 0),
+  );
+  const aiCacheHitPct = createMemo(() => {
+    const total = aiCacheTotal();
+    if (total <= 0) return 0;
+    return ((aiTelemetry()?.result?.summary?.cacheHits ?? 0) / total) * 100;
+  });
+
   return (
     <>
       <Title>{CRM_TITLE}</Title>
@@ -664,6 +679,7 @@ export default function CrmRoute() {
                 </article>
               </section>
 
+              <Show when={isOwner()}>
               <section class="intel-panel mt-4 p-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -731,9 +747,13 @@ export default function CrmRoute() {
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">P95 Latency</p>
                         <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiTelemetry()?.result?.summary?.p95DurationMs)}ms</p>
                       </article>
+                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Cache Hit Rate</p>
+                        <p class="mt-1 text-2xl font-semibold text-emerald-300">{formatPercent(aiCacheHitPct())}</p>
+                      </article>
                     </section>
 
-                    <section class="mt-4 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+                    <section class="mt-4 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
                       <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                         <div class="flex items-center justify-between">
                           <h3 class="text-sm font-semibold text-zinc-100">Lane Spend</h3>
@@ -742,8 +762,7 @@ export default function CrmRoute() {
                         <div class="mt-3 space-y-2">
                           <For each={aiTelemetry()?.result?.lanes ?? []}>
                             {(item) => {
-                              const maxTokens = Math.max(...((aiTelemetry()?.result?.lanes ?? []).map((entry) => entry.totalTokens ?? 0)), 1);
-                              const width = `${Math.max(8, ((item.totalTokens ?? 0) / maxTokens) * 100)}%`;
+                              const width = `${Math.max(8, ((item.totalTokens ?? 0) / aiLaneMaxTokens()) * 100)}%`;
                               return (
                                 <div class="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                                   <div class="flex items-center justify-between gap-3">
@@ -765,27 +784,43 @@ export default function CrmRoute() {
                         </div>
                       </article>
 
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-                        <h3 class="text-sm font-semibold text-zinc-100">Cache + Outcomes</h3>
-                        <div class="mt-3 grid gap-2">
-                          <For each={aiTelemetry()?.result?.cacheStatuses ?? []}>
-                            {(item) => (
-                              <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
-                                <span class="text-zinc-300">{normalizeEventLabel(item.label)}</span>
-                                <span class="font-medium text-zinc-100">{formatNumber(item.calls)}</span>
-                              </div>
-                            )}
-                          </For>
-                          <For each={aiTelemetry()?.result?.outcomes ?? []}>
-                            {(item) => (
-                              <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
-                                <span class="text-zinc-300">{normalizeEventLabel(item.label)}</span>
-                                <span class="font-medium text-zinc-100">{formatNumber(item.calls)}</span>
-                              </div>
-                            )}
-                          </For>
-                        </div>
-                      </article>
+                      <div class="grid gap-4">
+                        <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                          <h3 class="text-sm font-semibold text-zinc-100">Model Spend</h3>
+                          <div class="mt-3 space-y-2">
+                            <For each={aiTelemetry()?.result?.models ?? []}>
+                              {(item) => (
+                                <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                                  <span class="text-zinc-300">{normalizeEventLabel(item.label)}</span>
+                                  <span class="font-medium text-zinc-100">{formatNumber(item.totalTokens)} tokens</span>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                          <h3 class="text-sm font-semibold text-zinc-100">Cache + Outcomes</h3>
+                          <div class="mt-3 grid gap-2">
+                            <For each={aiTelemetry()?.result?.cacheStatuses ?? []}>
+                              {(item) => (
+                                <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                                  <span class="text-zinc-300">{normalizeEventLabel(item.label)}</span>
+                                  <span class="font-medium text-zinc-100">{formatNumber(item.calls)}</span>
+                                </div>
+                              )}
+                            </For>
+                            <For each={aiTelemetry()?.result?.outcomes ?? []}>
+                              {(item) => (
+                                <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                                  <span class="text-zinc-300">{normalizeEventLabel(item.label)}</span>
+                                  <span class="font-medium text-zinc-100">{formatNumber(item.calls)}</span>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </article>
+                      </div>
                     </section>
 
                     <section class="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
@@ -796,8 +831,7 @@ export default function CrmRoute() {
                       <div class="mt-3 grid gap-2">
                         <For each={aiTelemetry()?.result?.series ?? []}>
                           {(point) => {
-                            const maxCalls = Math.max(...((aiTelemetry()?.result?.series ?? []).map((entry) => entry.calls ?? 0)), 1);
-                            const width = `${Math.max(4, ((point.calls ?? 0) / maxCalls) * 100)}%`;
+                            const width = `${Math.max(4, ((point.calls ?? 0) / aiSeriesMaxCalls()) * 100)}%`;
                             return (
                               <div class="grid gap-1 md:grid-cols-[160px_1fr_auto_auto] md:items-center">
                                 <span class="text-[11px] text-zinc-500">{point.bucket || "—"}</span>
@@ -815,6 +849,7 @@ export default function CrmRoute() {
                   </Show>
                 </Show>
               </section>
+              </Show>
 
               <section class="intel-panel mt-4 overflow-x-auto p-4">
                 <h2 class="text-base font-semibold text-white">Customer 360</h2>

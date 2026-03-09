@@ -176,6 +176,59 @@ type CrmCustomerOpsPayload = {
   };
 };
 
+type AiTelemetryPayload = {
+  ok?: boolean;
+  error?: string;
+  result?: {
+    generatedAtMs?: number;
+    window?: string;
+    summary?: {
+      calls?: number;
+      promptTokens?: number;
+      completionTokens?: number;
+      totalTokens?: number;
+      outputInputRatio?: number;
+      avgDurationMs?: number;
+      p95DurationMs?: number;
+      failures?: number;
+      cacheHits?: number;
+      cacheMisses?: number;
+    };
+    lanes?: Array<{
+      label?: string;
+      calls?: number;
+      totalTokens?: number;
+      promptTokens?: number;
+      completionTokens?: number;
+      avgDurationMs?: number;
+      failures?: number;
+    }>;
+    models?: Array<{
+      label?: string;
+      calls?: number;
+      totalTokens?: number;
+      promptTokens?: number;
+      completionTokens?: number;
+      avgDurationMs?: number;
+      failures?: number;
+    }>;
+    outcomes?: Array<{
+      label?: string;
+      calls?: number;
+    }>;
+    cacheStatuses?: Array<{
+      label?: string;
+      calls?: number;
+    }>;
+    series?: Array<{
+      bucket?: string;
+      calls?: number;
+      totalTokens?: number;
+      completionTokens?: number;
+    }>;
+  };
+};
+
 async function fetchCrmOverview(): Promise<CrmPayload> {
   const res = await fetch("/api/admin/crm/overview", {
     method: "GET",
@@ -212,6 +265,31 @@ async function postCrmAction(path: string, payload: Record<string, unknown>): Pr
     };
   }
   return body as CrmCustomerOpsPayload;
+}
+
+async function fetchAiTelemetry(window: string): Promise<AiTelemetryPayload> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/admin/crm/ai-telemetry?window=${encodeURIComponent(window)}`, {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unable to load AI telemetry.",
+    };
+  }
+  const payload = await res.json().catch(() => ({ ok: false, error: "Invalid JSON response" }));
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: typeof payload?.error === "string" ? payload.error : `HTTP ${res.status}`,
+    };
+  }
+  return payload as AiTelemetryPayload;
 }
 
 function formatNumber(value: number | undefined): string {
@@ -258,6 +336,9 @@ export default function CrmRoute() {
   const role = () => (auth.user()?.entitlement?.role || auth.user()?.entitlement?.tier || "free").toLowerCase();
   const isOwner = () => role() === "owner";
   const [crm, { refetch }] = createResource(fetchCrmOverview);
+  const [aiWindow, setAiWindow] = createSignal<"15m" | "1h" | "24h" | "7d" | "30d">("1h");
+  const aiTelemetrySource = createMemo(() => (isOwner() ? aiWindow() : undefined));
+  const [aiTelemetry, { refetch: refetchAiTelemetry }] = createResource(aiTelemetrySource, fetchAiTelemetry);
   const [searchTerm, setSearchTerm] = createSignal("");
   const [statusFilter, setStatusFilter] = createSignal<"all" | "active" | "trialing" | "canceled" | "expired" | "none">("all");
   const [selectedUserId, setSelectedUserId] = createSignal("");
@@ -450,6 +531,21 @@ export default function CrmRoute() {
     return issues > 0 ? "text-amber-300 border-amber-500/40 bg-amber-500/10" : "text-emerald-300 border-emerald-500/40 bg-emerald-500/10";
   };
 
+  const aiLaneMaxTokens = createMemo(() =>
+    Math.max(...((aiTelemetry()?.result?.lanes ?? []).map((entry) => entry.totalTokens ?? 0)), 1),
+  );
+  const aiSeriesMaxCalls = createMemo(() =>
+    Math.max(...((aiTelemetry()?.result?.series ?? []).map((entry) => entry.calls ?? 0)), 1),
+  );
+  const aiCacheTotal = createMemo(() =>
+    (aiTelemetry()?.result?.summary?.cacheHits ?? 0) + (aiTelemetry()?.result?.summary?.cacheMisses ?? 0),
+  );
+  const aiCacheHitPct = createMemo(() => {
+    const total = aiCacheTotal();
+    if (total <= 0) return 0;
+    return ((aiTelemetry()?.result?.summary?.cacheHits ?? 0) / total) * 100;
+  });
+
   return (
     <>
       <Title>{CRM_TITLE}</Title>
@@ -591,6 +687,178 @@ export default function CrmRoute() {
                   </div>
                 </article>
               </section>
+
+              <Show when={isOwner()}>
+              <section class="intel-panel mt-4 p-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 class="text-base font-semibold text-zinc-100">AI Command Surface</h2>
+                    <p class="mt-1 text-xs text-zinc-500">Owner-only AI telemetry across dedupe, translate, classify, enrichment, and briefing lanes.</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <For each={["15m", "1h", "24h", "7d", "30d"] as const}>
+                      {(window) => (
+                        <button
+                          type="button"
+                          onClick={() => setAiWindow(window)}
+                          class={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                            aiWindow() === window
+                              ? "border-cyan-400/60 bg-cyan-500/12 text-cyan-200"
+                              : "border-white/10 bg-white/[0.03] text-zinc-400 hover:border-cyan-400/40 hover:text-cyan-200"
+                          }`}
+                        >
+                          {window}
+                        </button>
+                      )}
+                    </For>
+                    <button
+                      type="button"
+                      onClick={() => void refetchAiTelemetry()}
+                      class="intel-btn intel-btn-secondary"
+                    >
+                      Refresh AI
+                    </button>
+                  </div>
+                </div>
+
+                <Show when={!aiTelemetry.loading} fallback={
+                  <div class="mt-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 text-sm text-zinc-400">
+                    Loading AI telemetry...
+                  </div>
+                }>
+                  <Show when={aiTelemetry() && aiTelemetry()?.ok !== false} fallback={
+                    <div class="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                      {aiTelemetry()?.error || "Unable to load AI telemetry."}
+                    </div>
+                  }>
+                    <section class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Calls</p>
+                        <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiTelemetry()?.result?.summary?.calls)}</p>
+                      </article>
+                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Prompt Tokens</p>
+                        <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiTelemetry()?.result?.summary?.promptTokens)}</p>
+                      </article>
+                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Completion Tokens</p>
+                        <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiTelemetry()?.result?.summary?.completionTokens)}</p>
+                      </article>
+                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Output/Input</p>
+                        <p class="mt-1 text-2xl font-semibold text-cyan-300">{formatPercent((aiTelemetry()?.result?.summary?.outputInputRatio ?? 0) * 100)}</p>
+                      </article>
+                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Avg Latency</p>
+                        <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiTelemetry()?.result?.summary?.avgDurationMs)}ms</p>
+                      </article>
+                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">P95 Latency</p>
+                        <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiTelemetry()?.result?.summary?.p95DurationMs)}ms</p>
+                      </article>
+                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Cache Hit Rate</p>
+                        <p class="mt-1 text-2xl font-semibold text-emerald-300">{formatPercent(aiCacheHitPct())}</p>
+                      </article>
+                    </section>
+
+                    <section class="mt-4 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                      <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                        <div class="flex items-center justify-between">
+                          <h3 class="text-sm font-semibold text-zinc-100">Lane Spend</h3>
+                          <span class="text-[11px] text-zinc-500">top lanes by total tokens</span>
+                        </div>
+                        <div class="mt-3 space-y-2">
+                          <For each={aiTelemetry()?.result?.lanes ?? []}>
+                            {(item) => {
+                              const width = `${Math.max(8, ((item.totalTokens ?? 0) / aiLaneMaxTokens()) * 100)}%`;
+                              return (
+                                <div class="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                                  <div class="flex items-center justify-between gap-3">
+                                    <span class="text-sm font-medium text-zinc-100">{normalizeEventLabel(item.label)}</span>
+                                    <span class="text-xs text-zinc-400">{formatNumber(item.totalTokens)} tokens</span>
+                                  </div>
+                                  <div class="mt-2 h-2 overflow-hidden rounded-full bg-white/5">
+                                    <div class="h-full rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-emerald-400" style={{ width }} />
+                                  </div>
+                                  <div class="mt-2 flex flex-wrap gap-3 text-[11px] text-zinc-500">
+                                    <span>{formatNumber(item.calls)} calls</span>
+                                    <span>{formatNumber(item.failures)} failures</span>
+                                    <span>{formatNumber(item.avgDurationMs)}ms avg</span>
+                                  </div>
+                                </div>
+                              );
+                            }}
+                          </For>
+                        </div>
+                      </article>
+
+                      <div class="grid gap-4">
+                        <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                          <h3 class="text-sm font-semibold text-zinc-100">Model Spend</h3>
+                          <div class="mt-3 space-y-2">
+                            <For each={aiTelemetry()?.result?.models ?? []}>
+                              {(item) => (
+                                <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                                  <span class="text-zinc-300">{normalizeEventLabel(item.label)}</span>
+                                  <span class="font-medium text-zinc-100">{formatNumber(item.totalTokens)} tokens</span>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </article>
+
+                        <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                          <h3 class="text-sm font-semibold text-zinc-100">Cache + Outcomes</h3>
+                          <div class="mt-3 grid gap-2">
+                            <For each={aiTelemetry()?.result?.cacheStatuses ?? []}>
+                              {(item) => (
+                                <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                                  <span class="text-zinc-300">{normalizeEventLabel(item.label)}</span>
+                                  <span class="font-medium text-zinc-100">{formatNumber(item.calls)}</span>
+                                </div>
+                              )}
+                            </For>
+                            <For each={aiTelemetry()?.result?.outcomes ?? []}>
+                              {(item) => (
+                                <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                                  <span class="text-zinc-300">{normalizeEventLabel(item.label)}</span>
+                                  <span class="font-medium text-zinc-100">{formatNumber(item.calls)}</span>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </article>
+                      </div>
+                    </section>
+
+                    <section class="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                      <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-semibold text-zinc-100">Recent Series</h3>
+                        <span class="text-[11px] text-zinc-500">generated {formatTime(aiTelemetry()?.result?.generatedAtMs)}</span>
+                      </div>
+                      <div class="mt-3 grid gap-2">
+                        <For each={aiTelemetry()?.result?.series ?? []}>
+                          {(point) => {
+                            const width = `${Math.max(4, ((point.calls ?? 0) / aiSeriesMaxCalls()) * 100)}%`;
+                            return (
+                              <div class="grid gap-1 md:grid-cols-[160px_1fr_auto_auto] md:items-center">
+                                <span class="text-[11px] text-zinc-500">{point.bucket || "—"}</span>
+                                <div class="h-2 overflow-hidden rounded-full bg-white/5">
+                                  <div class="h-full rounded-full bg-gradient-to-r from-fuchsia-400 via-cyan-400 to-emerald-400" style={{ width }} />
+                                </div>
+                                <span class="text-[11px] text-zinc-400">{formatNumber(point.calls)} calls</span>
+                                <span class="text-[11px] text-zinc-400">{formatNumber(point.totalTokens)} tokens</span>
+                              </div>
+                            );
+                          }}
+                        </For>
+                      </div>
+                    </section>
+                  </Show>
+                </Show>
+              </section>
+              </Show>
 
               <section class="intel-panel mt-4 overflow-x-auto p-4">
                 <h2 class="text-base font-semibold text-white">Customer 360</h2>

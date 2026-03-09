@@ -18,6 +18,7 @@ const DEFAULT_BILLING_WEBHOOK_PATH = "/api/intel-dashboard/billing/webhook";
 const DEFAULT_FEATURE_GATES_PATH = "/api/intel-dashboard/feature-gates";
 const DEFAULT_USER_INFO_PATH = "/api/intel-dashboard/user-info";
 const DEFAULT_ADMIN_CRM_SUMMARY_PATH = "/api/intel-dashboard/admin/crm/summary";
+const DEFAULT_ADMIN_CRM_AI_TELEMETRY_PATH = "/api/intel-dashboard/admin/crm/ai-telemetry";
 const DEFAULT_ADMIN_CRM_CUSTOMER_PATH = "/api/intel-dashboard/admin/crm/customer";
 const DEFAULT_ADMIN_CRM_CANCEL_SUBSCRIPTION_PATH = "/api/intel-dashboard/admin/crm/cancel-subscription";
 const DEFAULT_ADMIN_CRM_REFUND_PATH = "/api/intel-dashboard/admin/crm/refund";
@@ -553,9 +554,13 @@ export type WorkerEnv = {
   FEATURE_GATES_PATH?: string;
   USER_INFO_PATH?: string;
   ADMIN_CRM_SUMMARY_PATH?: string;
+  ADMIN_CRM_AI_TELEMETRY_PATH?: string;
   ADMIN_CRM_CUSTOMER_PATH?: string;
   ADMIN_CRM_CANCEL_SUBSCRIPTION_PATH?: string;
   ADMIN_CRM_REFUND_PATH?: string;
+  AI_TELEMETRY_QUERY_ACCOUNT_ID?: string;
+  AI_TELEMETRY_QUERY_API_TOKEN?: string;
+  AI_TELEMETRY_DATASET?: string;
   LANDING_PATH?: string;
   LANDING_BRAND_NAME?: string;
   LANDING_TAGLINE?: string;
@@ -4200,6 +4205,295 @@ async function summarizeCrmTelemetry(env: WorkerEnv): Promise<{
     },
     latestEvents: latestEvents.slice(0, 60),
   };
+}
+
+type AiTelemetryWindowKey = "15m" | "1h" | "24h" | "7d" | "30d";
+
+type AiTelemetrySummaryRow = {
+  calls: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  outputInputRatio: number;
+  avgDurationMs: number;
+  p95DurationMs: number;
+  failures: number;
+  cacheHits: number;
+  cacheMisses: number;
+};
+
+type AiTelemetryBreakdownRow = {
+  label: string;
+  calls: number;
+  totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
+  avgDurationMs: number;
+  failures: number;
+};
+
+type AiTelemetrySeriesRow = {
+  bucket: string;
+  calls: number;
+  totalTokens: number;
+  completionTokens: number;
+};
+
+function normalizeAiTelemetryWindow(value: unknown): {
+  key: AiTelemetryWindowKey;
+} {
+  const normalized = trimString(value)?.toLowerCase();
+  if (normalized === "15m") return { key: "15m" };
+  if (normalized === "1h") return { key: "1h" };
+  if (normalized === "7d") return { key: "7d" };
+  if (normalized === "30d") return { key: "30d" };
+  if (normalized === "24h") return { key: "24h" };
+  return { key: "24h" };
+}
+
+function normalizeAiTelemetryDataset(rawValue: string | undefined): string {
+  const value = trimString(rawValue) ?? "intel_dashboard_ai";
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
+    throw new Error("AI_TELEMETRY_DATASET must be a valid Analytics Engine dataset name.");
+  }
+  return value;
+}
+
+async function queryAiTelemetrySql(env: WorkerEnv, sql: string): Promise<Record<string, unknown>[]> {
+  const accountId = trimString(env.AI_TELEMETRY_QUERY_ACCOUNT_ID);
+  const apiToken = trimString(env.AI_TELEMETRY_QUERY_API_TOKEN);
+  if (!accountId || !apiToken) {
+    throw new Error("AI telemetry query credentials are not configured.");
+  }
+
+  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/analytics_engine/sql`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiToken}`,
+      "content-type": "text/plain",
+    },
+    body: sql,
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  const decoded = (await response.json().catch(() => null)) as unknown;
+  const rows =
+    isRecord(decoded) && Array.isArray(decoded.data)
+      ? decoded.data
+      : isRecord(decoded) && isRecord(decoded.result) && Array.isArray(decoded.result.data)
+        ? decoded.result.data
+        : [];
+  if (!response.ok || !Array.isArray(rows)) {
+    throw new Error(`Analytics Engine SQL query failed with HTTP ${response.status}.`);
+  }
+  return rows.filter((row): row is Record<string, unknown> => isRecord(row));
+}
+
+async function handleAdminCrmAiTelemetry(args: {
+  env: WorkerEnv;
+  body: unknown;
+}): Promise<Response> {
+  let userId: string;
+  try {
+    userId = await validateUserId(args.body, args.env);
+  } catch (error) {
+    return errorJson(400, error instanceof Error ? error.message : "Invalid request.");
+  }
+  if (!isOwnerUser(args.env, userId)) {
+    return errorJson(403, "Forbidden.");
+  }
+  const body = isRecord(args.body) ? args.body : {};
+  const window = normalizeAiTelemetryWindow(body.window);
+  const dataset = normalizeAiTelemetryDataset(args.env.AI_TELEMETRY_DATASET);
+
+  const intervalSqlByWindow: Record<AiTelemetryWindowKey, string> = {
+    "15m": "15 MINUTE",
+    "1h": "1 HOUR",
+    "24h": "24 HOUR",
+    "7d": "7 DAY",
+    "30d": "30 DAY",
+  };
+  const bucketSqlByWindow: Record<AiTelemetryWindowKey, string> = {
+    "15m": "1 MINUTE",
+    "1h": "5 MINUTE",
+    "24h": "1 HOUR",
+    "7d": "6 HOUR",
+    "30d": "1 DAY",
+  };
+  const intervalSql = intervalSqlByWindow[window.key];
+  const bucketSql = bucketSqlByWindow[window.key];
+
+  const queryByWindow: Record<
+    AiTelemetryWindowKey,
+    {
+      summary: string;
+      lanes: string;
+      models: string;
+      outcomes: string;
+      cacheStatuses: string;
+      series: string;
+    }
+  > = {
+    "15m": {
+      summary: `SELECT
+        sum(_sample_interval) AS calls,
+        sum(double3 * _sample_interval) AS prompt_tokens,
+        sum(double4 * _sample_interval) AS completion_tokens,
+        sum(double5 * _sample_interval) AS total_tokens,
+        if(sum(double3 * _sample_interval) > 0, sum(double4 * _sample_interval) / sum(double3 * _sample_interval), 0) AS output_input_ratio,
+        if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms,
+        quantileExactWeighted(0.95)(double2, _sample_interval) AS p95_duration_ms,
+        sum(double9 * _sample_interval) AS failures,
+        sum(double11 * _sample_interval) AS cache_hits,
+        sum(double12 * _sample_interval) AS cache_misses
+      FROM ${dataset}
+      WHERE timestamp > NOW() - INTERVAL ${intervalSql}`,
+      lanes: `SELECT blob3 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY total_tokens DESC LIMIT 8`,
+      models: `SELECT blob4 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY total_tokens DESC LIMIT 8`,
+      outcomes: `SELECT blob6 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY calls DESC`,
+      cacheStatuses: `SELECT blob7 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY calls DESC`,
+      series: `SELECT toString(toStartOfInterval(timestamp, INTERVAL ${bucketSql})) AS bucket, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double4 * _sample_interval) AS completion_tokens FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY bucket ORDER BY bucket`,
+    },
+    "1h": {
+      summary: `SELECT
+        sum(_sample_interval) AS calls,
+        sum(double3 * _sample_interval) AS prompt_tokens,
+        sum(double4 * _sample_interval) AS completion_tokens,
+        sum(double5 * _sample_interval) AS total_tokens,
+        if(sum(double3 * _sample_interval) > 0, sum(double4 * _sample_interval) / sum(double3 * _sample_interval), 0) AS output_input_ratio,
+        if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms,
+        quantileExactWeighted(0.95)(double2, _sample_interval) AS p95_duration_ms,
+        sum(double9 * _sample_interval) AS failures,
+        sum(double11 * _sample_interval) AS cache_hits,
+        sum(double12 * _sample_interval) AS cache_misses
+      FROM ${dataset}
+      WHERE timestamp > NOW() - INTERVAL ${intervalSql}`,
+      lanes: `SELECT blob3 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY total_tokens DESC LIMIT 8`,
+      models: `SELECT blob4 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY total_tokens DESC LIMIT 8`,
+      outcomes: `SELECT blob6 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY calls DESC`,
+      cacheStatuses: `SELECT blob7 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY calls DESC`,
+      series: `SELECT toString(toStartOfInterval(timestamp, INTERVAL ${bucketSql})) AS bucket, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double4 * _sample_interval) AS completion_tokens FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY bucket ORDER BY bucket`,
+    },
+    "24h": {
+      summary: `SELECT
+        sum(_sample_interval) AS calls,
+        sum(double3 * _sample_interval) AS prompt_tokens,
+        sum(double4 * _sample_interval) AS completion_tokens,
+        sum(double5 * _sample_interval) AS total_tokens,
+        if(sum(double3 * _sample_interval) > 0, sum(double4 * _sample_interval) / sum(double3 * _sample_interval), 0) AS output_input_ratio,
+        if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms,
+        quantileExactWeighted(0.95)(double2, _sample_interval) AS p95_duration_ms,
+        sum(double9 * _sample_interval) AS failures,
+        sum(double11 * _sample_interval) AS cache_hits,
+        sum(double12 * _sample_interval) AS cache_misses
+      FROM ${dataset}
+      WHERE timestamp > NOW() - INTERVAL ${intervalSql}`,
+      lanes: `SELECT blob3 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY total_tokens DESC LIMIT 8`,
+      models: `SELECT blob4 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY total_tokens DESC LIMIT 8`,
+      outcomes: `SELECT blob6 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY calls DESC`,
+      cacheStatuses: `SELECT blob7 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY calls DESC`,
+      series: `SELECT toString(toStartOfInterval(timestamp, INTERVAL ${bucketSql})) AS bucket, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double4 * _sample_interval) AS completion_tokens FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY bucket ORDER BY bucket`,
+    },
+    "7d": {
+      summary: `SELECT
+        sum(_sample_interval) AS calls,
+        sum(double3 * _sample_interval) AS prompt_tokens,
+        sum(double4 * _sample_interval) AS completion_tokens,
+        sum(double5 * _sample_interval) AS total_tokens,
+        if(sum(double3 * _sample_interval) > 0, sum(double4 * _sample_interval) / sum(double3 * _sample_interval), 0) AS output_input_ratio,
+        if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms,
+        quantileExactWeighted(0.95)(double2, _sample_interval) AS p95_duration_ms,
+        sum(double9 * _sample_interval) AS failures,
+        sum(double11 * _sample_interval) AS cache_hits,
+        sum(double12 * _sample_interval) AS cache_misses
+      FROM ${dataset}
+      WHERE timestamp > NOW() - INTERVAL ${intervalSql}`,
+      lanes: `SELECT blob3 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY total_tokens DESC LIMIT 8`,
+      models: `SELECT blob4 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY total_tokens DESC LIMIT 8`,
+      outcomes: `SELECT blob6 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY calls DESC`,
+      cacheStatuses: `SELECT blob7 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY calls DESC`,
+      series: `SELECT toString(toStartOfInterval(timestamp, INTERVAL ${bucketSql})) AS bucket, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double4 * _sample_interval) AS completion_tokens FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY bucket ORDER BY bucket`,
+    },
+    "30d": {
+      summary: `SELECT
+        sum(_sample_interval) AS calls,
+        sum(double3 * _sample_interval) AS prompt_tokens,
+        sum(double4 * _sample_interval) AS completion_tokens,
+        sum(double5 * _sample_interval) AS total_tokens,
+        if(sum(double3 * _sample_interval) > 0, sum(double4 * _sample_interval) / sum(double3 * _sample_interval), 0) AS output_input_ratio,
+        if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms,
+        quantileExactWeighted(0.95)(double2, _sample_interval) AS p95_duration_ms,
+        sum(double9 * _sample_interval) AS failures,
+        sum(double11 * _sample_interval) AS cache_hits,
+        sum(double12 * _sample_interval) AS cache_misses
+      FROM ${dataset}
+      WHERE timestamp > NOW() - INTERVAL ${intervalSql}`,
+      lanes: `SELECT blob3 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY total_tokens DESC LIMIT 8`,
+      models: `SELECT blob4 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY total_tokens DESC LIMIT 8`,
+      outcomes: `SELECT blob6 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY calls DESC`,
+      cacheStatuses: `SELECT blob7 AS label, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double3 * _sample_interval) AS prompt_tokens, sum(double4 * _sample_interval) AS completion_tokens, if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms, sum(double9 * _sample_interval) AS failures FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY label ORDER BY calls DESC`,
+      series: `SELECT toString(toStartOfInterval(timestamp, INTERVAL ${bucketSql})) AS bucket, sum(_sample_interval) AS calls, sum(double5 * _sample_interval) AS total_tokens, sum(double4 * _sample_interval) AS completion_tokens FROM ${dataset} WHERE timestamp > NOW() - INTERVAL ${intervalSql} GROUP BY bucket ORDER BY bucket`,
+    },
+  };
+
+  try {
+    const [summaryRows, laneRows, modelRows, outcomeRows, cacheRows, seriesRows] = await Promise.all([
+      queryAiTelemetrySql(args.env, queryByWindow[window.key].summary),
+      queryAiTelemetrySql(args.env, queryByWindow[window.key].lanes),
+      queryAiTelemetrySql(args.env, queryByWindow[window.key].models),
+      queryAiTelemetrySql(args.env, queryByWindow[window.key].outcomes),
+      queryAiTelemetrySql(args.env, queryByWindow[window.key].cacheStatuses),
+      queryAiTelemetrySql(args.env, queryByWindow[window.key].series),
+    ]);
+
+    const summarySource = summaryRows[0] ?? {};
+    const summary: AiTelemetrySummaryRow = {
+      calls: Math.max(0, Math.floor(parseFiniteNumber(summarySource.calls) ?? 0)),
+      promptTokens: Math.max(0, Math.floor(parseFiniteNumber(summarySource.prompt_tokens) ?? 0)),
+      completionTokens: Math.max(0, Math.floor(parseFiniteNumber(summarySource.completion_tokens) ?? 0)),
+      totalTokens: Math.max(0, Math.floor(parseFiniteNumber(summarySource.total_tokens) ?? 0)),
+      outputInputRatio: Number((parseFiniteNumber(summarySource.output_input_ratio) ?? 0).toFixed(4)),
+      avgDurationMs: Number((parseFiniteNumber(summarySource.avg_duration_ms) ?? 0).toFixed(2)),
+      p95DurationMs: Number((parseFiniteNumber(summarySource.p95_duration_ms) ?? 0).toFixed(2)),
+      failures: Math.max(0, Math.floor(parseFiniteNumber(summarySource.failures) ?? 0)),
+      cacheHits: Math.max(0, Math.floor(parseFiniteNumber(summarySource.cache_hits) ?? 0)),
+      cacheMisses: Math.max(0, Math.floor(parseFiniteNumber(summarySource.cache_misses) ?? 0)),
+    };
+
+    const normalizeBreakdown = (rows: Record<string, unknown>[]): AiTelemetryBreakdownRow[] =>
+      rows.map((row) => ({
+        label: trimString(row.label) ?? "unknown",
+        calls: Math.max(0, Math.floor(parseFiniteNumber(row.calls) ?? 0)),
+        totalTokens: Math.max(0, Math.floor(parseFiniteNumber(row.total_tokens) ?? 0)),
+        promptTokens: Math.max(0, Math.floor(parseFiniteNumber(row.prompt_tokens) ?? 0)),
+        completionTokens: Math.max(0, Math.floor(parseFiniteNumber(row.completion_tokens) ?? 0)),
+        avgDurationMs: Number((parseFiniteNumber(row.avg_duration_ms) ?? 0).toFixed(2)),
+        failures: Math.max(0, Math.floor(parseFiniteNumber(row.failures) ?? 0)),
+      }));
+
+    const series: AiTelemetrySeriesRow[] = seriesRows.map((row) => ({
+      bucket: trimString(row.bucket) ?? "",
+      calls: Math.max(0, Math.floor(parseFiniteNumber(row.calls) ?? 0)),
+      totalTokens: Math.max(0, Math.floor(parseFiniteNumber(row.total_tokens) ?? 0)),
+      completionTokens: Math.max(0, Math.floor(parseFiniteNumber(row.completion_tokens) ?? 0)),
+    }));
+
+    return responseJson(200, {
+      ok: true,
+      result: {
+        generatedAtMs: Date.now(),
+        window: window.key,
+        summary,
+        lanes: normalizeBreakdown(laneRows),
+        models: normalizeBreakdown(modelRows),
+        outcomes: normalizeBreakdown(outcomeRows),
+        cacheStatuses: normalizeBreakdown(cacheRows),
+        series,
+      },
+    });
+  } catch (error) {
+    return errorJson(503, error instanceof Error ? error.message : "AI telemetry unavailable.");
+  }
 }
 
 function createEmptyStripeCrmStatusCounts(): StripeCrmStatusCounts {
@@ -9791,6 +10085,10 @@ const worker = {
       env.ADMIN_CRM_SUMMARY_PATH,
       DEFAULT_ADMIN_CRM_SUMMARY_PATH,
     );
+    const adminCrmAiTelemetryPath = normalizePath(
+      env.ADMIN_CRM_AI_TELEMETRY_PATH,
+      DEFAULT_ADMIN_CRM_AI_TELEMETRY_PATH,
+    );
     const adminCrmCustomerPath = normalizePath(
       env.ADMIN_CRM_CUSTOMER_PATH,
       DEFAULT_ADMIN_CRM_CUSTOMER_PATH,
@@ -10187,6 +10485,37 @@ const worker = {
         rpcMethod: "admin.crm.summary",
         cacheHit: false,
         outcome: "admin-crm-summary",
+      });
+    }
+
+    if (url.pathname === adminCrmAiTelemetryPath) {
+      if (request.method !== "POST") {
+        return finalize(errorJsonWithHeaders(405, "Method Not Allowed.", { allow: "POST" }), {
+          rpcMethod: "admin.crm.ai_telemetry",
+          cacheHit: false,
+          outcome: "method-not-allowed",
+        });
+      }
+      const tokenError = enforceApiToken();
+      if (tokenError) {
+        return finalize(tokenError, {
+          rpcMethod: "admin.crm.ai_telemetry",
+          cacheHit: false,
+          outcome: "unauthorized",
+        });
+      }
+      const parsed = await parseJsonRequestBody(request, maxRequestBytes);
+      if (!parsed.ok) {
+        return finalize(parsed.response, {
+          rpcMethod: "admin.crm.ai_telemetry",
+          cacheHit: false,
+          outcome: "invalid-request",
+        });
+      }
+      return finalize(await handleAdminCrmAiTelemetry({ env, body: parsed.body }), {
+        rpcMethod: "admin.crm.ai_telemetry",
+        cacheHit: false,
+        outcome: "admin-crm-ai-telemetry",
       });
     }
 

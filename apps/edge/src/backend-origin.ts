@@ -52,7 +52,11 @@ export function resolveBackendEndpointUrl(env: BackendBindingEnv, backendPath: s
 }
 
 export function resolveBackendApiToken(env: BackendBindingEnv): string {
-  return (env.USAGE_DATA_SOURCE_TOKEN || env.INTEL_API_TOKEN || "").trim();
+  const usageToken = (env.USAGE_DATA_SOURCE_TOKEN ?? "").trim();
+  if (usageToken) {
+    return usageToken;
+  }
+  return (env.INTEL_API_TOKEN ?? "").trim();
 }
 
 export function resolveBackendFetch(env: BackendBindingEnv): typeof fetch {

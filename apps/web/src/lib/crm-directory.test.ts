@@ -64,6 +64,7 @@ test("filterCrmDirectoryUsers applies status and query filters against account s
 
 test("formatCrmProviders joins values and applies the configured empty fallback", () => {
   assert.equal(formatCrmProviders(["github", "x"]), "github, x");
+  assert.equal(formatCrmProviders([" github", "x "]), "github, x");
   assert.equal(formatCrmProviders(["github", "x"], "|", ""), "github|x");
   assert.equal(formatCrmProviders([" ", ""], ", ", "none"), "none");
   assert.equal(formatCrmProviders(undefined), "—");

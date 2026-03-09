@@ -1370,6 +1370,75 @@ describe("intel-dashboard backend worker", () => {
     });
   });
 
+  it("does not read the base feed key when shard reads are enabled", async () => {
+    const baseKey = "intel-dashboard:usage:news:feed";
+    const shard0Key = "intel-dashboard:usage:news:feed:shard:global__0";
+    const shard1Key = "intel-dashboard:usage:news:feed:shard:global__1";
+    const kv = createKvMapBinding({
+      [baseKey]: [
+        {
+          id: "base-1",
+          title: "Base Feed",
+          url: "https://example.com/base",
+          publishedAtMs: 14_000_000,
+        },
+      ],
+      [shard0Key]: [
+        {
+          id: "s0-1",
+          title: "Shard 0",
+          url: "https://example.com/s0",
+          publishedAtMs: 15_000_000,
+        },
+      ],
+      [shard1Key]: [
+        {
+          id: "s1-1",
+          title: "Shard 1",
+          url: "https://example.com/s1",
+          publishedAtMs: 15_000_100,
+        },
+      ],
+      "intel-dashboard:billing:account:shard-user": {
+        userId: "shard-user",
+        status: "active",
+        subscribedAtMs: 14_000_000,
+        monthlyPriceUsd: 8,
+        updatedAtMs: 14_000_000,
+      },
+    });
+
+    const getCalls = [];
+    const originalGet = kv.binding.get;
+    kv.binding.get = async (key) => {
+      getCalls.push(key);
+      return originalGet(key);
+    };
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/news", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "shard-user", limit: 2 }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+        NEWS_COORDINATOR_SHARD_COUNT: "2",
+        NEWS_COORDINATOR_NAME: "global",
+        NEWS_HOT_OVERLAY_ENABLED: "false",
+        USAGE_KV: kv.binding,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(getCalls).not.toContain(baseKey);
+    expect(getCalls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("hydrates /api/air-sea with live OpenSky aircraft tracks", async () => {
     const nowSec = Math.floor(Date.now() / 1000);
     const kv = createKvMapBinding({

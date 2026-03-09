@@ -1602,7 +1602,7 @@ function resolveNewsFeedStorageKeysForRead(env: WorkerEnv): string[] {
     return [baseKey];
   }
 
-  const keys = new Set<string>([baseKey]);
+  const keys = new Set<string>();
   for (const shardName of shardNames) {
     keys.add(resolveNewsFeedStorageKey(env, shardName));
   }

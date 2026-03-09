@@ -5535,19 +5535,26 @@ export default {
       if (!entitlement.entitled && entitlement.tier !== "subscriber" && entitlement.role !== "owner") {
         return privateApiJson(origin, 403, { error: "Forbidden" });
       }
-      const payload = await queryTelegramSourceLeaderboard({
-        db: env.INTEL_DB,
-        windowRaw: url.searchParams.get("window"),
-      });
-      return new Response(JSON.stringify(payload), {
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "private, no-store, no-cache, must-revalidate",
-          "CDN-Cache-Control": "no-store",
-          "Vary": mergeVary(null, ["Origin", "Cookie", "Authorization"]),
-          ...corsHeaders(origin),
-        },
-      });
+      try {
+        const payload = await queryTelegramSourceLeaderboard({
+          db: env.INTEL_DB,
+          windowRaw: url.searchParams.get("window"),
+        });
+        return new Response(JSON.stringify(payload), {
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "private, no-store, no-cache, must-revalidate",
+            "CDN-Cache-Control": "no-store",
+            "Vary": mergeVary(null, ["Origin", "Cookie", "Authorization"]),
+            ...corsHeaders(origin),
+          },
+        });
+      } catch (error) {
+        return privateApiJson(origin, 500, {
+          error: "Telegram leaderboard query failed",
+          detail: error instanceof Error ? error.message : "unknown_error",
+        });
+      }
     }
 
     if (path === "/api/subscriber/feed-preferences") {

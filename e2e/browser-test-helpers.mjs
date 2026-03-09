@@ -19,6 +19,13 @@ export const SKIP_SESSION_PREFLIGHT = process.env.E2E_SKIP_SESSION_PREFLIGHT ===
 export const ARTIFACT_DIR = join(process.cwd(), "output", "e2e-browser");
 export const sessionValidationCache = new Map();
 
+export function isIgnorableConsoleError(text) {
+  return (
+    /^%c%d font-size:0;color:transparent NaN$/.test(text) ||
+    /Note that 'script-src' was not explicitly set, so 'default-src' is used as a fallback\./i.test(text)
+  );
+}
+
 export function parseCookieHeader(header) {
   const trimmed = trim(header);
   const eq = trimmed.indexOf("=");
@@ -145,4 +152,70 @@ export async function createBrowserContext(t, options = {}) {
     "E2E_SESSION_COOKIE is required for browser-authenticated dashboard smoke e2e",
     options,
   );
+}
+
+export async function createPublicBrowserContext(t, options = {}) {
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    t.skip(`Chromium is unavailable for browser e2e: ${message}`);
+    return null;
+  }
+
+  const context = await browser.newContext({ acceptDownloads: true, ...options });
+  return { browser, context };
+}
+
+export async function waitForProtectedLoginOverlay(page, { nextPath } = {}) {
+  const githubLink = page.getByRole("link", { name: "Continue with GitHub" }).first();
+  const xLink = page.getByRole("link", { name: "Continue with X" }).first();
+
+  await githubLink.waitFor({ state: "visible", timeout: 30_000 });
+  await xLink.waitFor({ state: "visible", timeout: 30_000 });
+  await page.locator("text=Continue your intelligence workflow with secure OAuth authentication.").first().waitFor({
+    state: "visible",
+    timeout: 30_000,
+  });
+
+  if (nextPath) {
+    assert.equal(await githubLink.getAttribute("href"), `/auth/login?next=${encodeURIComponent(nextPath)}`);
+    assert.equal(await xLink.getAttribute("href"), `/auth/x/login?next=${encodeURIComponent(nextPath)}`);
+  }
+}
+
+export function collectBrowserDiagnostics(page, baseUrl) {
+  const pageErrors = [];
+  const consoleErrors = [];
+  const requestFailures = [];
+  const baseOrigin = new URL(baseUrl).origin;
+
+  page.on("pageerror", (error) => {
+    pageErrors.push(error.message);
+  });
+
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      const text = message.text();
+      if (!isIgnorableConsoleError(text)) {
+        consoleErrors.push(text);
+      }
+    }
+  });
+
+  page.on("requestfailed", (request) => {
+    try {
+      const requestUrl = new URL(request.url());
+      const errorText = request.failure()?.errorText || "request_failed";
+      if (requestUrl.origin === baseOrigin) {
+        if (/ERR_ABORTED/i.test(errorText)) return;
+        requestFailures.push(`${request.method()} ${request.url()} ${errorText}`);
+      }
+    } catch {
+      // ignore malformed request urls
+    }
+  });
+
+  return { pageErrors, consoleErrors, requestFailures };
 }

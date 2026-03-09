@@ -475,21 +475,21 @@ export async function openPage(page, path, options = {}) {
     timeout = 45_000,
   } = options;
 
-  await page.goto(`${EDGE_BASE_URL}${path}`, {
+  return await page.goto(`${EDGE_BASE_URL}${path}`, {
     waitUntil,
     timeout,
   });
 }
 
 export async function openDashboardPage(page, path) {
-  await openPage(page, path, {
+  return await openPage(page, path, {
     waitUntil: "networkidle",
     timeout: 45_000,
   });
 }
 
 export async function openPublicPage(page, path) {
-  await openPage(page, path, {
+  return await openPage(page, path, {
     waitUntil: "domcontentloaded",
     timeout: 30_000,
   });

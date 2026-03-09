@@ -15,6 +15,7 @@ export const REQUIRE_AUTH = process.env.E2E_REQUIRE_AUTH === "1";
 export const STRICT = process.env.E2E_STRICT === "1";
 export const ACCESS_CLIENT_ID = trim(process.env.E2E_CF_ACCESS_CLIENT_ID);
 export const ACCESS_CLIENT_SECRET = trim(process.env.E2E_CF_ACCESS_CLIENT_SECRET);
+export const SKIP_SESSION_PREFLIGHT = process.env.E2E_SKIP_SESSION_PREFLIGHT === "1";
 export const ARTIFACT_DIR = join(process.cwd(), "output", "e2e-browser");
 export const sessionValidationCache = new Map();
 
@@ -63,6 +64,10 @@ export async function captureBrowserArtifacts(page, testName, error) {
 export async function validateSessionCookie(t, cookieHeader, missingMessage) {
   const cookie = requireOrSkip(t, cookieHeader, missingMessage);
   if (!cookie) return "";
+
+  if (SKIP_SESSION_PREFLIGHT) {
+    return cookie;
+  }
 
   if (!sessionValidationCache.has(cookie)) {
     sessionValidationCache.set(cookie, (async () => {

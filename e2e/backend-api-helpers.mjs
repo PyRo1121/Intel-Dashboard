@@ -43,9 +43,14 @@ export async function fetchWithRetry(url, init = {}) {
   for (let attempt = 0; attempt <= RETRIES; attempt += 1) {
     try {
       const finalInit = withBackendAccessHeaders(url, init);
+      const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+      const signal =
+        finalInit.signal != null
+          ? AbortSignal.any([finalInit.signal, timeoutSignal])
+          : timeoutSignal;
       const response = await fetch(url, {
         ...finalInit,
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal,
       });
       if (response.status >= 500 && attempt < RETRIES) {
         await sleep(200 * (attempt + 1));
@@ -69,7 +74,9 @@ export function withBackendAccessHeaders(url, init = {}) {
     return init;
   }
   if (!BACKEND_ACCESS_CLIENT_ID || !BACKEND_ACCESS_CLIENT_SECRET) {
-    return init;
+    throw new Error(
+      "BACKEND_BASE_URL is set and matched, but E2E_CF_ACCESS_CLIENT_ID and E2E_CF_ACCESS_CLIENT_SECRET are missing.",
+    );
   }
   const headers = new Headers(init.headers || {});
   headers.set("CF-Access-Client-Id", BACKEND_ACCESS_CLIENT_ID);
@@ -83,6 +90,9 @@ export async function readJson(response) {
   try {
     return JSON.parse(raw);
   } catch {
+    if (STRICT) {
+      console.error(`Failed to parse JSON response from ${response.url}: ${raw.slice(0, 240)}`);
+    }
     return null;
   }
 }

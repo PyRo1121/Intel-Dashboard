@@ -1,10 +1,8 @@
+import { isRecord } from "./type-guards.ts";
+
 type BackendJsonResult =
   | { ok: true; payload: Record<string, unknown> }
   | { ok: false; status: number; error: string };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 export async function postOwnerBackendJson(args: {
   backendToken: string;
@@ -60,4 +58,3 @@ export async function postOwnerBackendJson(args: {
 
   return { ok: true, payload: result };
 }
-

@@ -8,8 +8,14 @@ import {
 } from "./security-guards";
 import { TelegramScraperDO } from "./telegram-scraper-do";
 import { createEdgeAuth } from "./auth";
+import { misconfiguredApiResponse, unauthorizedApiResponse } from "./auth-api-response";
 import { buildDeterministicAvatarDataUrl } from "./avatar-fallback";
-import { resolveBackendEndpointUrl, usesBackendServiceBinding } from "./backend-origin";
+import {
+  resolveBackendApiToken,
+  resolveBackendEndpointUrl,
+  resolveBackendFetch,
+  usesBackendServiceBinding,
+} from "./backend-origin";
 import { buildClientXProfileDiagnostics, type XProfileSyncDiagnostics } from "./auth-diagnostics";
 import { normalizeSafeAuthRedirectLocation } from "./auth-redirect";
 import { buildOwnerCrmAiTelemetryFailureResponse } from "./crm-ai-telemetry-proxy";
@@ -18,6 +24,7 @@ import { buildOwnerCrmOverviewPayload, type CrmDirectoryUser } from "./crm-overv
 import { corsHeaders, corsJson, mergeVary, privateApiHeaders, privateApiJson, privateApiMethodNotAllowed } from "./private-api-headers";
 import { getDashboardAppRoutePrefixes, normalizeSafePostAuthPath } from "./post-auth-path";
 import { createTurnstileGateToken, type TurnstileMode, verifyTurnstileGateToken } from "./turnstile";
+import { isRecord } from "./type-guards";
 import { DASHBOARD_HOME_PATH, DEFAULT_POST_AUTH_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
 import { buildAuthModeSwitchHref, buildAuthPageHref, buildAuthProviderHref } from "@intel-dashboard/shared/auth-flow.ts";
 import { getAuthCopy } from "@intel-dashboard/shared/auth-copy.ts";
@@ -1016,14 +1023,6 @@ function fromBase64Url(s: string): Uint8Array {
   return bytes;
 }
 
-function unauthorizedApiResponse(origin: string | null): Response {
-  return privateApiJson(origin, 401, { error: "Unauthorized", login_url: "/login" });
-}
-
-function misconfiguredApiResponse(origin: string | null): Response {
-  return privateApiJson(origin, 503, { error: "Server auth misconfigured" });
-}
-
 function normalizeString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -1039,10 +1038,6 @@ function normalizeNumber(value: unknown): number | null {
     }
   }
   return null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function resolveTurnstileSiteKey(env: Env): string {
@@ -2215,20 +2210,6 @@ async function resolveOptionalFeedEntitlement(params: {
   });
 }
 
-function resolveBackendEndpoint(env: Env, backendPath: string): string {
-  return resolveBackendEndpointUrl(env, backendPath);
-}
-
-function resolveBackendApiToken(env: Env): string {
-  return (env.USAGE_DATA_SOURCE_TOKEN || env.INTEL_API_TOKEN || "").trim();
-}
-
-function resolveBackendFetch(env: Env): typeof fetch {
-  return usesBackendServiceBinding(env)
-    ? env.INTEL_BACKEND.fetch.bind(env.INTEL_BACKEND) as typeof fetch
-    : fetch;
-}
-
 function parseProviderList(raw: unknown): string[] {
   const value = normalizeString(raw);
   if (!value) {
@@ -2320,7 +2301,7 @@ async function fetchOwnerCrmBackendSummary(params: {
 }): Promise<{ ok: true; payload: Record<string, unknown> } | { ok: false; status: number; error: string }> {
   return postOwnerBackendJson({
     backendToken: resolveBackendApiToken(params.env),
-    url: resolveBackendEndpoint(params.env, "/api/intel-dashboard/admin/crm/summary"),
+    url: resolveBackendEndpointUrl(params.env, "/api/intel-dashboard/admin/crm/summary"),
     userId: resolveUserId(params.user),
     userLogin: params.user.login,
     errorPrefix: "Backend CRM summary",
@@ -2339,7 +2320,7 @@ async function fetchOwnerCrmAiTelemetry(params: {
 }): Promise<OwnerCrmAiTelemetryFetchResult> {
   return postOwnerBackendJson({
     backendToken: resolveBackendApiToken(params.env),
-    url: resolveBackendEndpoint(params.env, "/api/intel-dashboard/admin/crm/ai-telemetry"),
+    url: resolveBackendEndpointUrl(params.env, "/api/intel-dashboard/admin/crm/ai-telemetry"),
     userId: resolveUserId(params.user),
     userLogin: params.user.login,
     extraBody: { window: params.window },
@@ -2403,7 +2384,7 @@ async function proxySessionBillingRoute(params: {
   }
 
   const backendRequest = new Request(
-    resolveBackendEndpoint(params.env, params.backendPath),
+    resolveBackendEndpointUrl(params.env, params.backendPath),
     {
       method: "POST",
       headers: {

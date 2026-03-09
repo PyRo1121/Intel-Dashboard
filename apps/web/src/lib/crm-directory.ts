@@ -60,7 +60,9 @@ export function formatCrmProviders(
   separator = ", ",
   emptyValue = "—",
 ): string {
-  const values = (providers ?? []).filter((value) => typeof value === "string" && value.trim().length > 0);
+  const values = (providers ?? [])
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter((value) => value.length > 0);
   if (values.length === 0) {
     return emptyValue;
   }

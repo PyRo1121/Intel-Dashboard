@@ -10,6 +10,7 @@ import {
 } from "~/lib/freshness";
 import { fetchPublicJson } from "~/lib/client-json";
 import { readLatestArray } from "~/lib/resource-latest";
+import { getSeveritySummaryAccentClass, getSeveritySummaryTotal } from "~/lib/severity-summary";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import { formatLongDateTime, formatShortDateTime, isInitialResourceLoading } from "~/lib/utils";
 import { FileText, ChevronDown, Clock, Send } from "lucide-solid";
@@ -47,9 +48,6 @@ export default function Briefings() {
       stale: "Stale",
     },
   });
-
-  const totalEvents = (s: Briefing["severity_summary"]) =>
-    s.critical + s.high + s.medium + s.low;
 
   const toggle = (id: string) =>
     setExpanded((prev) => (prev === id ? null : id));
@@ -156,10 +154,7 @@ export default function Briefings() {
                     style={idx() < 10 ? `animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: ${idx() * 60}ms` : undefined}
                   >
                     {/* Top severity accent */}
-                    <div class={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent to-transparent ${
-                      briefing.severity_summary.critical > 0 ? "via-red-500/30" :
-                      briefing.severity_summary.high > 0 ? "via-amber-500/25" : "via-blue-500/20"
-                    }`} />
+                    <div class={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent to-transparent ${getSeveritySummaryAccentClass(briefing.severity_summary)}`} />
 
                     <div class="p-6">
                       {/* Header row */}
@@ -172,7 +167,7 @@ export default function Briefings() {
                             </span>
                           </div>
                           <span class="text-[11px] text-zinc-600 font-mono-data">
-                            {totalEvents(briefing.severity_summary)} events
+                            {getSeveritySummaryTotal(briefing.severity_summary)} events
                           </span>
                         </div>
                         <div class={`flex items-center justify-center w-7 h-7 rounded-lg text-zinc-600 group-hover:text-zinc-400 transition-all duration-300 ${isExpanded() ? "rotate-180" : ""}`}>

@@ -1,8 +1,7 @@
 import { For, Show, createMemo, createSignal, createResource } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
-import { fetchIntelFeed } from "~/lib/intel-feed";
 import { formatTitleLabel } from "~/lib/event-label";
-import { normalizeIntelItem } from "~/lib/intel-text";
+import { fetchOsintItems } from "~/lib/osint-client";
 import { readLatestArray } from "~/lib/resource-latest";
 import SeverityBadge from "~/components/ui/SeverityBadge";
 import {
@@ -23,18 +22,9 @@ import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 
 const FILTERS: (Severity | "all")[] = ["all", "critical", "high", "medium", "low"];
 
-async function loadOsint(): Promise<IntelItem[]> {
-  const data = await fetchIntelFeed();
-  return Array.isArray(data)
-    ? data
-      .filter((item): item is IntelItem => item && typeof item === "object")
-      .map((item) => normalizeIntelItem(item))
-    : [];
-}
-
 export default function OsintFeed() {
   const [filter, setFilter] = createSignal<Severity | "all">("all");
-  const [osint, { refetch }] = createResource(loadOsint, { initialValue: [] as IntelItem[] });
+  const [osint, { refetch }] = createResource(fetchOsintItems, { initialValue: [] as IntelItem[] });
   const feedThresholds = STANDARD_FEED_FRESHNESS_THRESHOLDS;
   const nowMs = useWallClock(1000);
 

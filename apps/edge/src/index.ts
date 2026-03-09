@@ -2469,6 +2469,15 @@ async function fetchOwnerCrmAiTelemetry(params: {
   return { ok: true, payload: result };
 }
 
+function normalizeOwnerAiTelemetryWindow(rawValue: string | null): string | null {
+  const value = (rawValue || "").trim().toLowerCase();
+  if (!value) return "24h";
+  if (value === "15m" || value === "1h" || value === "24h" || value === "7d" || value === "30d") {
+    return value;
+  }
+  return null;
+}
+
 async function parseOptionalJsonObject(request: Request): Promise<Record<string, unknown>> {
   if (request.method === "GET" || request.method === "HEAD") {
     return {};
@@ -5455,7 +5464,16 @@ export default {
         );
       }
 
-      const window = (url.searchParams.get("window") || "24h").trim();
+      const window = normalizeOwnerAiTelemetryWindow(url.searchParams.get("window"));
+      if (!window) {
+        return new Response(
+          JSON.stringify({ error: "Invalid AI telemetry window." }),
+          {
+            status: 400,
+            headers: privateApiHeaders(origin),
+          },
+        );
+      }
       const backendTelemetry = await fetchOwnerCrmAiTelemetry({
         env,
         user: sessionUser,

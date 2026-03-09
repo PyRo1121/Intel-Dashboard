@@ -1886,6 +1886,60 @@ describe("intel-dashboard backend worker", () => {
     });
   });
 
+  it("rejects invalid owner CRM AI telemetry windows", async () => {
+    const analyticsFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              calls: 1,
+              prompt_tokens: 10,
+              completion_tokens: 4,
+              total_tokens: 14,
+              output_input_ratio: 0.4,
+              avg_duration_ms: 100,
+              p95_duration_ms: 100,
+              failures: 0,
+              cache_hits: 1,
+              cache_misses: 0,
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", analyticsFetch);
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/admin/crm/ai-telemetry", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "owner-id", window: "90m" }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+        AI_TELEMETRY_QUERY_ACCOUNT_ID: "acct_123",
+        AI_TELEMETRY_QUERY_API_TOKEN: "cf_api_token",
+        AI_TELEMETRY_DATASET: "intel_dashboard_ai",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      result: {
+        window: "24h",
+      },
+    });
+  });
+
   it("uses live Stripe subscription metrics for CRM revenue when configured", async () => {
     const now = Date.now();
     const kv = createKvMapBinding({

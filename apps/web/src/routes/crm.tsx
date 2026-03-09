@@ -329,7 +329,8 @@ export default function CrmRoute() {
   const isOwner = () => role() === "owner";
   const [crm, { refetch }] = createResource(fetchCrmOverview);
   const [aiWindow, setAiWindow] = createSignal<"15m" | "1h" | "24h" | "7d" | "30d">("1h");
-  const [aiTelemetry, { refetch: refetchAiTelemetry }] = createResource(aiWindow, fetchAiTelemetry);
+  const aiTelemetrySource = createMemo(() => (isOwner() ? aiWindow() : undefined));
+  const [aiTelemetry, { refetch: refetchAiTelemetry }] = createResource(aiTelemetrySource, fetchAiTelemetry);
   const [searchTerm, setSearchTerm] = createSignal("");
   const [statusFilter, setStatusFilter] = createSignal<"all" | "active" | "trialing" | "canceled" | "expired" | "none">("all");
   const [selectedUserId, setSelectedUserId] = createSignal("");

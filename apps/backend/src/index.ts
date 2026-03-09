@@ -4241,16 +4241,14 @@ type AiTelemetrySeriesRow = {
 
 function normalizeAiTelemetryWindow(value: unknown): {
   key: AiTelemetryWindowKey;
-  intervalSql: string;
-  bucketSql: string;
 } {
   const normalized = trimString(value)?.toLowerCase();
-  if (normalized === "15m") return { key: "15m", intervalSql: "15 MINUTE", bucketSql: "1 MINUTE" };
-  if (normalized === "1h") return { key: "1h", intervalSql: "1 HOUR", bucketSql: "5 MINUTE" };
-  if (normalized === "7d") return { key: "7d", intervalSql: "7 DAY", bucketSql: "6 HOUR" };
-  if (normalized === "30d") return { key: "30d", intervalSql: "30 DAY", bucketSql: "1 DAY" };
-  if (normalized === "24h") return { key: "24h", intervalSql: "24 HOUR", bucketSql: "1 HOUR" };
-  return { key: "24h", intervalSql: "24 HOUR", bucketSql: "1 HOUR" };
+  if (normalized === "15m") return { key: "15m" };
+  if (normalized === "1h") return { key: "1h" };
+  if (normalized === "7d") return { key: "7d" };
+  if (normalized === "30d") return { key: "30d" };
+  if (normalized === "24h") return { key: "24h" };
+  return { key: "24h" };
 }
 
 function normalizeAiTelemetryDataset(rawValue: string | undefined): string {
@@ -4308,6 +4306,23 @@ async function handleAdminCrmAiTelemetry(args: {
   const window = normalizeAiTelemetryWindow(body.window);
   const dataset = normalizeAiTelemetryDataset(args.env.AI_TELEMETRY_DATASET);
 
+  const intervalSqlByWindow: Record<AiTelemetryWindowKey, string> = {
+    "15m": "15 MINUTE",
+    "1h": "1 HOUR",
+    "24h": "24 HOUR",
+    "7d": "7 DAY",
+    "30d": "30 DAY",
+  };
+  const bucketSqlByWindow: Record<AiTelemetryWindowKey, string> = {
+    "15m": "1 MINUTE",
+    "1h": "5 MINUTE",
+    "24h": "1 HOUR",
+    "7d": "6 HOUR",
+    "30d": "1 DAY",
+  };
+  const intervalSql = intervalSqlByWindow[window.key];
+  const bucketSql = bucketSqlByWindow[window.key];
+
   try {
     const [summaryRows, laneRows, modelRows, outcomeRows, cacheRows, seriesRows] = await Promise.all([
       queryAiTelemetrySql(
@@ -4324,7 +4339,7 @@ async function handleAdminCrmAiTelemetry(args: {
           sum(double11 * _sample_interval) AS cache_hits,
           sum(double12 * _sample_interval) AS cache_misses
         FROM ${dataset}
-        WHERE timestamp > NOW() - INTERVAL ${window.intervalSql}`,
+        WHERE timestamp > NOW() - INTERVAL ${intervalSql}`,
       ),
       queryAiTelemetrySql(
         args.env,
@@ -4337,7 +4352,7 @@ async function handleAdminCrmAiTelemetry(args: {
           if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms,
           sum(double9 * _sample_interval) AS failures
         FROM ${dataset}
-        WHERE timestamp > NOW() - INTERVAL ${window.intervalSql}
+        WHERE timestamp > NOW() - INTERVAL ${intervalSql}
         GROUP BY label
         ORDER BY total_tokens DESC
         LIMIT 8`,
@@ -4353,7 +4368,7 @@ async function handleAdminCrmAiTelemetry(args: {
           if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms,
           sum(double9 * _sample_interval) AS failures
         FROM ${dataset}
-        WHERE timestamp > NOW() - INTERVAL ${window.intervalSql}
+        WHERE timestamp > NOW() - INTERVAL ${intervalSql}
         GROUP BY label
         ORDER BY total_tokens DESC
         LIMIT 8`,
@@ -4369,7 +4384,7 @@ async function handleAdminCrmAiTelemetry(args: {
           if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms,
           sum(double9 * _sample_interval) AS failures
         FROM ${dataset}
-        WHERE timestamp > NOW() - INTERVAL ${window.intervalSql}
+        WHERE timestamp > NOW() - INTERVAL ${intervalSql}
         GROUP BY label
         ORDER BY calls DESC`,
       ),
@@ -4384,19 +4399,19 @@ async function handleAdminCrmAiTelemetry(args: {
           if(sum(_sample_interval) > 0, sum(double2 * _sample_interval) / sum(_sample_interval), 0) AS avg_duration_ms,
           sum(double9 * _sample_interval) AS failures
         FROM ${dataset}
-        WHERE timestamp > NOW() - INTERVAL ${window.intervalSql}
+        WHERE timestamp > NOW() - INTERVAL ${intervalSql}
         GROUP BY label
         ORDER BY calls DESC`,
       ),
       queryAiTelemetrySql(
         args.env,
         `SELECT
-          toString(toStartOfInterval(timestamp, INTERVAL ${window.bucketSql})) AS bucket,
+          toString(toStartOfInterval(timestamp, INTERVAL ${bucketSql})) AS bucket,
           sum(_sample_interval) AS calls,
           sum(double5 * _sample_interval) AS total_tokens,
           sum(double4 * _sample_interval) AS completion_tokens
         FROM ${dataset}
-        WHERE timestamp > NOW() - INTERVAL ${window.intervalSql}
+        WHERE timestamp > NOW() - INTERVAL ${intervalSql}
         GROUP BY bucket
         ORDER BY bucket`,
       ),

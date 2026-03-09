@@ -18,6 +18,7 @@ const WINDOW_TO_MS: Record<TelegramSourceLeaderboardWindow, number> = {
   "7d": 7 * 24 * 60 * 60 * 1000,
   "30d": 30 * 24 * 60 * 60 * 1000,
 };
+const TELEGRAM_LEADERBOARD_RETURN_LIMIT = 25;
 
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
@@ -84,7 +85,7 @@ export function normalizeTelegramSourceLeaderboardRows(rows: unknown[]): Telegra
       if (right.leadCount !== left.leadCount) return right.leadCount - left.leadCount;
       return right.avgSignalScore - left.avgSignalScore;
     })
-    .slice(0, 25);
+    .slice(0, TELEGRAM_LEADERBOARD_RETURN_LIMIT);
 }
 
 export async function queryTelegramSourceLeaderboard(args: {
@@ -137,8 +138,14 @@ export async function queryTelegramSourceLeaderboard(args: {
     FROM ranked_sources
     WHERE rank_in_event = 1
     GROUP BY channel
-    ORDER BY lead_count DESC, avg_signal_score DESC
-    LIMIT 50`,
+    ORDER BY
+      (COUNT(*) * 8 + AVG(COALESCE(signal_score, 0)) * 0.6 +
+       SUM(CASE WHEN signal_grade IN ('A', 'B') THEN 1 ELSE 0 END) * 4 +
+       SUM(CASE WHEN verification_state IN ('verified', 'corroborated') THEN 1 ELSE 0 END) * 2 +
+       MAX(COALESCE(source_history_score, 0)) * 0.4) DESC,
+      COUNT(*) DESC,
+      AVG(COALESCE(signal_score, 0)) DESC
+    LIMIT ${TELEGRAM_LEADERBOARD_RETURN_LIMIT}`,
   ).bind(cutoffIso).all<Record<string, unknown>>();
 
   return {

@@ -1,11 +1,24 @@
 import { Meta, Title } from "@solidjs/meta";
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
+import { computeAiCacheHitRatePercent, getAiTelemetryMaxValue, getAiTelemetryTopEntryBy, readAiTelemetryItems } from "~/lib/ai-telemetry";
 import { useAuth } from "~/lib/auth";
-import { fetchClientJson } from "~/lib/client-json";
-import { getCrmCustomerCacheSourceLabel } from "~/lib/crm-customer-cache";
-import { formatEventLabel } from "~/lib/event-label";
-import { formatSubscriptionStatus, isOwnerRole } from "@intel-dashboard/shared/entitlement.ts";
+import { isAuthUserOwner } from "~/lib/auth-user";
+import { fetchCrmAiTelemetry, fetchCrmOverview, postCrmAction, readCrmItems } from "~/lib/crm-client";
+import { buildCrmAccountStatusMap, filterCrmDirectoryUsers, findCrmDirectoryUserById, formatCrmProviders } from "~/lib/crm-directory";
+import { buildCrmLatestEventMap, escapeCsvCell, getCrmLatestEventDisplay } from "~/lib/crm-export";
 import {
+  getCrmCustomerAccountStatusLabel,
+  getCrmCustomerCacheSourceLabel,
+  getCrmCustomerCacheFetchedAtMs,
+  getCrmCustomerCurrentPeriodEndMs,
+  getCrmCustomerStripeCustomerId,
+  getCrmCustomerStripeSubscriptionId,
+  readCrmCustomerCharges,
+} from "~/lib/crm-customer-cache";
+import { formatEventLabel } from "~/lib/event-label";
+import { formatSubscriptionStatus } from "@intel-dashboard/shared/entitlement.ts";
+import {
+  getCrmQualityBadgeTone,
   getCrmRevenueSourceLabel,
   getCrmSummaryStatusLabel,
   getCrmSummaryWarningMessage,
@@ -265,62 +278,16 @@ type AiTelemetryPayload = {
   };
 };
 
-async function fetchCrmOverview(): Promise<CrmPayload> {
-  const result = await fetchClientJson<CrmPayload>("/api/admin/crm/overview", {
-    method: "GET",
-  });
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: result.error,
-    };
-  }
-  return result.data;
-}
-
-async function postCrmAction(path: string, payload: Record<string, unknown>): Promise<CrmCustomerOpsPayload> {
-  const result = await fetchClientJson<CrmCustomerOpsPayload>(path, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: result.error,
-    };
-  }
-  return result.data;
-}
-
-async function fetchAiTelemetry(window: string): Promise<AiTelemetryPayload> {
-  const result = await fetchClientJson<AiTelemetryPayload>(`/api/admin/crm/ai-telemetry?window=${encodeURIComponent(window)}`, {
-    method: "GET",
-  });
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: result.error,
-    };
-  }
-  return result.data;
-}
-
-function computeHitRatePercent(input: { cacheHits?: number; cacheMisses?: number } | null | undefined): number {
-  const hits = Math.max(0, input?.cacheHits ?? 0);
-  const misses = Math.max(0, input?.cacheMisses ?? 0);
-  const total = hits + misses;
-  if (total <= 0) return 0;
-  return (hits / total) * 100;
-}
-
 export default function CrmRoute() {
   const auth = useAuth();
-  const role = () => (auth.user()?.entitlement?.role || auth.user()?.entitlement?.tier || "free").toLowerCase();
-  const isOwner = () => isOwnerRole(role());
-  const [crm, { refetch }] = createResource(fetchCrmOverview);
+  const isOwner = () => isAuthUserOwner(auth.user());
+  const [crm, { refetch }] = createResource(() => fetchCrmOverview<CrmPayload>());
   const [aiWindow, setAiWindow] = createSignal<"15m" | "1h" | "24h" | "7d" | "30d">("1h");
   const aiTelemetrySource = createMemo(() => (isOwner() ? aiWindow() : undefined));
-  const [aiTelemetry, { refetch: refetchAiTelemetry }] = createResource(aiTelemetrySource, fetchAiTelemetry);
+  const [aiTelemetry, { refetch: refetchAiTelemetry }] = createResource(
+    aiTelemetrySource,
+    (window) => fetchCrmAiTelemetry<AiTelemetryPayload>(window),
+  );
   const [searchTerm, setSearchTerm] = createSignal("");
   const [statusFilter, setStatusFilter] = createSignal<"all" | "active" | "trialing" | "canceled" | "expired" | "none">("all");
   const [selectedUserId, setSelectedUserId] = createSignal("");
@@ -331,23 +298,10 @@ export default function CrmRoute() {
   const [refundAmountUsd, setRefundAmountUsd] = createSignal("");
   const [refundReason, setRefundReason] = createSignal<"requested_by_customer" | "duplicate" | "fraudulent">("requested_by_customer");
 
-  const accountStatusMap = () => {
-    const map = new Map<string, { status?: string; monthlyPriceUsd?: number }>();
-    for (const account of crm()?.result?.billing?.accounts ?? []) {
-      if (typeof account.userId === "string" && account.userId.trim().length > 0) {
-        map.set(account.userId, {
-          status: account.status,
-          monthlyPriceUsd: account.monthlyPriceUsd,
-        });
-      }
-    }
-    return map;
-  };
+  const accountStatusMap = createMemo(() => buildCrmAccountStatusMap(crm()?.result?.billing?.accounts));
 
   const selectedUser = createMemo(() => {
-    const id = selectedUserId();
-    if (!id) return null;
-    return (crm()?.result?.directory?.users ?? []).find((entry) => entry.id === id) ?? null;
+    return findCrmDirectoryUserById(crm()?.result?.directory?.users, selectedUserId());
   });
 
   const loadCustomerOps = async (targetUserId: string, refresh = false) => {
@@ -356,7 +310,7 @@ export default function CrmRoute() {
     setOpsError("");
     setOpsNotice("");
     setOpsBusy(true);
-    const payload = await postCrmAction("/api/admin/crm/customer", { targetUserId, ...(refresh ? { refresh: true } : {}) });
+    const payload = await postCrmAction<CrmCustomerOpsPayload>("/api/admin/crm/customer", { targetUserId, ...(refresh ? { refresh: true } : {}) });
     if (payload.ok === false) {
       setOpsError(payload.error || "Unable to load Stripe customer details.");
       setSelectedCustomerOps(null);
@@ -376,7 +330,7 @@ export default function CrmRoute() {
     setOpsBusy(true);
     setOpsError("");
     setOpsNotice("");
-    const payload = await postCrmAction("/api/admin/crm/cancel-subscription", {
+    const payload = await postCrmAction<CrmCustomerOpsPayload>("/api/admin/crm/cancel-subscription", {
       targetUserId,
       atPeriodEnd,
     });
@@ -407,7 +361,7 @@ export default function CrmRoute() {
     setOpsBusy(true);
     setOpsError("");
     setOpsNotice("");
-    const payload = await postCrmAction("/api/admin/crm/refund", {
+    const payload = await postCrmAction<CrmCustomerOpsPayload>("/api/admin/crm/refund", {
       targetUserId,
       ...(chargeId ? { chargeId } : {}),
       ...(hasAmount ? { amountUsd: parsedAmount } : {}),
@@ -426,27 +380,13 @@ export default function CrmRoute() {
     setOpsBusy(false);
   };
 
-  const latestEventMap = () => {
-    const map = new Map<string, { atMs?: number; kind?: string }>();
-    for (const event of crm()?.result?.latestEvents ?? []) {
-      if (typeof event.userId === "string" && event.userId.trim().length > 0 && !map.has(event.userId)) {
-        map.set(event.userId, { atMs: event.atMs, kind: event.kind });
-      }
-    }
-    return map;
-  };
+  const latestEventMap = createMemo(() => buildCrmLatestEventMap(crm()?.result?.latestEvents));
 
   const filteredUsers = createMemo(() => {
-    const query = searchTerm().trim().toLowerCase();
-    const status = statusFilter();
-    const accounts = accountStatusMap();
-    return (crm()?.result?.directory?.users ?? []).filter((entry) => {
-      const billingStatus = (accounts.get(entry.id)?.status || "none").trim().toLowerCase();
-      const matchesStatus = status === "all" ? true : billingStatus === status;
-      if (!matchesStatus) return false;
-      if (!query) return true;
-      const haystack = `${entry.name} ${entry.login} ${entry.email} ${(entry.providers ?? []).join(" ")}`.toLowerCase();
-      return haystack.includes(query);
+    return filterCrmDirectoryUsers(crm()?.result?.directory?.users, {
+      query: searchTerm(),
+      status: statusFilter(),
+      accounts: accountStatusMap(),
     });
   });
 
@@ -467,30 +407,24 @@ export default function CrmRoute() {
       "created_at",
       "updated_at",
     ];
-    const escapeCell = (value: unknown): string => {
-      const text = String(value ?? "");
-      if (text.includes(",") || text.includes("\"") || text.includes("\n")) {
-        return `"${text.replaceAll("\"", "\"\"")}"`;
-      }
-      return text;
-    };
     const lines = [header.join(",")];
     for (const entry of rows) {
       const billing = accounts.get(entry.id);
       const latestEvent = latestEvents.get(entry.id);
+      const latestEventDisplay = getCrmLatestEventDisplay(latestEvent);
       lines.push([
         entry.id,
         entry.name,
         entry.login,
         entry.email,
-        (entry.providers ?? []).join("|"),
+        formatCrmProviders(entry.providers, "|", ""),
         formatSubscriptionStatus(billing?.status),
         String(billing?.monthlyPriceUsd ?? 0),
-        formatEventLabel(latestEvent?.kind),
-        formatTime(latestEvent?.atMs),
+        latestEventDisplay.kindLabel,
+        latestEventDisplay.atLabel,
         formatTime(entry.createdAtMs),
         formatTime(entry.updatedAtMs),
-      ].map(escapeCell).join(","));
+      ].map(escapeCsvCell).join(","));
     }
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -503,32 +437,14 @@ export default function CrmRoute() {
     URL.revokeObjectURL(url);
   };
 
-  const qualityBadgeTone = () => {
-    const quality = crm()?.result?.dataQuality;
-    const issues =
-      (quality?.missingAvatarUsers ?? 0) +
-      (quality?.placeholderNameUsers ?? 0) +
-      (quality?.syntheticLoginUsers ?? 0) +
-      (quality?.orphanTrackedUsers ?? 0);
-    return issues > 0 ? "text-amber-300 border-amber-500/40 bg-amber-500/10" : "text-emerald-300 border-emerald-500/40 bg-emerald-500/10";
-  };
+  const qualityBadgeTone = () => getCrmQualityBadgeTone(crm()?.result?.dataQuality);
 
-  const aiLaneMaxTokens = createMemo(() =>
-    Math.max(...((aiTelemetry()?.result?.lanes ?? []).map((entry) => entry.totalTokens ?? 0)), 1),
-  );
-  const aiSeriesMaxCalls = createMemo(() =>
-    Math.max(...((aiTelemetry()?.result?.series ?? []).map((entry) => entry.calls ?? 0)), 1),
-  );
-  const aiCacheHitPct = createMemo(() => computeHitRatePercent(aiTelemetry()?.result?.summary));
-  const aiWorstFailureLane = createMemo(() =>
-    [...(aiTelemetry()?.result?.lanes ?? [])].sort((left, right) => (right.failures ?? 0) - (left.failures ?? 0))[0] ?? null,
-  );
-  const aiSlowestLane = createMemo(() =>
-    [...(aiTelemetry()?.result?.lanes ?? [])].sort((left, right) => (right.p95DurationMs ?? 0) - (left.p95DurationMs ?? 0))[0] ?? null,
-  );
-  const aiHungriestLane = createMemo(() =>
-    [...(aiTelemetry()?.result?.lanes ?? [])].sort((left, right) => (right.outputInputRatio ?? 0) - (left.outputInputRatio ?? 0))[0] ?? null,
-  );
+  const aiLaneMaxTokens = createMemo(() => getAiTelemetryMaxValue(aiTelemetry()?.result?.lanes, (entry) => entry.totalTokens, 1));
+  const aiSeriesMaxCalls = createMemo(() => getAiTelemetryMaxValue(aiTelemetry()?.result?.series, (entry) => entry.calls, 1));
+  const aiCacheHitPct = createMemo(() => computeAiCacheHitRatePercent(aiTelemetry()?.result?.summary));
+  const aiWorstFailureLane = createMemo(() => getAiTelemetryTopEntryBy(aiTelemetry()?.result?.lanes, (entry) => entry.failures));
+  const aiSlowestLane = createMemo(() => getAiTelemetryTopEntryBy(aiTelemetry()?.result?.lanes, (entry) => entry.p95DurationMs));
+  const aiHungriestLane = createMemo(() => getAiTelemetryTopEntryBy(aiTelemetry()?.result?.lanes, (entry) => entry.outputInputRatio));
   const crmDegraded = createMemo(() => crm()?.result?.degraded);
   const crmDegradedTone = createMemo(() => getCrmSummaryWarningTone(crmDegraded()));
   const crmDegradedMessage = createMemo(() => getCrmSummaryWarningMessage(crmDegraded()));
@@ -796,7 +712,7 @@ export default function CrmRoute() {
                           <span class="text-[11px] text-zinc-500">top lanes by total tokens</span>
                         </div>
                         <div class="mt-3 space-y-2">
-                          <For each={aiTelemetry()?.result?.lanes ?? []}>
+                          <For each={readAiTelemetryItems(aiTelemetry()?.result?.lanes)}>
                             {(item) => {
                               const width = `${Math.max(8, ((item.totalTokens ?? 0) / aiLaneMaxTokens()) * 100)}%`;
                               return (
@@ -813,7 +729,7 @@ export default function CrmRoute() {
                                     <span>{formatNumber(item.failures)} failures</span>
                                     <span>{formatNumber(item.avgDurationMs)}ms avg</span>
                                     <span>{formatNumber(item.p95DurationMs)}ms p95</span>
-                                    <span>{formatPercent(computeHitRatePercent(item))} cache hit</span>
+                                    <span>{formatPercent(computeAiCacheHitRatePercent(item))} cache hit</span>
                                     <span>{formatPercent((item.outputInputRatio ?? 0) * 100)} output/input</span>
                                   </div>
                                 </div>
@@ -827,7 +743,7 @@ export default function CrmRoute() {
                         <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                           <h3 class="text-sm font-semibold text-zinc-100">Model Spend</h3>
                           <div class="mt-3 space-y-2">
-                            <For each={aiTelemetry()?.result?.models ?? []}>
+                            <For each={readAiTelemetryItems(aiTelemetry()?.result?.models)}>
                               {(item) => (
                                 <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
                                   <span class="text-zinc-300">{formatEventLabel(item.label)}</span>
@@ -841,7 +757,7 @@ export default function CrmRoute() {
                         <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                           <h3 class="text-sm font-semibold text-zinc-100">Cache + Outcomes</h3>
                           <div class="mt-3 grid gap-2">
-                            <For each={aiTelemetry()?.result?.cacheStatuses ?? []}>
+                            <For each={readAiTelemetryItems(aiTelemetry()?.result?.cacheStatuses)}>
                               {(item) => (
                                 <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
                                   <span class="text-zinc-300">{formatEventLabel(item.label)}</span>
@@ -849,7 +765,7 @@ export default function CrmRoute() {
                                 </div>
                               )}
                             </For>
-                            <For each={aiTelemetry()?.result?.outcomes ?? []}>
+                            <For each={readAiTelemetryItems(aiTelemetry()?.result?.outcomes)}>
                               {(item) => (
                                 <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
                                   <span class="text-zinc-300">{formatEventLabel(item.label)}</span>
@@ -868,7 +784,7 @@ export default function CrmRoute() {
                         <span class="text-[11px] text-zinc-500">generated {formatTime(aiTelemetry()?.result?.generatedAtMs)}</span>
                       </div>
                       <div class="mt-3 grid gap-2">
-                        <For each={aiTelemetry()?.result?.series ?? []}>
+                        <For each={readAiTelemetryItems(aiTelemetry()?.result?.series)}>
                           {(point) => {
                             const width = `${Math.max(4, ((point.calls ?? 0) / aiSeriesMaxCalls()) * 100)}%`;
                             return (
@@ -947,6 +863,7 @@ export default function CrmRoute() {
                       {(entry) => {
                         const billing = accountStatusMap().get(entry.id);
                         const latestEvent = latestEventMap().get(entry.id);
+                        const latestEventDisplay = getCrmLatestEventDisplay(latestEvent);
                         return (
                           <tr class="border-b border-white/[0.04] text-zinc-300">
                             <td class="px-2 py-2">
@@ -954,12 +871,12 @@ export default function CrmRoute() {
                               <p class="text-xs text-zinc-500">{entry.login}</p>
                             </td>
                             <td class="px-2 py-2 text-xs text-zinc-400">{entry.email}</td>
-                            <td class="px-2 py-2 text-xs text-zinc-400">{(entry.providers ?? []).join(", ") || "—"}</td>
+                            <td class="px-2 py-2 text-xs text-zinc-400">{formatCrmProviders(entry.providers)}</td>
                             <td class="px-2 py-2 text-xs text-zinc-200">{formatSubscriptionStatus(billing?.status)}</td>
                             <td class="px-2 py-2 text-xs text-zinc-200">{formatUsd(billing?.monthlyPriceUsd)}</td>
                             <td class="px-2 py-2 text-xs text-zinc-400">
-                              <p>{formatEventLabel(latestEvent?.kind)}</p>
-                              <p>{formatTime(latestEvent?.atMs)}</p>
+                              <p>{latestEventDisplay.kindLabel}</p>
+                              <p>{latestEventDisplay.atLabel}</p>
                             </td>
                             <td class="px-2 py-2 text-xs text-zinc-400">{formatTime(entry.createdAtMs)}</td>
                             <td class="px-2 py-2 text-xs text-zinc-400">
@@ -1017,19 +934,19 @@ export default function CrmRoute() {
                       <div class="mt-3 grid gap-2 sm:grid-cols-2">
                         <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Account Status</p>
-                          <p class="text-sm font-medium text-zinc-100">{formatSubscriptionStatus(selectedCustomerOps()?.result?.account?.status)}</p>
+                          <p class="text-sm font-medium text-zinc-100">{getCrmCustomerAccountStatusLabel(selectedCustomerOps()?.result)}</p>
                         </div>
                         <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Stripe Customer</p>
-                          <p class="truncate text-sm font-medium text-zinc-100">{selectedCustomerOps()?.result?.account?.stripeCustomerId || "—"}</p>
+                          <p class="truncate text-sm font-medium text-zinc-100">{getCrmCustomerStripeCustomerId(selectedCustomerOps()?.result)}</p>
                         </div>
                         <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Stripe Subscription</p>
-                          <p class="truncate text-sm font-medium text-zinc-100">{selectedCustomerOps()?.result?.stripe?.subscription?.id || selectedCustomerOps()?.result?.account?.stripeSubscriptionId || "—"}</p>
+                          <p class="truncate text-sm font-medium text-zinc-100">{getCrmCustomerStripeSubscriptionId(selectedCustomerOps()?.result)}</p>
                         </div>
                         <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Current Period End</p>
-                          <p class="text-sm font-medium text-zinc-100">{formatTime(selectedCustomerOps()?.result?.stripe?.subscription?.currentPeriodEndMs ?? undefined)}</p>
+                          <p class="text-sm font-medium text-zinc-100">{formatTime(getCrmCustomerCurrentPeriodEndMs(selectedCustomerOps()?.result))}</p>
                         </div>
                       </div>
                       <Show when={selectedCustomerOps()?.result?.cache}>
@@ -1040,7 +957,7 @@ export default function CrmRoute() {
                               {getCrmCustomerCacheSourceLabel(cache().source)}
                             </span>
                             {" • "}
-                            fetched {formatTime(cache().fetchedAtMs)}
+                            fetched {formatTime(getCrmCustomerCacheFetchedAtMs(selectedCustomerOps()?.result))}
                           </p>
                         )}
                       </Show>
@@ -1110,11 +1027,11 @@ export default function CrmRoute() {
                     </article>
                   </div>
 
-                  <Show when={(selectedCustomerOps()?.result?.stripe?.charges?.length ?? 0) > 0}>
+                  <Show when={readCrmCustomerCharges(selectedCustomerOps()?.result).length > 0}>
                     <div class="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
                       <p class="text-xs uppercase tracking-[0.11em] text-zinc-500">Recent Charges</p>
                       <div class="mt-2 space-y-2">
-                        <For each={selectedCustomerOps()?.result?.stripe?.charges ?? []}>
+                        <For each={readCrmCustomerCharges(selectedCustomerOps()?.result)}>
                           {(charge) => (
                             <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
                               <div>
@@ -1141,7 +1058,7 @@ export default function CrmRoute() {
               <section class="intel-panel mt-4 p-4">
                 <h2 class="text-base font-semibold text-zinc-100">Telemetry Event Mix (7d)</h2>
                 <div class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <For each={crm()?.result?.telemetry?.topKinds7d ?? []}>
+                  <For each={readCrmItems(crm()?.result?.telemetry?.topKinds7d)}>
                     {(item) => (
                       <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
                         <p class="text-xs text-zinc-500">{formatEventLabel(item.kind)}</p>

@@ -1,23 +1,55 @@
 import type { Severity } from "./types";
 
+type SeverityCarrier = {
+  severity: Severity | "";
+};
+
+const SEVERITY_STYLES: Record<Severity, {
+  text: string;
+  surface: string;
+  dot: string;
+  hex: string;
+}> = {
+  critical: {
+    text: "text-red-400",
+    surface: "bg-red-500/15 text-red-400 ring-red-500/30",
+    dot: "bg-red-400 shadow-[0_0_6px_rgba(239,68,68,0.5)]",
+    hex: "#ef4444",
+  },
+  high: {
+    text: "text-amber-400",
+    surface: "bg-amber-500/15 text-amber-400 ring-amber-500/30",
+    dot: "bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.4)]",
+    hex: "#f59e0b",
+  },
+  medium: {
+    text: "text-blue-400",
+    surface: "bg-blue-500/15 text-blue-400 ring-blue-500/30",
+    dot: "bg-blue-400",
+    hex: "#3b82f6",
+  },
+  low: {
+    text: "text-zinc-400",
+    surface: "bg-zinc-500/15 text-zinc-400 ring-zinc-500/30",
+    dot: "bg-zinc-500",
+    hex: "#71717a",
+  },
+};
+
 export function severityColor(severity: Severity | ""): string {
-  switch (severity) {
-    case "critical": return "text-red-400";
-    case "high": return "text-amber-400";
-    case "medium": return "text-blue-400";
-    case "low": return "text-zinc-400";
-    default: return "text-zinc-500";
-  }
+  return severity ? SEVERITY_STYLES[severity].text : "text-zinc-500";
 }
 
 export function severityBg(severity: Severity | ""): string {
-  switch (severity) {
-    case "critical": return "bg-red-500/15 text-red-400 ring-red-500/30";
-    case "high": return "bg-amber-500/15 text-amber-400 ring-amber-500/30";
-    case "medium": return "bg-blue-500/15 text-blue-400 ring-blue-500/30";
-    case "low": return "bg-zinc-500/15 text-zinc-400 ring-zinc-500/30";
-    default: return "bg-zinc-500/10 text-zinc-500 ring-zinc-500/20";
-  }
+  return severity ? SEVERITY_STYLES[severity].surface : "bg-zinc-500/10 text-zinc-500 ring-zinc-500/20";
+}
+
+export function severityDot(severity: Severity | ""): string {
+  return severity ? SEVERITY_STYLES[severity].dot : "bg-zinc-500";
+}
+
+export function severityHexColor(severity: Severity | ""): string {
+  return severity ? SEVERITY_STYLES[severity].hex : "#71717a";
 }
 
 export function formatRelativeTimeAt(timestamp: string, now: number): string {
@@ -58,10 +90,40 @@ export function formatAgeAgoAt(atMs: number | undefined, nowMs: number): string 
   return `${formatAgeCompactFromMs(Math.max(0, nowMs - atMs))} ago`;
 }
 
+export function truncateText(value: string, maxChars: number, ellipsis = "..."): string {
+  if (!Number.isFinite(maxChars) || maxChars <= 0) {
+    return "";
+  }
+  if (value.length <= maxChars) {
+    return value;
+  }
+  return `${value.slice(0, maxChars)}${ellipsis}`;
+}
+
+export function getInitialLetter(value: string, fallback: string): string {
+  const normalized = value.trim();
+  return normalized.slice(0, 1).toUpperCase() || fallback;
+}
+
+export function isInitialResourceLoading(resourceState: string | undefined, itemCount: number): boolean {
+  return resourceState === "refreshing" && itemCount === 0;
+}
+
 export function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return n.toString();
+}
+
+export function parseCompactNumber(value: string): number {
+  const upper = value.replace(/,/g, "").trim().toUpperCase();
+  const match = upper.match(/^([0-9]+(?:\.[0-9]+)?)([KMB])?$/);
+  if (!match) return Number.parseInt(upper.replace(/[^0-9]/g, ""), 10) || 0;
+  const base = Number.parseFloat(match[1]);
+  if (match[2] === "K") return Math.round(base * 1_000);
+  if (match[2] === "M") return Math.round(base * 1_000_000);
+  if (match[2] === "B") return Math.round(base * 1_000_000_000);
+  return Math.round(base);
 }
 
 export function formatWholeNumber(value: number | undefined): string {
@@ -116,4 +178,17 @@ export function formatLongDateTime(timestamp: string): string {
 
 export function formatPrice(price: number): string {
   return `${(price * 100).toFixed(0)}¢`;
+}
+
+export function countBySeverity<T extends SeverityCarrier>(items: T[]): Record<Severity, number> {
+  const counts: Record<Severity, number> = {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+  };
+  for (const item of items) {
+    if (item.severity) counts[item.severity] += 1;
+  }
+  return counts;
 }

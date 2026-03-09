@@ -11,7 +11,7 @@
   "dependencies": {
     "@intel-dashboard/shared": "workspace:*",
     "@kobalte/core": "^0.13.11",
-    "@solid-primitives/intersection-observer": "^2.2.2",
+    "@solid-primitives/intersection-observer": "^2.2.4",
     "@solid-primitives/media": "^2.3.5",
     "@solid-primitives/resize-observer": "^2.1.5",
     "@solid-primitives/scroll": "^2.1.5",

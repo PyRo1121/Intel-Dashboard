@@ -16,6 +16,7 @@ import {
   createBriefingsFixture,
   createIntelFixture,
   EDGE_BASE_URL,
+  SESSION_COOKIE,
   captureBrowserArtifacts,
   createBrowserContext,
   createBrowserContextWithCookie,

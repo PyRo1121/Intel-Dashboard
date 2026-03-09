@@ -4,7 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { chromium } from "@playwright/test";
 import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
-import { waitForBillingDashboard, waitForCrmDashboard } from "./browser-test-helpers.mjs";
+import { waitForBillingDashboard, waitForCrmAiSurface, waitForCrmDashboard } from "./browser-test-helpers.mjs";
 import {
   AUTHENTICATED_BROWSER_NOERROR_ROUTES,
   AUTHENTICATED_BROWSER_ROUTES,
@@ -480,17 +480,9 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
         await toggle.click();
         assert.equal(await toggle.getAttribute("aria-pressed"), "true", `CRM AI window ${window} should become active`);
         await page.getByTestId("crm-ai-refresh").click();
-        await page.getByTestId("crm-ai-surface").waitFor({ state: "visible", timeout: 30_000 });
-        await page.waitForFunction(() => {
-          const configured = document.querySelector('[data-testid="crm-ai-surface-configured"]');
-          const unavailable = document.querySelector('[data-testid="crm-ai-surface-unavailable"]');
-          const loading = document.querySelector('[data-testid="crm-ai-surface-loading"]');
-          return Boolean(configured || unavailable || !loading);
-        }, { timeout: 30_000 });
-        const hasConfiguredAiSurface = await page.getByTestId("crm-ai-surface-configured").count();
-        const hasUnavailableAiSurface = await page.getByTestId("crm-ai-surface-unavailable").count();
+        const { configuredCount, unavailableCount } = await waitForCrmAiSurface(page);
         assert.ok(
-          hasConfiguredAiSurface > 0 || hasUnavailableAiSurface > 0,
+          configuredCount > 0 || unavailableCount > 0,
           `CRM should render either the configured AI telemetry surface or an explicit unavailable-state banner for ${window}`,
         );
       }

@@ -213,6 +213,23 @@ export async function waitForBillingDashboard(page) {
   return billingNotice;
 }
 
+export async function waitForCrmAiSurface(page) {
+  await page.getByTestId("crm-ai-surface").waitFor({ state: "visible", timeout: 30_000 });
+  await page.waitForFunction(() => {
+    const configured = document.querySelector('[data-testid="crm-ai-surface-configured"]');
+    const unavailable = document.querySelector('[data-testid="crm-ai-surface-unavailable"]');
+    const loading = document.querySelector('[data-testid="crm-ai-surface-loading"]');
+    return Boolean(configured || unavailable || !loading);
+  }, { timeout: 30_000 });
+
+  const configuredCount = await page.getByTestId("crm-ai-surface-configured").count();
+  const unavailableCount = await page.getByTestId("crm-ai-surface-unavailable").count();
+  return {
+    configuredCount,
+    unavailableCount,
+  };
+}
+
 export function collectBrowserDiagnostics(page, baseUrl) {
   const pageErrors = [];
   const consoleErrors = [];

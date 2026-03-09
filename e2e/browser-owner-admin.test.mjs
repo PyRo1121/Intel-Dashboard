@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { captureBrowserArtifacts, createBrowserContext, EDGE_BASE_URL, waitForBillingDashboard, waitForCrmDashboard } from "./browser-test-helpers.mjs";
+import {
+  captureBrowserArtifacts,
+  createBrowserContext,
+  EDGE_BASE_URL,
+  waitForBillingDashboard,
+  waitForCrmAiSurface,
+  waitForCrmDashboard,
+} from "./browser-test-helpers.mjs";
 
 test("owner-admin billing actions surface owner bypass notices", async (t) => {
   const runtime = await createBrowserContext(t);
@@ -89,15 +96,7 @@ test("owner-admin CRM controls filter, export, and enforce refund guardrails", a
         await toggle.click();
         assert.equal(await toggle.getAttribute("aria-pressed"), "true");
         await page.getByTestId("crm-ai-refresh").click();
-        await page.getByTestId("crm-ai-surface").waitFor({ state: "visible", timeout: 30_000 });
-        await page.waitForFunction(() => {
-          const configured = document.querySelector('[data-testid="crm-ai-surface-configured"]');
-          const unavailable = document.querySelector('[data-testid="crm-ai-surface-unavailable"]');
-          const loading = document.querySelector('[data-testid="crm-ai-surface-loading"]');
-          return Boolean(configured || unavailable || !loading);
-        }, { timeout: 30_000 });
-        const configuredCount = await page.getByTestId("crm-ai-surface-configured").count();
-        const unavailableCount = await page.getByTestId("crm-ai-surface-unavailable").count();
+        const { configuredCount, unavailableCount } = await waitForCrmAiSurface(page);
         assert.ok(configuredCount > 0 || unavailableCount > 0);
       }
     } catch (error) {

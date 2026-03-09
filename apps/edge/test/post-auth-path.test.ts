@@ -12,6 +12,7 @@ test("getDashboardAppRoutePrefixes exposes the allowed dashboard route roots", (
     "/overview",
     "/osint",
     "/my-feed",
+    "/my-alerts",
     "/telegram",
     "/map",
     "/air-sea",

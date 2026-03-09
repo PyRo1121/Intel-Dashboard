@@ -5,6 +5,7 @@ export const AUTH_NEXT_ROUTE_PREFIXES = [
   DASHBOARD_HOME_PATH,
   "/osint",
   "/my-feed",
+  "/my-alerts",
   "/telegram",
   "/map",
   "/air-sea",

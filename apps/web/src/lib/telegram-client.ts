@@ -17,8 +17,12 @@ export const EMPTY_TELEGRAM_DATA: TelegramData = {
   channels: [],
 };
 
+function withOptionalSignal(signal?: AbortSignal): { signal?: AbortSignal } {
+  return signal ? { signal } : {};
+}
+
 export async function fetchTelegramFeed<T>(signal?: AbortSignal): Promise<T | null> {
-  const result = await fetchPublicJson<T>("/api/telegram", { signal });
+  const result = await fetchPublicJson<T>("/api/telegram", withOptionalSignal(signal));
   return result.ok ? result.data : null;
 }
 
@@ -27,7 +31,7 @@ export function resolveTelegramFeedData(data: TelegramData | null | undefined): 
 }
 
 export async function fetchTelegramDedupeFeedbackStatus(signal?: AbortSignal): Promise<TelegramDedupeFeedbackStatus | null> {
-  const result = await fetchClientJson<{ count?: unknown }>("/api/telegram/dedupe-feedback", { signal });
+  const result = await fetchClientJson<{ count?: unknown }>("/api/telegram/dedupe-feedback", withOptionalSignal(signal));
   if (!result.ok) {
     if (result.status === 403) {
       return { ownerEnabled: false, count: 0 };

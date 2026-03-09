@@ -3,6 +3,9 @@ import test from "node:test";
 import { BROWSER_METADATA_EXPECTATIONS } from "./coverage-manifest.mjs";
 import {
   assertNoBrowserDiagnostics,
+  assertNotFoundPage,
+  assertPageTitle,
+  assertResponseStatus,
   openAndAssertPublicAuthEntry,
   captureBrowserArtifacts,
   collectBrowserDiagnostics,
@@ -36,10 +39,8 @@ test("public auth entry pages render the current Intel Dashboard access contract
       const page = await context.newPage();
       try {
         const response = await openPublicPage(page, expectation.path);
-        assert.ok(response);
-        assert.equal(response.status(), 200);
-        await page.waitForTimeout(500);
-        assert.equal(await page.title(), expectation.title);
+        assertResponseStatus(response, 200);
+        await assertPageTitle(page, expectation.title);
       } catch (error) {
         await captureBrowserArtifacts(page, `public-auth-meta-${expectation.path}`, error);
         throw error;
@@ -51,9 +52,8 @@ test("public auth entry pages render the current Intel Dashboard access contract
     const notFoundPage = await context.newPage();
     try {
       const response = await openPublicPage(notFoundPage, "/this-page-should-not-exist-xyz");
-      assert.ok(response);
-      assert.equal(response.status(), 404);
-      assert.match((await notFoundPage.textContent("body")) || "", /404|not found/i);
+      assertResponseStatus(response, 404);
+      await assertNotFoundPage(notFoundPage);
     } catch (error) {
       await captureBrowserArtifacts(notFoundPage, "public-404-contract", error);
       throw error;

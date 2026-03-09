@@ -246,6 +246,20 @@ export async function openAndAssertPublicAuthEntry(page, options) {
   await assertPublicAuthEntrySurface(page, { mode, nextPath });
 }
 
+export async function assertPageTitle(page, expectedTitle) {
+  await page.waitForTimeout(500);
+  assert.equal(await page.title(), expectedTitle);
+}
+
+export function assertResponseStatus(response, expectedStatus) {
+  assert.ok(response);
+  assert.equal(response.status(), expectedStatus);
+}
+
+export async function assertNotFoundPage(page) {
+  assert.match((await page.textContent("body")) || "", /404|not found/i);
+}
+
 export async function waitForCrmDashboard(page) {
   await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });

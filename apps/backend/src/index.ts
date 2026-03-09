@@ -2719,20 +2719,6 @@ async function enqueueBriefingRefresh(args: {
     return false;
   }
 
-  const ttlSeconds = normalizeBriefingCacheTtlSeconds(args.env.BRIEFING_CACHE_TTL_SECONDS);
-  const refreshIntervalSeconds = normalizeBriefingRefreshIntervalSeconds(args.env.BRIEFING_REFRESH_INTERVAL_SECONDS);
-  const pendingTtlSeconds = Math.min(ttlSeconds, refreshIntervalSeconds + 60);
-  await kv.put(
-    buildBriefingPendingKey(args.env, args.windowStartMs),
-    JSON.stringify({
-      windowStartMs: args.windowStartMs,
-      windowHours: args.windowHours,
-      sourceHash: args.sourceHash,
-      updatedAtMs: nowMs,
-    }),
-    { expirationTtl: pendingTtlSeconds },
-  );
-
   if (args.env.AI_JOB_QUEUE && typeof args.env.AI_JOB_QUEUE.send === "function") {
     await enqueueAiBatchMessage({
       env: args.env,
@@ -2743,6 +2729,19 @@ async function enqueueBriefingRefresh(args: {
         sourceHash: args.sourceHash,
       },
     });
+    const ttlSeconds = normalizeBriefingCacheTtlSeconds(args.env.BRIEFING_CACHE_TTL_SECONDS);
+    const refreshIntervalSeconds = normalizeBriefingRefreshIntervalSeconds(args.env.BRIEFING_REFRESH_INTERVAL_SECONDS);
+    const pendingTtlSeconds = Math.min(ttlSeconds, refreshIntervalSeconds + 60);
+    await kv.put(
+      buildBriefingPendingKey(args.env, args.windowStartMs),
+      JSON.stringify({
+        windowStartMs: args.windowStartMs,
+        windowHours: args.windowHours,
+        sourceHash: args.sourceHash,
+        updatedAtMs: nowMs,
+      }),
+      { expirationTtl: pendingTtlSeconds },
+    );
     return true;
   }
 
@@ -2937,12 +2936,16 @@ async function buildPublicBriefings(args: {
         );
 
       if (args.allowBackgroundRefresh !== false && shouldRefresh) {
-        await enqueueBriefingRefresh({
-          env: args.env,
-          windowStartMs: bucketStart,
-          windowHours,
-          sourceHash,
-        });
+        try {
+          await enqueueBriefingRefresh({
+            env: args.env,
+            windowStartMs: bucketStart,
+            windowHours,
+            sourceHash,
+          });
+        } catch {
+          // Keep the endpoint serving cached or fallback briefing content even when queueing fails.
+        }
       }
     } else {
       const cached = await loadCachedBriefingWindow(args.env, bucketStart);

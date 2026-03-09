@@ -1810,6 +1810,44 @@ describe("intel-dashboard backend worker", () => {
     );
   });
 
+  it("keeps /api/briefings alive when refresh enqueue fails and does not persist a pending marker", async () => {
+    const briefingWindowStart = 1_699_992_000_000;
+    const kv = createKvMapBinding({
+      "intel-dashboard:usage:news:feed": [
+        {
+          id: "brief-1",
+          title: "Drone strike near critical infrastructure",
+          url: "https://example.com/drone",
+          summary: "Infrastructure strike and emergency response underway.",
+          source: "Example Desk",
+          publishedAtMs: briefingWindowStart + 10_000,
+          severity: "critical",
+          region: "middle_east",
+          category: "conflict",
+        },
+      ],
+    });
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/briefings", { method: "GET" }),
+      {
+        USAGE_KV: kv.binding,
+        AI_JOB_QUEUE: {
+          send: async () => {
+            throw new Error("queue down");
+          },
+        },
+        BRIEFING_AI_WINDOWS: "1",
+        PUBLIC_FEED_ROUTES_ENABLED: "true",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as Array<{ content: string }>;
+    expect(payload[0]?.content).toContain("INTELLIGENCE BRIEFING");
+    expect(kv.data.has(`intel-dashboard:usage:briefing:pending:${briefingWindowStart}`)).toBe(false);
+  });
+
   it("processes queued briefing refresh jobs and persists cached AI content", async () => {
     const briefingWindowStart = 1_699_992_000_000;
     const kv = createKvMapBinding({

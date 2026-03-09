@@ -546,6 +546,21 @@ type AiBatchState = {
   error?: string;
 };
 
+type AiBatchStateMeta = {
+  id: string;
+  status: AiBatchStatus;
+  createdAtMs: number;
+  updatedAtMs: number;
+  provider: AiBatchProvider;
+  maxConnections: number;
+  pollAttempts: number;
+  totalJobs: number;
+  externalBatchId?: string;
+  outputFileId?: string;
+  results?: AiBatchJobResult[];
+  error?: string;
+};
+
 type AiJobRequest =
   | {
       type: "dedupe";
@@ -1516,6 +1531,10 @@ function extractMediaUrls(value: unknown, maxItems: number): string[] {
 
 function resolveAiBatchStateKey(env: WorkerEnv, batchId: string): string {
   return `${normalizeAiBatchNamespacePrefix(env.AI_BATCH_NAMESPACE_PREFIX)}:state:${batchId}`;
+}
+
+function resolveAiBatchMetaKey(env: WorkerEnv, batchId: string): string {
+  return `${normalizeAiBatchNamespacePrefix(env.AI_BATCH_NAMESPACE_PREFIX)}:meta:${batchId}`;
 }
 
 function resolveAiBatchIdempotencyKey(env: WorkerEnv, idempotencyKey: string): string {
@@ -7730,13 +7749,93 @@ async function loadAiBatchState(env: WorkerEnv, batchId: string): Promise<AiBatc
   }
 }
 
+function normalizeAiBatchStateMeta(value: unknown, batchId: string): AiBatchStateMeta | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const statusRaw = trimString(value.status);
+  const status =
+    statusRaw === "queued" ||
+    statusRaw === "running" ||
+    statusRaw === "submitted" ||
+    statusRaw === "polling" ||
+    statusRaw === "completed" ||
+    statusRaw === "failed"
+      ? (statusRaw as AiBatchStatus)
+      : null;
+  const provider = normalizeAiBatchProvider(trimString(value.provider));
+  const createdAtMs = parseFiniteNumber(value.createdAtMs);
+  const updatedAtMs = parseFiniteNumber(value.updatedAtMs);
+  const maxConnections = parseFiniteNumber(value.maxConnections);
+  const pollAttempts = parseFiniteNumber(value.pollAttempts);
+  const totalJobs = parseFiniteNumber(value.totalJobs);
+  if (
+    !status ||
+    createdAtMs === undefined ||
+    updatedAtMs === undefined ||
+    maxConnections === undefined ||
+    pollAttempts === undefined ||
+    totalJobs === undefined
+  ) {
+    return null;
+  }
+
+  return {
+    id: trimString(value.id) ?? batchId,
+    status,
+    createdAtMs: Math.floor(createdAtMs),
+    updatedAtMs: Math.floor(updatedAtMs),
+    provider,
+    maxConnections: clamp(Math.floor(maxConnections), 1, MAX_AI_PIPELINE_MAX_CONNECTIONS),
+    pollAttempts: Math.max(0, Math.floor(pollAttempts)),
+    totalJobs: Math.max(0, Math.floor(totalJobs)),
+    ...(trimString(value.externalBatchId) ? { externalBatchId: trimString(value.externalBatchId) } : {}),
+    ...(trimString(value.outputFileId) ? { outputFileId: trimString(value.outputFileId) } : {}),
+    ...(Array.isArray(value.results) ? { results: value.results as AiBatchJobResult[] } : {}),
+    ...(trimString(value.error) ? { error: trimString(value.error) } : {}),
+  };
+}
+
+async function loadAiBatchStateMeta(env: WorkerEnv, batchId: string): Promise<AiBatchStateMeta | null> {
+  const kv = getAiBatchKv(env);
+  if (!kv) {
+    return null;
+  }
+  const raw = await kv.get(resolveAiBatchMetaKey(env, batchId));
+  if (!raw) {
+    return null;
+  }
+  try {
+    return normalizeAiBatchStateMeta(JSON.parse(raw) as unknown, batchId);
+  } catch {
+    return null;
+  }
+}
+
 async function saveAiBatchState(env: WorkerEnv, state: AiBatchState): Promise<void> {
   const kv = getAiBatchKv(env);
   if (!kv || typeof kv.put !== "function") {
     throw new Error("USAGE_KV binding with get()/put() is required for AI batch jobs.");
   }
   const ttl = normalizeAiBatchStatusTtlSeconds(env.AI_BATCH_STATUS_TTL_SECONDS);
-  await kv.put(resolveAiBatchStateKey(env, state.id), JSON.stringify(state), { expirationTtl: ttl });
+  const meta: AiBatchStateMeta = {
+    id: state.id,
+    status: state.status,
+    createdAtMs: state.createdAtMs,
+    updatedAtMs: state.updatedAtMs,
+    provider: state.provider,
+    maxConnections: state.maxConnections,
+    pollAttempts: state.pollAttempts,
+    totalJobs: state.jobs.length,
+    ...(state.externalBatchId ? { externalBatchId: state.externalBatchId } : {}),
+    ...(state.outputFileId ? { outputFileId: state.outputFileId } : {}),
+    ...(state.results ? { results: state.results } : {}),
+    ...(state.error ? { error: state.error } : {}),
+  };
+  await Promise.all([
+    kv.put(resolveAiBatchStateKey(env, state.id), JSON.stringify(state), { expirationTtl: ttl }),
+    kv.put(resolveAiBatchMetaKey(env, state.id), JSON.stringify(meta), { expirationTtl: ttl }),
+  ]);
 }
 
 async function loadAiBatchIdempotency(env: WorkerEnv, idempotencyKey: string): Promise<string | null> {
@@ -7766,6 +7865,23 @@ function aiBatchStateResponse(state: AiBatchState): Record<string, unknown> {
     maxConnections: state.maxConnections,
     pollAttempts: state.pollAttempts,
     totalJobs: state.jobs.length,
+    ...(state.externalBatchId ? { externalBatchId: state.externalBatchId } : {}),
+    ...(state.outputFileId ? { outputFileId: state.outputFileId } : {}),
+    ...(state.results ? { jobs: state.results } : {}),
+    ...(state.error ? { error: state.error } : {}),
+  };
+}
+
+function aiBatchMetaResponse(state: AiBatchStateMeta): Record<string, unknown> {
+  return {
+    id: state.id,
+    status: state.status,
+    provider: state.provider,
+    createdAtMs: state.createdAtMs,
+    updatedAtMs: state.updatedAtMs,
+    maxConnections: state.maxConnections,
+    pollAttempts: state.pollAttempts,
+    totalJobs: state.totalJobs,
     ...(state.externalBatchId ? { externalBatchId: state.externalBatchId } : {}),
     ...(state.outputFileId ? { outputFileId: state.outputFileId } : {}),
     ...(state.results ? { jobs: state.results } : {}),
@@ -8426,13 +8542,13 @@ async function handleAiJobsStatus(args: {
   env: WorkerEnv;
   batchId: string;
 }): Promise<Response> {
-  const state = await loadAiBatchState(args.env, args.batchId);
-  if (!state) {
+  const stateMeta = await loadAiBatchStateMeta(args.env, args.batchId);
+  if (!stateMeta) {
     return errorJson(404, "AI batch job not found.");
   }
   return responseJson(200, {
     ok: true,
-    result: aiBatchStateResponse(state),
+    result: aiBatchMetaResponse(stateMeta),
   });
 }
 
@@ -8500,11 +8616,11 @@ async function handleAiJobs(args: {
   if (idempotencyKey) {
     const existingBatchId = await loadAiBatchIdempotency(args.env, idempotencyKey);
     if (existingBatchId) {
-      const existingState = await loadAiBatchState(args.env, existingBatchId);
+      const existingState = await loadAiBatchStateMeta(args.env, existingBatchId);
       if (existingState) {
         return responseJson(202, {
           ok: true,
-          result: aiBatchStateResponse(existingState),
+          result: aiBatchMetaResponse(existingState),
         });
       }
     }
@@ -8542,12 +8658,21 @@ async function handleAiJobs(args: {
     }
   }
 
-  const currentState = (await loadAiBatchState(args.env, batchId)) ?? queuedState;
+  const currentState = (await loadAiBatchStateMeta(args.env, batchId)) ?? {
+    id: queuedState.id,
+    status: queuedState.status,
+    createdAtMs: queuedState.createdAtMs,
+    updatedAtMs: queuedState.updatedAtMs,
+    provider: queuedState.provider,
+    maxConnections: queuedState.maxConnections,
+    pollAttempts: queuedState.pollAttempts,
+    totalJobs: queuedState.jobs.length,
+  };
   return responseJson(202, {
     ok: true,
     result: {
       mode: "async",
-      ...aiBatchStateResponse(currentState),
+      ...aiBatchMetaResponse(currentState),
     },
   });
 }

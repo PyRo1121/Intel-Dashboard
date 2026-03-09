@@ -3540,6 +3540,51 @@ describe("intel-dashboard backend worker", () => {
     });
   });
 
+  it("serves ai job status from lightweight meta records without full state payload", async () => {
+    const kv = createKvMapBinding({
+      "intel-dashboard:ai-batch:meta:batch-meta-only": {
+        id: "batch-meta-only",
+        status: "submitted",
+        createdAtMs: 10,
+        updatedAtMs: 20,
+        provider: "groq",
+        maxConnections: 10,
+        pollAttempts: 2,
+        totalJobs: 40,
+        externalBatchId: "ext-123",
+      },
+    });
+
+    const response = await worker.fetch(
+      new Request(
+        "https://backend.example.com/api/intel-dashboard/ai/jobs?batchId=batch-meta-only",
+        {
+          method: "GET",
+          headers: {
+            authorization: "Bearer admin-token",
+          },
+        },
+      ),
+      {
+        BILLING_ADMIN_TOKEN: "admin-token",
+        AI_JOBS_PATH: "/api/intel-dashboard/ai/jobs",
+        USAGE_KV: kv.binding,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      result: {
+        id: "batch-meta-only",
+        status: "submitted",
+        provider: "groq",
+        totalJobs: 40,
+        externalBatchId: "ext-123",
+      },
+    });
+  });
+
   it("processes queued internal ai batch run messages", async () => {
     const kv = createKvMapBinding();
 

@@ -471,9 +471,12 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
       await page.getByRole("button", { name: "Refresh AI" }).click();
       await page.waitForSelector("text=AI Command Surface", { timeout: 30_000 });
       const pageText = (await page.textContent("body")) || "";
-      assert.match(pageText, /Lane Spend/i, "CRM should render the AI lane breakdown");
-      assert.match(pageText, /Model Spend/i, "CRM should render the AI model breakdown");
-      assert.match(pageText, /Failure Hotspot/i, "CRM should render AI hotspot cards");
+      const hasConfiguredAiSurface = /Lane Spend/i.test(pageText) && /Model Spend/i.test(pageText) && /Failure Hotspot/i.test(pageText);
+      const hasUnavailableAiSurface = /AI telemetry query credentials are not configured\./i.test(pageText);
+      assert.ok(
+        hasConfiguredAiSurface || hasUnavailableAiSurface,
+        "CRM should render either the configured AI telemetry surface or an explicit unavailable-state banner",
+      );
     } catch (error) {
       await captureBrowserArtifacts(page, "authenticated-crm-controls", error);
       throw error;

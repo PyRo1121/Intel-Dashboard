@@ -126,11 +126,15 @@ test("owner-admin CRM keyboard navigation stays intact", async (t) => {
     const page = await context.newPage();
     try {
       await page.goto(`${EDGE_BASE_URL}/crm`, {
-        waitUntil: "domcontentloaded",
+        waitUntil: "networkidle",
         timeout: 45_000,
       });
 
       const crmSearch = page.getByTestId("crm-user-search");
+      await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
+      await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
+      await page.getByTestId("crm-summary-mrr").waitFor({ state: "visible", timeout: 30_000 });
+      await crmSearch.waitFor({ state: "visible", timeout: 30_000 });
       await crmSearch.focus();
       await page.keyboard.type("PyRo1121");
 
@@ -151,7 +155,7 @@ test("owner-admin CRM keyboard navigation stays intact", async (t) => {
       }, { timeout: 30_000 });
 
       await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "domcontentloaded",
+        waitUntil: "networkidle",
         timeout: 45_000,
       });
 

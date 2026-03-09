@@ -65,6 +65,7 @@ run_worker_first = [
   "/media/*",
   "/media-proxy",
   "/osint*",
+  "/my-feed*",
   "/telegram*",
   "/map*",
   "/air-sea*",

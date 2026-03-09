@@ -15,6 +15,8 @@ export const OSINT_TITLE = `OSINT Feed — Real-Time Conflict Events & Intellige
 export const OSINT_DESCRIPTION = "Aggregated OSINT feed from GDELT, RSS sources, and milblogger channels. Severity-rated conflict events across Ukraine, Middle East, Africa, and global hotspots.";
 export const TELEGRAM_TITLE = `Telegram OSINT Monitor — 250+ Global Conflict Channels | ${SITE_NAME}`;
 export const TELEGRAM_DESCRIPTION = "Monitor 250+ global Telegram OSINT and conflict channels in real-time. Unified feed with regional filtering, media isolation, cyber tagging, and deep-linking.";
+export const MY_FEED_TITLE = `My Feed — Personalized Telegram + OSINT Intelligence | ${SITE_NAME}`;
+export const MY_FEED_DESCRIPTION = "Subscriber-only personalized intelligence feed combining Telegram and OSINT with favorites, watched regions, and ranked signals.";
 export const BRIEFINGS_TITLE = `AI Intelligence Briefings — Conflict Analysis & Summaries | ${SITE_NAME}`;
 export const BRIEFINGS_DESCRIPTION = "AI-generated intelligence briefings delivered every 4 hours. Automated conflict analysis, severity summaries, and strategic insights from global OSINT data.";
 export const MAP_TITLE = `Global Threat Map — Live Conflict Monitoring by Region | ${SITE_NAME}`;
@@ -37,6 +39,7 @@ const DASHBOARD_SHELL_TITLES = [
   { prefix: DASHBOARD_HOME_PATH, title: OVERVIEW_TITLE },
   { prefix: "/osint", title: OSINT_TITLE },
   { prefix: "/telegram", title: TELEGRAM_TITLE },
+  { prefix: "/my-feed", title: MY_FEED_TITLE },
   { prefix: "/briefings", title: BRIEFINGS_TITLE },
   { prefix: "/map", title: MAP_TITLE },
   { prefix: "/air-sea", title: AIR_SEA_TITLE },

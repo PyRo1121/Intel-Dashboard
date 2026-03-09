@@ -17,6 +17,13 @@ export type EntitlementViewInput = {
   delayMinutes?: number;
 };
 
+export type EntitlementLimitsInput = {
+  intelMaxItems?: number | null;
+  briefingsMaxItems?: number | null;
+  airSeaMaxItems?: number | null;
+  telegramTotalMessagesMax?: number | null;
+};
+
 export function resolveEntitlementView(entitlement: EntitlementViewInput | null | undefined): {
   role: string;
   entitled: boolean;
@@ -42,6 +49,17 @@ export function formatEntitlementLimit(value: number | null | undefined): string
   if (value === null || value === undefined) return "Unlimited";
   const numeric = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
   return String(numeric);
+}
+
+export function resolveFeedSurfaceLimit(
+  surface: string,
+  limits: EntitlementLimitsInput | null | undefined,
+): number | null | undefined {
+  const scope = surface.trim().toLowerCase();
+  if (scope === "telegram") return limits?.telegramTotalMessagesMax;
+  if (scope === "briefings") return limits?.briefingsMaxItems;
+  if (scope === "air-sea") return limits?.airSeaMaxItems;
+  return limits?.intelMaxItems;
 }
 
 export function isEntitledRole(value: string | undefined): boolean {

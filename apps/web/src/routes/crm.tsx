@@ -1,5 +1,6 @@
 import { Meta, Title } from "@solidjs/meta";
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
+import { computeAiCacheHitRatePercent } from "~/lib/ai-telemetry";
 import { useAuth } from "~/lib/auth";
 import { isAuthUserOwner, resolveAuthUserRole } from "~/lib/auth-user";
 import { fetchClientJson } from "~/lib/client-json";
@@ -306,14 +307,6 @@ async function fetchAiTelemetry(window: string): Promise<AiTelemetryPayload> {
   return result.data;
 }
 
-function computeHitRatePercent(input: { cacheHits?: number; cacheMisses?: number } | null | undefined): number {
-  const hits = Math.max(0, input?.cacheHits ?? 0);
-  const misses = Math.max(0, input?.cacheMisses ?? 0);
-  const total = hits + misses;
-  if (total <= 0) return 0;
-  return (hits / total) * 100;
-}
-
 export default function CrmRoute() {
   const auth = useAuth();
   const role = () => resolveAuthUserRole(auth.user());
@@ -520,7 +513,7 @@ export default function CrmRoute() {
   const aiSeriesMaxCalls = createMemo(() =>
     Math.max(...((aiTelemetry()?.result?.series ?? []).map((entry) => entry.calls ?? 0)), 1),
   );
-  const aiCacheHitPct = createMemo(() => computeHitRatePercent(aiTelemetry()?.result?.summary));
+  const aiCacheHitPct = createMemo(() => computeAiCacheHitRatePercent(aiTelemetry()?.result?.summary));
   const aiWorstFailureLane = createMemo(() =>
     [...(aiTelemetry()?.result?.lanes ?? [])].sort((left, right) => (right.failures ?? 0) - (left.failures ?? 0))[0] ?? null,
   );
@@ -814,7 +807,7 @@ export default function CrmRoute() {
                                     <span>{formatNumber(item.failures)} failures</span>
                                     <span>{formatNumber(item.avgDurationMs)}ms avg</span>
                                     <span>{formatNumber(item.p95DurationMs)}ms p95</span>
-                                    <span>{formatPercent(computeHitRatePercent(item))} cache hit</span>
+                                    <span>{formatPercent(computeAiCacheHitRatePercent(item))} cache hit</span>
                                     <span>{formatPercent((item.outputInputRatio ?? 0) * 100)} output/input</span>
                                   </div>
                                 </div>

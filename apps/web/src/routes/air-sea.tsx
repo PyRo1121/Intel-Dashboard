@@ -3,6 +3,7 @@ import { Title, Meta, Link } from "@solidjs/meta";
 import { Plane, Ship, ExternalLink, Clock, Eye, Navigation, Search, Radio, ChevronUp, ChevronDown, MapPin } from "lucide-solid";
 import { getAviationSourceLabel, getAviationSourceNote } from "~/lib/air-sea-aviation";
 import { formatTitleLabel } from "~/lib/event-label";
+import { getIntelCategoryStyle } from "~/lib/intel-category-style";
 import {
   freshnessPillTone,
   freshnessTooltip,
@@ -11,7 +12,16 @@ import {
 } from "~/lib/freshness";
 import { fetchPublicJson } from "~/lib/client-json";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
-import { formatAgeCompactFromMs, formatRelativeTimeAt, formatNumber, parseTimestampMs } from "~/lib/utils";
+import {
+  formatAgeCompactFromMs,
+  formatNumber,
+  formatRelativeTimeAt,
+  parseCompactNumber,
+  parseTimestampMs,
+  severityBg,
+  severityDot,
+  severityHexColor,
+} from "~/lib/utils";
 import type { Severity } from "~/lib/types";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { AIR_SEA_DESCRIPTION, AIR_SEA_SOCIAL_DESCRIPTION, AIR_SEA_TITLE } from "@intel-dashboard/shared/route-meta.ts";
@@ -85,27 +95,7 @@ const EMPTY: AirSeaPayload = {
 
 /* ── Category styling (matches telegram.tsx) ───────────────────────── */
 
-const CAT_STYLE: Record<string, { bg: string; border: string; text: string }> = {
-  ru_milblog: { bg: "bg-red-500/10", border: "border-red-500/20", text: "text-red-300" },
-  ua_frontline: { bg: "bg-yellow-500/10", border: "border-yellow-500/20", text: "text-yellow-300" },
-  ua_intel: { bg: "bg-sky-500/10", border: "border-sky-500/20", text: "text-sky-300" },
-  ua_osint: { bg: "bg-cyan-500/10", border: "border-cyan-500/20", text: "text-cyan-300" },
-  en_analysis: { bg: "bg-emerald-500/10", border: "border-emerald-500/20", text: "text-emerald-300" },
-  en_osint: { bg: "bg-lime-500/10", border: "border-lime-500/20", text: "text-lime-300" },
-  air_defense: { bg: "bg-purple-500/10", border: "border-purple-500/20", text: "text-purple-300" },
-  drone: { bg: "bg-amber-500/10", border: "border-amber-500/20", text: "text-amber-300" },
-  naval: { bg: "bg-indigo-500/10", border: "border-indigo-500/20", text: "text-indigo-300" },
-  satellite: { bg: "bg-fuchsia-500/10", border: "border-fuchsia-500/20", text: "text-fuchsia-300" },
-  mapping: { bg: "bg-violet-500/10", border: "border-violet-500/20", text: "text-violet-300" },
-  israel_milblog: { bg: "bg-blue-400/10", border: "border-blue-400/20", text: "text-blue-200" },
-  iran_milblog: { bg: "bg-emerald-600/10", border: "border-emerald-600/20", text: "text-emerald-200" },
-  global_osint: { bg: "bg-zinc-400/10", border: "border-zinc-400/20", text: "text-zinc-200" },
-  middle_east_osint: { bg: "bg-amber-600/10", border: "border-amber-600/20", text: "text-amber-200" },
-  nato_tracking: { bg: "bg-blue-600/10", border: "border-blue-600/20", text: "text-blue-200" },
-  nuclear_monitoring: { bg: "bg-red-600/10", border: "border-red-600/20", text: "text-red-200" },
-};
-const DEFAULT_CAT = { bg: "bg-zinc-500/10", border: "border-zinc-500/20", text: "text-zinc-300" };
-function catStyle(cat: string) { return CAT_STYLE[cat] ?? DEFAULT_CAT; }
+function catStyle(cat: string) { return getIntelCategoryStyle(cat); }
 
 /* ── Tag styling ───────────────────────────────────────────────────── */
 
@@ -119,39 +109,7 @@ const TAG_COLORS: Record<string, string> = {
 
 /* ── Severity helpers ──────────────────────────────────────────────── */
 
-function sevDot(s: Severity): string {
-  if (s === "critical") return "bg-red-400 shadow-[0_0_6px_rgba(239,68,68,0.5)]";
-  if (s === "high") return "bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.4)]";
-  if (s === "medium") return "bg-blue-400";
-  return "bg-zinc-500";
-}
-
-function sevBadge(s: Severity): string {
-  if (s === "critical") return "bg-red-500/15 text-red-400 border-red-500/30";
-  if (s === "high") return "bg-amber-500/15 text-amber-400 border-amber-500/30";
-  if (s === "medium") return "bg-blue-500/15 text-blue-400 border-blue-500/30";
-  return "bg-zinc-500/15 text-zinc-400 border-zinc-500/30";
-}
-
-function sevMapColor(s: Severity): string {
-  if (s === "critical") return "#ef4444";
-  if (s === "high") return "#f59e0b";
-  if (s === "medium") return "#3b82f6";
-  return "#71717a";
-}
-
 function regionLabel(r: string): string { return formatTitleLabel(r, "—"); }
-
-function parseViews(v: string): number {
-  const upper = v.replace(/,/g, "").trim().toUpperCase();
-  const m = upper.match(/^([0-9]+(?:\.[0-9]+)?)([KMB])?$/);
-  if (!m) return Number.parseInt(upper.replace(/[^0-9]/g, ""), 10) || 0;
-  const base = Number.parseFloat(m[1]);
-  if (m[2] === "K") return Math.round(base * 1000);
-  if (m[2] === "M") return Math.round(base * 1_000_000);
-  if (m[2] === "B") return Math.round(base * 1_000_000_000);
-  return Math.round(base);
-}
 
 /* ── Data loader ───────────────────────────────────────────────────── */
 
@@ -260,7 +218,7 @@ export default function AirSeaOps() {
 
     for (const ac of acList) {
       const isSelected = selectedAircraft() === ac.icao24;
-      const color = sevMapColor(ac.severity);
+      const color = severityHexColor(ac.severity);
       const radius = isSelected ? 9 : 6;
 
       // Glow ring for selected
@@ -436,9 +394,9 @@ export default function AirSeaOps() {
                   >
                     <div class="flex items-center justify-between gap-2">
                       <div class="flex items-center gap-2.5 min-w-0">
-                        <span class={`h-2 w-2 rounded-full shrink-0 ${sevDot(ac.severity)}`} />
+                        <span class={`h-2 w-2 rounded-full shrink-0 ${severityDot(ac.severity)}`} />
                         <span class="font-mono-data text-sm font-bold text-white truncate">{ac.callsign}</span>
-                        <span class={`shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] uppercase tracking-wider font-medium ${sevBadge(ac.severity)}`}>{ac.type}</span>
+                        <span class={`shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] uppercase tracking-wider font-medium ${severityBg(ac.severity).replace("ring-", "border-")}`}>{ac.type}</span>
                       </div>
                       <div class="flex items-center gap-1.5 shrink-0">
                         <Show when={ac.links.adsbexchange}>
@@ -529,7 +487,7 @@ export default function AirSeaOps() {
                   <div class="flex items-start gap-3">
                     {/* Severity indicator */}
                     <div class="pt-1 shrink-0">
-                      <div class={`h-2.5 w-2.5 rounded-full ${sevDot(report.severity)}`} />
+                      <div class={`h-2.5 w-2.5 rounded-full ${severityDot(report.severity)}`} />
                     </div>
 
                     <div class="min-w-0 flex-1 space-y-2">
@@ -562,9 +520,9 @@ export default function AirSeaOps() {
                         <span class="rounded-full bg-white/[0.04] border border-white/[0.08] px-2 py-0.5 text-[9px] text-zinc-500 uppercase tracking-wider">
                           {regionLabel(report.region)}
                         </span>
-                        <Show when={parseViews(report.views) > 0}>
+                        <Show when={parseCompactNumber(report.views) > 0}>
                           <span class="inline-flex items-center gap-1 text-[10px] text-zinc-600">
-                            <Eye size={10} /> {formatNumber(parseViews(report.views))}
+                            <Eye size={10} /> {formatNumber(parseCompactNumber(report.views))}
                           </span>
                         </Show>
 

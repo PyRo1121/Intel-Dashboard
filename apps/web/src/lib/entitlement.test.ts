@@ -7,6 +7,7 @@ import {
   formatSubscriptionStatus,
   isEntitledRole,
   isOwnerRole,
+  resolveFeedSurfaceLimit,
   resolveEntitlementView,
   resolveEntitlementRole,
 } from "@intel-dashboard/shared/entitlement.ts";
@@ -47,6 +48,17 @@ test("shared entitlement helpers normalize tier labels and entitlement roles", (
   assert.equal(formatEntitlementLimit(null), "Unlimited");
   assert.equal(formatEntitlementLimit(42.8), "42");
   assert.equal(formatEntitlementLimit(-1), "0");
+
+  const limits = {
+    intelMaxItems: 20,
+    briefingsMaxItems: 8,
+    airSeaMaxItems: 12,
+    telegramTotalMessagesMax: 50,
+  };
+  assert.equal(resolveFeedSurfaceLimit("OSINT", limits), 20);
+  assert.equal(resolveFeedSurfaceLimit("Briefings", limits), 8);
+  assert.equal(resolveFeedSurfaceLimit("Air-Sea", limits), 12);
+  assert.equal(resolveFeedSurfaceLimit("Telegram", limits), 50);
 
   assert.equal(isEntitledRole("owner"), true);
   assert.equal(isEntitledRole("subscriber"), true);

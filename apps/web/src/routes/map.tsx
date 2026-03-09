@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
 import { fetchIntelFeed } from "~/lib/intel-feed";
+import { getRegionThreatLevel } from "~/lib/region-threat";
 import { readLatestArray } from "~/lib/resource-latest";
 import { REGION_LABELS, type IntelRegion, type IntelItem } from "~/lib/types";
 import {
@@ -67,15 +68,6 @@ const REGION_ACCENT: Record<IntelRegion, string> = {
   us:              "#8b5cf6",
   global:          "#71717a",
 };
-
-/* ── Severity helpers ──────────────────────────────────────────────── */
-
-function threatLevel(summary: RegionSummary): { label: string; color: string; mapColor: string; bgColor: string } {
-  if (summary.critical >= 3) return { label: "CRITICAL", color: "text-red-400", mapColor: "#ef4444", bgColor: "bg-red-500/10" };
-  if (summary.critical >= 1 || summary.high >= 3) return { label: "HIGH", color: "text-amber-400", mapColor: "#f59e0b", bgColor: "bg-amber-500/10" };
-  if (summary.high >= 1 || summary.medium >= 2) return { label: "ELEVATED", color: "text-blue-400", mapColor: "#3b82f6", bgColor: "bg-blue-500/10" };
-  return { label: "LOW", color: "text-zinc-400", mapColor: "#71717a", bgColor: "bg-zinc-500/10" };
-}
 
 /* ── Data loader ───────────────────────────────────────────────────── */
 
@@ -196,7 +188,7 @@ export default function ThreatMap() {
       const coords = REGION_CENTROIDS[r.region];
       if (!coords) continue;
 
-      const threat = threatLevel(r);
+      const threat = getRegionThreatLevel(r);
       const isSelected = selected === r.region;
       const baseRadius = Math.max(8, Math.min(28, 6 + Math.sqrt(r.eventCount) * 3));
       const radius = isSelected ? baseRadius + 4 : baseRadius;
@@ -379,7 +371,7 @@ export default function ThreatMap() {
         {/* ── Selected Region Detail ──────────────────────────────── */}
         <Show when={selectedSummary()}>
           {(summary) => {
-            const threat = () => threatLevel(summary());
+            const threat = () => getRegionThreatLevel(summary());
             return (
               <div class="surface-card p-5 ring-1 ring-white/[0.08] animate-scale-in relative overflow-hidden">
                 <div class={`absolute left-0 top-0 bottom-0 w-[3px] ${
@@ -443,7 +435,7 @@ export default function ThreatMap() {
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
           <For each={regions().filter((r) => r.eventCount > 0).sort((a, b) => b.eventCount - a.eventCount)}>
             {(r, idx) => {
-              const threat = threatLevel(r);
+              const threat = getRegionThreatLevel(r);
               const accent = REGION_ACCENT[r.region] || "#71717a";
               return (
                 <button

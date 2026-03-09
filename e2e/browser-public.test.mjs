@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BROWSER_METADATA_EXPECTATIONS } from "./coverage-manifest.mjs";
 import {
+  assertNoBrowserDiagnostics,
   assertPublicAuthEntrySurface,
   captureBrowserArtifacts,
   collectBrowserDiagnostics,
@@ -81,9 +82,7 @@ test("public auth entry pages stay free of same-origin browser failures", async 
         await openPublicPage(page, route);
         await page.waitForTimeout(500);
       }
-      assert.deepEqual(pageErrors, []);
-      assert.deepEqual(consoleErrors, []);
-      assert.deepEqual(requestFailures, []);
+      assertNoBrowserDiagnostics({ pageErrors, consoleErrors, requestFailures });
     } catch (error) {
       await captureBrowserArtifacts(page, "public-auth-diagnostics", error);
       throw error;

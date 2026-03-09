@@ -401,3 +401,9 @@ export function collectBrowserDiagnostics(page, baseUrl, options = {}) {
 
   return { pageErrors, consoleErrors, requestFailures };
 }
+
+export function assertNoBrowserDiagnostics(diagnostics, messages = {}) {
+  assert.deepEqual(diagnostics.pageErrors, [], messages.pageErrors);
+  assert.deepEqual(diagnostics.consoleErrors, [], messages.consoleErrors);
+  assert.deepEqual(diagnostics.requestFailures, [], messages.requestFailures);
+}

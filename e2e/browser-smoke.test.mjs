@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  assertNoBrowserDiagnostics,
   assertPublicAuthEntrySurface,
   EDGE_BASE_URL,
   captureBrowserArtifacts,
@@ -1175,9 +1176,14 @@ test("browser-authenticated app pages stay free of uncaught, console, and same-o
         await page.waitForTimeout(1_000);
       }
 
-      assert.deepEqual(pageErrors, [], "authenticated dashboard pages should not throw uncaught page errors");
-      assert.deepEqual(consoleErrors, [], "authenticated dashboard pages should not emit console.error messages");
-      assert.deepEqual(requestFailures, [], "authenticated dashboard pages should not have same-origin request failures");
+      assertNoBrowserDiagnostics(
+        { pageErrors, consoleErrors, requestFailures },
+        {
+          pageErrors: "authenticated dashboard pages should not throw uncaught page errors",
+          consoleErrors: "authenticated dashboard pages should not emit console.error messages",
+          requestFailures: "authenticated dashboard pages should not have same-origin request failures",
+        },
+      );
     } catch (error) {
       await captureBrowserArtifacts(page, "authenticated-dashboard-diagnostics", error);
       throw error;
@@ -1618,9 +1624,14 @@ test("browser public pages stay free of uncaught, console, and same-origin reque
         await page.waitForTimeout(1_000);
       }
 
-      assert.deepEqual(pageErrors, [], "public pages should not throw uncaught page errors");
-      assert.deepEqual(consoleErrors, [], "public pages should not emit console.error messages");
-      assert.deepEqual(requestFailures, [], "public pages should not have same-origin request failures");
+      assertNoBrowserDiagnostics(
+        { pageErrors, consoleErrors, requestFailures },
+        {
+          pageErrors: "public pages should not throw uncaught page errors",
+          consoleErrors: "public pages should not emit console.error messages",
+          requestFailures: "public pages should not have same-origin request failures",
+        },
+      );
     } catch (error) {
       await captureBrowserArtifacts(page, "public-page-diagnostics", error);
       throw error;

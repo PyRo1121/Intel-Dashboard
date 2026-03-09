@@ -19,10 +19,20 @@ export const SKIP_SESSION_PREFLIGHT = process.env.E2E_SKIP_SESSION_PREFLIGHT ===
 export const ARTIFACT_DIR = join(process.cwd(), "output", "e2e-browser");
 export const sessionValidationCache = new Map();
 
+export function buildCloudflareAccessHeaders(clientId = ACCESS_CLIENT_ID, clientSecret = ACCESS_CLIENT_SECRET) {
+  if (!trim(clientId) || !trim(clientSecret)) return undefined;
+  return {
+    "CF-Access-Client-Id": trim(clientId),
+    "CF-Access-Client-Secret": trim(clientSecret),
+  };
+}
+
 export function isIgnorableConsoleError(text) {
   return (
     /^%c%d font-size:0;color:transparent NaN$/.test(text) ||
-    /Note that 'script-src' was not explicitly set, so 'default-src' is used as a fallback\./i.test(text)
+    /Note that 'script-src' was not explicitly set, so 'default-src' is used as a fallback\./i.test(text) ||
+    /Request header field cf-access-client-id is not allowed by Access-Control-Allow-Headers in preflight response\./i.test(text) ||
+    /^Failed to load resource: net::ERR_FAILED$/i.test(text)
   );
 }
 
@@ -121,13 +131,7 @@ export async function createBrowserContextWithCookie(t, cookieHeaderValue, missi
     return null;
   }
 
-  const extraHTTPHeaders =
-    ACCESS_CLIENT_ID && ACCESS_CLIENT_SECRET
-      ? {
-          "CF-Access-Client-Id": ACCESS_CLIENT_ID,
-          "CF-Access-Client-Secret": ACCESS_CLIENT_SECRET,
-        }
-      : undefined;
+  const extraHTTPHeaders = buildCloudflareAccessHeaders();
 
   const context = await browser.newContext({ acceptDownloads: true, extraHTTPHeaders, ...options });
   await context.addCookies([
@@ -164,7 +168,11 @@ export async function createPublicBrowserContext(t, options = {}) {
     return null;
   }
 
-  const context = await browser.newContext({ acceptDownloads: true, ...options });
+  const context = await browser.newContext({
+    acceptDownloads: true,
+    extraHTTPHeaders: buildCloudflareAccessHeaders(),
+    ...options,
+  });
   return { browser, context };
 }
 

@@ -20,6 +20,9 @@ export const ARTIFACT_DIR = join(process.cwd(), "output", "e2e-browser");
 export const sessionValidationCache = new Map();
 export const CRM_AI_WINDOWS = ["15m", "1h", "24h", "7d", "30d"];
 export const MISSING_BILLING_STATE_PATTERN = /Billing account not found for target user\.|Target user has no Stripe customer id yet\./i;
+export const OWNER_BILLING_TRIAL_NOTICE_PATTERN = /Owner account detected. Trial activation is not required./i;
+export const OWNER_BILLING_CHECKOUT_NOTICE_PATTERN = /Owner account detected. Checkout bypass is active./i;
+export const OWNER_BILLING_PORTAL_NOTICE_PATTERN = /Owner account detected. Stripe portal is not required./i;
 
 export function buildCloudflareAccessHeaders(clientId = ACCESS_CLIENT_ID, clientSecret = ACCESS_CLIENT_SECRET) {
   if (!trim(clientId) || !trim(clientSecret)) return undefined;
@@ -213,6 +216,20 @@ export async function waitForBillingDashboard(page) {
   const billingNotice = page.getByTestId("billing-notice");
   await billingNotice.waitFor({ state: "attached", timeout: 30_000 });
   return billingNotice;
+}
+
+export async function assertOwnerBillingBypassNotices(page, billingNotice) {
+  await page.getByTestId("billing-start-trial").click();
+  await billingNotice.waitFor({ state: "visible", timeout: 30_000 });
+  assert.match((await billingNotice.textContent()) || "", OWNER_BILLING_TRIAL_NOTICE_PATTERN);
+
+  await page.getByTestId("billing-open-checkout").click();
+  await billingNotice.waitFor({ state: "visible", timeout: 30_000 });
+  assert.match((await billingNotice.textContent()) || "", OWNER_BILLING_CHECKOUT_NOTICE_PATTERN);
+
+  await page.getByTestId("billing-manage-subscription").click();
+  await billingNotice.waitFor({ state: "visible", timeout: 30_000 });
+  assert.match((await billingNotice.textContent()) || "", OWNER_BILLING_PORTAL_NOTICE_PATTERN);
 }
 
 export async function waitForCrmAiSurface(page) {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  assertOwnerBillingBypassNotices,
   captureBrowserArtifacts,
   CRM_AI_WINDOWS,
   createBrowserContext,
@@ -26,18 +27,7 @@ test("owner-admin billing actions surface owner bypass notices", async (t) => {
       });
 
       const notice = await waitForBillingDashboard(page);
-
-      await page.getByTestId("billing-start-trial").click();
-      await notice.waitFor({ state: "visible", timeout: 30_000 });
-      assert.match((await notice.textContent()) || "", /Owner account detected. Trial activation is not required./i);
-
-      await page.getByTestId("billing-open-checkout").click();
-      await notice.waitFor({ state: "visible", timeout: 30_000 });
-      assert.match((await notice.textContent()) || "", /Owner account detected. Checkout bypass is active./i);
-
-      await page.getByTestId("billing-manage-subscription").click();
-      await notice.waitFor({ state: "visible", timeout: 30_000 });
-      assert.match((await notice.textContent()) || "", /Owner account detected. Stripe portal is not required./i);
+      await assertOwnerBillingBypassNotices(page, notice);
 
       await page.getByTestId("billing-activity-surface").waitFor({ state: "visible", timeout: 30_000 });
     } catch (error) {

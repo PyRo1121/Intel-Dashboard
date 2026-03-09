@@ -5,6 +5,7 @@ import test from "node:test";
 import { chromium } from "@playwright/test";
 import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 import {
+  assertOwnerBillingBypassNotices,
   CRM_AI_WINDOWS,
   MISSING_BILLING_STATE_PATTERN,
   waitForBillingDashboard,
@@ -400,18 +401,7 @@ test("browser-authenticated billing actions surface owner bypass notices", async
       });
 
       const notice = await waitForBillingDashboard(page);
-
-      await page.getByTestId("billing-start-trial").click();
-      await notice.waitFor({ state: "visible", timeout: 30_000 });
-      assert.match((await notice.textContent()) || "", /Owner account detected. Trial activation is not required./i);
-
-      await page.getByTestId("billing-open-checkout").click();
-      await notice.waitFor({ state: "visible", timeout: 30_000 });
-      assert.match((await notice.textContent()) || "", /Owner account detected. Checkout bypass is active./i);
-
-      await page.getByTestId("billing-manage-subscription").click();
-      await notice.waitFor({ state: "visible", timeout: 30_000 });
-      assert.match((await notice.textContent()) || "", /Owner account detected. Stripe portal is not required./i);
+      await assertOwnerBillingBypassNotices(page, notice);
       const activitySurface = page.getByTestId("billing-activity-surface");
       await activitySurface.waitFor({ state: "visible", timeout: 30_000 });
     } catch (error) {

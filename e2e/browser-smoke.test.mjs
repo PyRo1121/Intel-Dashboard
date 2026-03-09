@@ -86,10 +86,7 @@ test("browser-authenticated sidebar renders owner identity and avatar", async (t
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       await page.locator('p').filter({ hasText: /^PyRo1121$/ }).first().waitFor({ state: "visible", timeout: 30_000 });
       await page.locator('p').filter({ hasText: /^@PyRo1121$/ }).first().waitFor({ state: "visible", timeout: 30_000 });
@@ -211,10 +208,7 @@ test("browser-authenticated Telegram controls toggle feed windows and dedupe sur
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/telegram`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/telegram");
 
       await page.waitForSelector("text=Telegram Intel", { timeout: 30_000 });
 
@@ -260,10 +254,7 @@ test("browser-authenticated Telegram latest age ticker updates live", async (t) 
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/telegram`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/telegram");
 
       const latestAgeStat = page.locator('p').filter({ hasText: /^Latest Msg Age$/ }).first();
       await latestAgeStat.waitFor({ state: "visible", timeout: 30_000 });
@@ -295,10 +286,7 @@ test("browser-authenticated billing activity ages update with wall clock drift",
     const page = await context.newPage();
     try {
       await installMockClock(page);
-      await page.goto(`${EDGE_BASE_URL}/billing`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/billing");
 
       const firstAge = page.locator('[data-e2e="billing-event-age"]').first();
       await firstAge.waitFor({ state: "visible", timeout: 30_000 });
@@ -338,10 +326,7 @@ test("browser-authenticated overview feed ages update with wall clock drift", as
           body: JSON.stringify(createIntelFixture({ timestamp: fixtureTimestamp })),
         });
       });
-      await page.goto(`${EDGE_BASE_URL}/overview`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/overview");
 
       const freshnessPill = page.locator('span[title^="Freshness thresholds:"]').first();
       await freshnessPill.waitFor({ state: "visible", timeout: 30_000 });
@@ -688,10 +673,7 @@ test("browser-authenticated OSINT severity filters apply the live feed contract"
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       await page.waitForSelector("text=OSINT Feed", { timeout: 30_000 });
 
@@ -740,10 +722,7 @@ test("browser-authenticated Air/Sea filters honor no-match search and recovery",
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/air-sea`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/air-sea");
 
       await page.waitForSelector("text=Air / Sea Ops", { timeout: 30_000 });
 
@@ -784,10 +763,7 @@ test("browser-authenticated Threat Map region cards open and close detail state"
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/map`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/map");
 
       await page.waitForSelector("text=Global Threat Overview", { timeout: 30_000 });
 
@@ -825,10 +801,7 @@ test("browser-authenticated dashboard controls support keyboard activation", asy
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const osintCritical = page.locator("button").filter({ hasText: /^Critical(?:\s*\(\d+\))?$/i }).first();
       await osintCritical.focus();

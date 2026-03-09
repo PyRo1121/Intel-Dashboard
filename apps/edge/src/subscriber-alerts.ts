@@ -1,4 +1,9 @@
-import type { SubscriberAlertItem, SubscriberAlertState, SubscriberAlertType } from "@intel-dashboard/shared/subscriber-alerts.ts";
+import type {
+  SubscriberAlertItem,
+  SubscriberAlertPreferences,
+  SubscriberAlertState,
+  SubscriberAlertType,
+} from "@intel-dashboard/shared/subscriber-alerts.ts";
 import type { SubscriberFeedPreferences } from "@intel-dashboard/shared/subscriber-feed.ts";
 
 type TelegramCanonicalEventLike = {
@@ -107,10 +112,39 @@ export function normalizeSubscriberAlertState(value: string | null | undefined):
   return value === "all" ? "all" : "unread";
 }
 
+export function createDefaultSubscriberAlertPreferences(): SubscriberAlertPreferences {
+  return {
+    firstReportRegionEnabled: true,
+    highSignalRegionEnabled: true,
+    firstReportChannelEnabled: true,
+    highSignalSourceEnabled: true,
+    minimumTelegramHighSignalGrade: "B",
+  };
+}
+
+export function normalizeSubscriberAlertPreferences(value: unknown): SubscriberAlertPreferences {
+  const defaults = createDefaultSubscriberAlertPreferences();
+  if (!value || typeof value !== "object") {
+    return defaults;
+  }
+  const record = value as Record<string, unknown>;
+  const updatedAt = normalizeString(record.updatedAt) || undefined;
+  const minimumTelegramHighSignalGrade = normalizeKey(normalizeString(record.minimumTelegramHighSignalGrade)) === "a" ? "A" : "B";
+  return {
+    firstReportRegionEnabled: record.firstReportRegionEnabled !== false,
+    highSignalRegionEnabled: record.highSignalRegionEnabled !== false,
+    firstReportChannelEnabled: record.firstReportChannelEnabled !== false,
+    highSignalSourceEnabled: record.highSignalSourceEnabled !== false,
+    minimumTelegramHighSignalGrade,
+    ...(updatedAt ? { updatedAt } : {}),
+  };
+}
+
 export function matchTelegramSubscriberAlerts(args: {
   userId: string;
   event: TelegramCanonicalEventLike;
   preferences: SubscriberFeedPreferences;
+  alertPreferences: SubscriberAlertPreferences;
 }): SubscriberAlertItem[] {
   const tags = normalizeStringArray(args.event.domain_tags);
   const channel = normalizeString(args.event.source_channels?.[0] ?? args.event.first_reporter_channel);
@@ -123,7 +157,10 @@ export function matchTelegramSubscriberAlerts(args: {
   const signalGrade = normalizeString(args.event.signal_grade) || undefined;
   const rankReasons = normalizeStringArray(args.event.signal_reasons);
   const isFirst = rankReasons.includes("first");
-  const isHighSignal = signalGrade === "A" || signalGrade === "B";
+  const isHighSignal =
+    args.alertPreferences.minimumTelegramHighSignalGrade === "A"
+      ? signalGrade === "A"
+      : signalGrade === "A" || signalGrade === "B";
   const title = normalizeTelegramText(args.event).slice(0, 180);
   const summary = normalizeTelegramText(args.event);
   const link = normalizeString(args.event.sources?.[0]?.link);
@@ -131,7 +168,7 @@ export function matchTelegramSubscriberAlerts(args: {
 
   for (const watchedRegion of args.preferences.watchRegions) {
     if (!matchesNormalized([watchedRegion], region)) continue;
-    if (isFirst) {
+    if (isFirst && args.alertPreferences.firstReportRegionEnabled) {
       alerts.push(createAlert({
         userId: args.userId,
         type: "first_report_region",
@@ -151,7 +188,7 @@ export function matchTelegramSubscriberAlerts(args: {
         rankReasons,
       }));
     }
-    if (isHighSignal) {
+    if (isHighSignal && args.alertPreferences.highSignalRegionEnabled) {
       alerts.push(createAlert({
         userId: args.userId,
         type: "high_signal_region",
@@ -175,7 +212,7 @@ export function matchTelegramSubscriberAlerts(args: {
 
   for (const favoriteChannel of args.preferences.favoriteChannels) {
     if (!matchesNormalized([favoriteChannel], channel)) continue;
-    if (isFirst) {
+    if (isFirst && args.alertPreferences.firstReportChannelEnabled) {
       alerts.push(createAlert({
         userId: args.userId,
         type: "first_report_channel",
@@ -204,6 +241,7 @@ export function matchOsintSubscriberAlerts(args: {
   userId: string;
   item: IntelItemLike;
   preferences: SubscriberFeedPreferences;
+  alertPreferences: SubscriberAlertPreferences;
 }): SubscriberAlertItem[] {
   const severity = normalizeKey(args.item.severity);
   const source = normalizeString(args.item.source);
@@ -216,44 +254,48 @@ export function matchOsintSubscriberAlerts(args: {
   if (isHighSignal) {
     for (const watchedRegion of args.preferences.watchRegions) {
       if (!matchesNormalized([watchedRegion], region)) continue;
-      alerts.push(createAlert({
-        userId: args.userId,
-        type: "high_signal_region",
-        itemId: `osint:${args.item.url}`,
-        matchedPreference: watchedRegion,
-        sourceSurface: "osint",
-        createdAt: coerceTimestamp(args.item.timestamp),
-        title: normalizeString(args.item.title),
-        summary: normalizeString(args.item.summary),
-        link: normalizeString(args.item.url),
-        sourceLabel: source,
-        channelOrProvider: source,
-        region,
-        tags,
-        signalScore: severityBase,
-        rankReasons: [],
-      }));
+      if (args.alertPreferences.highSignalRegionEnabled) {
+        alerts.push(createAlert({
+          userId: args.userId,
+          type: "high_signal_region",
+          itemId: `osint:${args.item.url}`,
+          matchedPreference: watchedRegion,
+          sourceSurface: "osint",
+          createdAt: coerceTimestamp(args.item.timestamp),
+          title: normalizeString(args.item.title),
+          summary: normalizeString(args.item.summary),
+          link: normalizeString(args.item.url),
+          sourceLabel: source,
+          channelOrProvider: source,
+          region,
+          tags,
+          signalScore: severityBase,
+          rankReasons: [],
+        }));
+      }
     }
 
     for (const favoriteSource of args.preferences.favoriteSources) {
       if (!matchesNormalized([favoriteSource], source)) continue;
-      alerts.push(createAlert({
-        userId: args.userId,
-        type: "high_signal_source",
-        itemId: `osint:${args.item.url}`,
-        matchedPreference: favoriteSource,
-        sourceSurface: "osint",
-        createdAt: coerceTimestamp(args.item.timestamp),
-        title: normalizeString(args.item.title),
-        summary: normalizeString(args.item.summary),
-        link: normalizeString(args.item.url),
-        sourceLabel: source,
-        channelOrProvider: source,
-        region,
-        tags,
-        signalScore: severityBase,
-        rankReasons: [],
-      }));
+      if (args.alertPreferences.highSignalSourceEnabled) {
+        alerts.push(createAlert({
+          userId: args.userId,
+          type: "high_signal_source",
+          itemId: `osint:${args.item.url}`,
+          matchedPreference: favoriteSource,
+          sourceSurface: "osint",
+          createdAt: coerceTimestamp(args.item.timestamp),
+          title: normalizeString(args.item.title),
+          summary: normalizeString(args.item.summary),
+          link: normalizeString(args.item.url),
+          sourceLabel: source,
+          channelOrProvider: source,
+          region,
+          tags,
+          signalScore: severityBase,
+          rankReasons: [],
+        }));
+      }
     }
   }
 
@@ -267,4 +309,3 @@ export function sortSubscriberAlerts(items: SubscriberAlertItem[]): SubscriberAl
     return right.signalScore - left.signalScore;
   });
 }
-

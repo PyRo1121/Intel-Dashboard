@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createEmptySubscriberFeedPreferences } from "../src/subscriber-feed.ts";
 import {
+  createDefaultSubscriberAlertPreferences,
   matchOsintSubscriberAlerts,
   matchTelegramSubscriberAlerts,
+  normalizeSubscriberAlertPreferences,
   normalizeSubscriberAlertState,
   sortSubscriberAlerts,
 } from "../src/subscriber-alerts.ts";
@@ -12,6 +14,19 @@ test("normalizeSubscriberAlertState defaults to unread", () => {
   assert.equal(normalizeSubscriberAlertState("all"), "all");
   assert.equal(normalizeSubscriberAlertState("unread"), "unread");
   assert.equal(normalizeSubscriberAlertState("other"), "unread");
+});
+
+test("normalizeSubscriberAlertPreferences applies safe defaults", () => {
+  assert.deepEqual(createDefaultSubscriberAlertPreferences(), {
+    firstReportRegionEnabled: true,
+    highSignalRegionEnabled: true,
+    firstReportChannelEnabled: true,
+    highSignalSourceEnabled: true,
+    minimumTelegramHighSignalGrade: "B",
+  });
+
+  assert.equal(normalizeSubscriberAlertPreferences({ minimumTelegramHighSignalGrade: "a" }).minimumTelegramHighSignalGrade, "A");
+  assert.equal(normalizeSubscriberAlertPreferences({ highSignalRegionEnabled: false }).highSignalRegionEnabled, false);
 });
 
 test("telegram alerts match watched regions and favorite channels", () => {
@@ -34,6 +49,7 @@ test("telegram alerts match watched regions and favorite channels", () => {
       sources: [{ link: "https://t.me/alpha/1" }],
     },
     preferences: prefs,
+    alertPreferences: createDefaultSubscriberAlertPreferences(),
   });
 
   assert.deepEqual(
@@ -60,6 +76,7 @@ test("osint alerts match watched regions and favorite sources only for high seve
       severity: "high",
     },
     preferences: prefs,
+    alertPreferences: createDefaultSubscriberAlertPreferences(),
   });
 
   assert.deepEqual(
@@ -109,3 +126,29 @@ test("sortSubscriberAlerts orders newest first then stronger scores", () => {
   assert.equal(sortSubscriberAlerts(items as never)[0]?.id, "newer-low");
 });
 
+test("alert preferences can suppress alert types and tighten Telegram high-signal grade", () => {
+  const prefs = createEmptySubscriberFeedPreferences();
+  prefs.watchRegions = ["ukraine"];
+  const controls = normalizeSubscriberAlertPreferences({
+    firstReportRegionEnabled: false,
+    highSignalRegionEnabled: true,
+    minimumTelegramHighSignalGrade: "A",
+  });
+
+  const alerts = matchTelegramSubscriberAlerts({
+    userId: "user-1",
+    event: {
+      event_id: "evt-2",
+      datetime: "2026-03-09T12:00:00.000Z",
+      category: "ukraine",
+      text_en: "Telegram event",
+      signal_score: 82,
+      signal_grade: "B",
+      signal_reasons: ["first", "multi-source"],
+    },
+    preferences: prefs,
+    alertPreferences: controls,
+  });
+
+  assert.deepEqual(alerts, []);
+});

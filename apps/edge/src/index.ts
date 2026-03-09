@@ -21,8 +21,10 @@ import {
   type SubscriberFeedPreferences,
 } from "./subscriber-feed";
 import {
+  createDefaultSubscriberAlertPreferences,
   matchOsintSubscriberAlerts,
   matchTelegramSubscriberAlerts,
+  normalizeSubscriberAlertPreferences,
   normalizeSubscriberAlertState,
   sortSubscriberAlerts,
 } from "./subscriber-alerts";
@@ -2284,6 +2286,7 @@ async function ensureSubscriberFeedSchema(env: Env): Promise<void> {
 
 async function ensureSubscriberAlertSchema(env: Env): Promise<void> {
   if (subscriberAlertSchemaReady) return;
+  const defaults = createDefaultSubscriberAlertPreferences();
   await env.INTEL_DB.prepare(
     `CREATE TABLE IF NOT EXISTS subscriber_alert_events (
       id TEXT PRIMARY KEY,
@@ -2317,6 +2320,17 @@ async function ensureSubscriberAlertSchema(env: Env): Promise<void> {
   await env.INTEL_DB.prepare(
     `CREATE INDEX IF NOT EXISTS idx_subscriber_alert_events_user_read
      ON subscriber_alert_events (user_id, read_at, created_at DESC)`,
+  ).run();
+  await env.INTEL_DB.prepare(
+    `CREATE TABLE IF NOT EXISTS subscriber_alert_preferences (
+      user_id TEXT PRIMARY KEY,
+      first_report_region_enabled INTEGER NOT NULL DEFAULT 1,
+      high_signal_region_enabled INTEGER NOT NULL DEFAULT 1,
+      first_report_channel_enabled INTEGER NOT NULL DEFAULT 1,
+      high_signal_source_enabled INTEGER NOT NULL DEFAULT 1,
+      minimum_telegram_high_signal_grade TEXT NOT NULL DEFAULT '${defaults.minimumTelegramHighSignalGrade}',
+      updated_at TEXT NOT NULL
+    )`,
   ).run();
   subscriberAlertSchemaReady = true;
 }
@@ -2505,6 +2519,7 @@ async function materializeSubscriberAlerts(env: Env, userId: string, preferences
   if (!hasSubscriberAlertPreferences(preferences)) {
     return;
   }
+  const alertPreferences = await loadSubscriberAlertPreferences(env, userId);
 
   const [telegramEvents, intelItems] = await Promise.all([
     loadTelegramCanonicalEvents(env),
@@ -2517,6 +2532,7 @@ async function materializeSubscriberAlerts(env: Env, userId: string, preferences
         userId,
         event: event as never,
         preferences,
+        alertPreferences,
       }),
     ),
     ...intelItems.flatMap((item) =>
@@ -2524,6 +2540,7 @@ async function materializeSubscriberAlerts(env: Env, userId: string, preferences
         userId,
         item,
         preferences,
+        alertPreferences,
       }),
     ),
   ];
@@ -2561,6 +2578,58 @@ async function materializeSubscriberAlerts(env: Env, userId: string, preferences
   );
 
   await env.INTEL_DB.batch(statements);
+}
+
+async function loadSubscriberAlertPreferences(env: Env, userId: string) {
+  await ensureSubscriberAlertSchema(env);
+  const row = await env.INTEL_DB.prepare(
+    `SELECT
+      first_report_region_enabled,
+      high_signal_region_enabled,
+      first_report_channel_enabled,
+      high_signal_source_enabled,
+      minimum_telegram_high_signal_grade,
+      updated_at
+    FROM subscriber_alert_preferences
+    WHERE user_id = ?`,
+  ).bind(userId).first<Record<string, unknown>>();
+
+  return normalizeSubscriberAlertPreferences({
+    firstReportRegionEnabled: row?.first_report_region_enabled !== 0,
+    highSignalRegionEnabled: row?.high_signal_region_enabled !== 0,
+    firstReportChannelEnabled: row?.first_report_channel_enabled !== 0,
+    highSignalSourceEnabled: row?.high_signal_source_enabled !== 0,
+    minimumTelegramHighSignalGrade: normalizeString(row?.minimum_telegram_high_signal_grade) ?? "B",
+    updatedAt: normalizeString(row?.updated_at) ?? undefined,
+  });
+}
+
+async function saveSubscriberAlertPreferences(
+  env: Env,
+  userId: string,
+  preferences: ReturnType<typeof createDefaultSubscriberAlertPreferences>,
+): Promise<void> {
+  await ensureSubscriberAlertSchema(env);
+  const updatedAt = new Date().toISOString();
+  await env.INTEL_DB.prepare(
+    `INSERT OR REPLACE INTO subscriber_alert_preferences (
+      user_id,
+      first_report_region_enabled,
+      high_signal_region_enabled,
+      first_report_channel_enabled,
+      high_signal_source_enabled,
+      minimum_telegram_high_signal_grade,
+      updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    userId,
+    preferences.firstReportRegionEnabled ? 1 : 0,
+    preferences.highSignalRegionEnabled ? 1 : 0,
+    preferences.firstReportChannelEnabled ? 1 : 0,
+    preferences.highSignalSourceEnabled ? 1 : 0,
+    preferences.minimumTelegramHighSignalGrade,
+    updatedAt,
+  ).run();
 }
 
 async function loadSubscriberAlerts(env: Env, userId: string, state: "all" | "unread", limit: number) {
@@ -5982,6 +6051,38 @@ export default {
       const limit = limitRaw === null ? 50 : Math.min(Math.max(1, Math.floor(limitRaw)), 200);
       const response = await loadSubscriberAlerts(env, gate.userId, state, limit);
       return privateApiJson(origin, 200, response);
+    }
+
+    if (path === "/api/subscriber/alert-preferences") {
+      if (!env.INTEL_DB) {
+        return privateApiJson(origin, 503, { error: "Subscriber alerts unavailable" });
+      }
+      const gate = await requireSubscriberEntitlement({ env, user, origin });
+      if (!gate.ok) {
+        return gate.response;
+      }
+
+      if (request.method === "GET") {
+        const preferences = await loadSubscriberAlertPreferences(env, gate.userId);
+        return privateApiJson(origin, 200, preferences);
+      }
+
+      if (request.method === "POST") {
+        let payload: unknown;
+        try {
+          payload = await request.json();
+        } catch {
+          return privateApiJson(origin, 400, { error: "Invalid JSON" });
+        }
+        const preferences = normalizeSubscriberAlertPreferences(payload);
+        await saveSubscriberAlertPreferences(env, gate.userId, preferences);
+        return privateApiJson(origin, 200, {
+          ...preferences,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      return privateApiMethodNotAllowed(origin, "GET, POST");
     }
 
     if (path === "/api/subscriber/my-alerts/read") {

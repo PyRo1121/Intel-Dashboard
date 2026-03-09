@@ -108,6 +108,69 @@ export async function advanceMockClock(page, ms) {
   }, ms);
 }
 
+export function createIntelFixture({ timestamp, region = "global" } = {}) {
+  return [
+    {
+      title: "Fixture intelligence update",
+      summary: "Deterministic intelligence summary for browser timing verification.",
+      source: "Fixture Source",
+      url: "https://example.com/fixture-intel",
+      timestamp,
+      region,
+      category: "news",
+      severity: "high",
+    },
+  ];
+}
+
+export function createBriefingsFixture(timestamp) {
+  return [
+    {
+      id: "fixture-briefing-1",
+      timestamp,
+      content: "Deterministic briefing content for browser timing verification.",
+      severity_summary: { critical: 1, high: 2, medium: 0, low: 0 },
+    },
+  ];
+}
+
+export function createAirSeaFixture(timestamp) {
+  return {
+    timestamp,
+    aviation: {
+      timestamp,
+      source: "Fixture OpenSky",
+      emergencies: 0,
+      aircraft: [],
+    },
+    intelFeed: [
+      {
+        id: "fixture-air-1",
+        domain: "air",
+        category: "en_analysis",
+        channel: "Fixture Air",
+        channelUsername: "fixtureair",
+        text: "Deterministic air/sea report for browser timing verification.",
+        datetime: timestamp,
+        link: "https://example.com/fixture-air",
+        views: "100",
+        severity: "high",
+        region: "Global",
+        tags: ["fixture"],
+        media: [],
+      },
+    ],
+    stats: {
+      aircraftCount: 0,
+      airIntelCount: 1,
+      seaIntelCount: 0,
+      totalIntel: 1,
+      critical: 0,
+      high: 1,
+    },
+  };
+}
+
 export async function validateSessionCookie(t, cookieHeader, missingMessage) {
   const cookie = requireOrSkip(t, cookieHeader, missingMessage);
   if (!cookie) return "";

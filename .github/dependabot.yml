@@ -13,6 +13,10 @@ updates:
       - "bun"
     commit-message:
       prefix: "deps"
+    ignore:
+      - dependency-name: "drizzle-orm"
+        update-types:
+          - "version-update:semver-minor"
 
   - package-ecosystem: "github-actions"
     directory: "/"

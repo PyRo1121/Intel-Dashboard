@@ -672,7 +672,7 @@ export default function TelegramPage() {
           >
             Media only
           </button>
-          <Show when={signalSubscriber()}>
+          <Show when={signalSubscriber() && mergeDuplicates()}>
             <button
               type="button"
               onClick={() => {

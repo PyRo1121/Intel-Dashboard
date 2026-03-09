@@ -1,0 +1,87 @@
+apps/web/src/lib/utils.test.ts
+  fbdbb1d68cb02f36 4,8-9,13-15,18,27-35,67-109
+packages/shared/entitlement.ts
+  fbdbb1d68cb02f36 1-4,6,13-66,70,75,79,87
+apps/web/src/lib/crm-client.ts
+  fbdbb1d68cb02f36 1-48
+apps/web/src/lib/crm-customer-cache.ts
+  fbdbb1d68cb02f36 1-2,16-73,76-101
+apps/web/src/lib/ai-telemetry.ts
+  fbdbb1d68cb02f36 1-54
+apps/web/src/lib/crm-directory.ts
+  fbdbb1d68cb02f36 1-68
+apps/web/src/lib/auth-user.ts
+  fbdbb1d68cb02f36 1-56
+apps/web/src/routes/crm.tsx
+  fbdbb1d68cb02f36 3,5-16,19,21,283-284,289,301,304,313,333,364,383,386-389,414,420,423-424,427,440,442-447,715,732,746,760,768,787,866,874,878-879,937,941,945,949,960,1030,1034,1061
+apps/web/src/lib/ai-telemetry.test.ts
+  fbdbb1d68cb02f36 1-52
+apps/web/src/lib/crm-export.test.ts
+  fbdbb1d68cb02f36 1-40
+apps/web/src/lib/auth-user.test.ts
+  fbdbb1d68cb02f36 1-95
+apps/web/src/lib/crm-export.ts
+  fbdbb1d68cb02f36 1-37
+apps/web/src/lib/entitlement.test.ts
+  fbdbb1d68cb02f36 5,10-12,22-61
+apps/web/src/lib/crm-summary.ts
+  fbdbb1d68cb02f36 9-15,58-67
+apps/web/src/components/billing/FeedAccessNotice.tsx
+  fbdbb1d68cb02f36 4,6,17-18,21,26,29
+apps/web/src/lib/crm-client.test.ts
+  fbdbb1d68cb02f36 1-67
+apps/web/src/lib/crm-customer-cache.test.ts
+  fbdbb1d68cb02f36 4-10,20-77
+apps/web/src/lib/crm-summary.test.ts
+  fbdbb1d68cb02f36 4,55-68
+apps/web/src/lib/utils.ts
+  fbdbb1d68cb02f36 3-38,40,44-48,51-52,93-109,118-128,182-193
+apps/web/src/lib/crm-directory.test.ts
+  fbdbb1d68cb02f36 1-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.8",
+  "base_commit_sha": "e4953628cc10e4d63ce1e0f210a64a87618a8670",
+  "prompts": {
+    "1d2d0219b5c1d340": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd078-bf9e-7dd3-9530-3d34271b7311",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 265,
+      "total_deletions": 403,
+      "accepted_lines": 197,
+      "overriden_lines": 0
+    },
+    "d9cab6b7788d67e8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd14d-7a27-7f52-a15c-311809a93474",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 14,
+      "total_deletions": 97,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    },
+    "fbdbb1d68cb02f36": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd0d9-c76f-7c23-b348-713dec4ebf33",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 1121,
+      "total_deletions": 214,
+      "accepted_lines": 1114,
+      "overriden_lines": 0
+    }
+  }
+}

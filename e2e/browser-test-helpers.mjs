@@ -540,9 +540,7 @@ export async function waitForBillingDashboard(page) {
   await page.getByTestId("billing-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("billing-summary-plan").waitFor({ state: "visible", timeout: 30_000 });
 
-  const billingNotice = page.getByTestId("billing-notice");
-  await billingNotice.waitFor({ state: "attached", timeout: 30_000 });
-  return billingNotice;
+  return page.getByTestId("billing-notice");
 }
 
 export async function openBillingDashboard(page) {

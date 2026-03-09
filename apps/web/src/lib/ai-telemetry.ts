@@ -4,7 +4,7 @@ export type AiTelemetryCacheStatsLike = {
 } | null | undefined;
 
 export function readAiTelemetryItems<T>(items: readonly T[] | null | undefined): T[] {
-  return [...(items ?? [])];
+  return items ? (items as T[]) : [];
 }
 
 export function getAiTelemetryMaxValue<T>(

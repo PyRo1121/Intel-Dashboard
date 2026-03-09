@@ -1,7 +1,7 @@
 import { fetchClientJson } from "./client-json.ts";
 
 export function readCrmItems<T>(items: readonly T[] | null | undefined): T[] {
-  return [...(items ?? [])];
+  return items ? (items as T[]) : [];
 }
 
 export async function fetchCrmOverview<T extends { ok?: boolean; error?: string }>(): Promise<T> {

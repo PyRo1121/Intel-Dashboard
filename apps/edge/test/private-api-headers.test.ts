@@ -29,6 +29,19 @@ test("privateApiJson applies private no-store JSON headers", async () => {
   assert.equal(response.headers.get("X-Frame-Options"), "DENY");
 });
 
+test("privateApiJson applies private no-store JSON headers on explicit error responses", async () => {
+  const response = privateApiJson("https://intel.pyro1121.com", 400, { error: "Bad Request" });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "Bad Request" });
+  assert.equal(response.headers.get("Content-Type"), "application/json");
+  assert.equal(response.headers.get("Cache-Control"), "private, no-store, no-cache, must-revalidate");
+  assert.equal(response.headers.get("CDN-Cache-Control"), "no-store");
+  assert.match(response.headers.get("Vary") || "", /Origin/);
+  assert.match(response.headers.get("Vary") || "", /Cookie/);
+  assert.match(response.headers.get("Vary") || "", /Authorization/);
+});
+
 test("privateApiJson merges extra headers", async () => {
   const response = privateApiJson("https://intel.pyro1121.com", 405, { error: "Method Not Allowed" }, null, {
     Allow: "GET, POST",

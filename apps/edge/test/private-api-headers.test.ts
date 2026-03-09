@@ -44,4 +44,5 @@ test("privateApiMethodNotAllowed applies allow header and default payload", asyn
   assert.equal(response.status, 405);
   assert.deepEqual(await response.json(), { error: "Method Not Allowed" });
   assert.equal(response.headers.get("Allow"), "GET, POST");
+  assert.equal(response.headers.get("Content-Type"), "application/json");
 });

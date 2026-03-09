@@ -154,7 +154,7 @@ describe("proxyAuthenticatedApi", () => {
 
     try {
       const handler = createProxyGetHandler("/api/air-sea");
-      const response = await handler(buildEvent(new Request("https://localhost:3200/api/air-sea?limit=3")));
+      const response = await handler(buildEvent(new Request("https://localhost:3200/api/other-route?limit=3")));
 
       assert.equal(response.status, 200);
       assert.equal(calls[0]?.url, "https://intel.pyro1121.com/api/air-sea?limit=3");

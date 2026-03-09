@@ -6,9 +6,9 @@ export function jsonResponse(
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  return new Response(JSON.stringify(payload), {
+  const body = JSON.stringify(payload) ?? "null";
+  return new Response(body, {
     status: init.status,
     headers,
   });
 }
-

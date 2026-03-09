@@ -2608,7 +2608,7 @@ async function saveSubscriberAlertPreferences(
   env: Env,
   userId: string,
   preferences: ReturnType<typeof createDefaultSubscriberAlertPreferences>,
-): Promise<void> {
+): Promise<string> {
   await ensureSubscriberAlertSchema(env);
   const updatedAt = new Date().toISOString();
   await env.INTEL_DB.prepare(
@@ -2630,6 +2630,7 @@ async function saveSubscriberAlertPreferences(
     preferences.minimumTelegramHighSignalGrade,
     updatedAt,
   ).run();
+  return updatedAt;
 }
 
 async function loadSubscriberAlerts(env: Env, userId: string, state: "all" | "unread", limit: number) {
@@ -6075,10 +6076,10 @@ export default {
           return privateApiJson(origin, 400, { error: "Invalid JSON" });
         }
         const preferences = normalizeSubscriberAlertPreferences(payload);
-        await saveSubscriberAlertPreferences(env, gate.userId, preferences);
+        const updatedAt = await saveSubscriberAlertPreferences(env, gate.userId, preferences);
         return privateApiJson(origin, 200, {
           ...preferences,
-          updatedAt: new Date().toISOString(),
+          updatedAt,
         });
       }
 

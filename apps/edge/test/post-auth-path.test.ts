@@ -11,6 +11,7 @@ test("getDashboardAppRoutePrefixes exposes the allowed dashboard route roots", (
   assert.deepEqual(getDashboardAppRoutePrefixes(), [
     "/overview",
     "/osint",
+    "/my-feed",
     "/telegram",
     "/map",
     "/air-sea",

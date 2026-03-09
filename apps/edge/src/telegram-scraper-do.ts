@@ -1247,6 +1247,15 @@ export class TelegramScraperDO extends DurableObject<Env> {
           if (rightScore !== leftScore) return rightScore - leftScore;
           return left.datetimeMs - right.datetimeMs;
         });
+        const rankedSources = [...cluster.sources].sort((left, right) => {
+          const leftScore = sourceScores.get(left.channel) ?? 0;
+          const rightScore = sourceScores.get(right.channel) ?? 0;
+          if (rightScore !== leftScore) return rightScore - leftScore;
+          if (right.datetimeMs !== left.datetimeMs) return right.datetimeMs - left.datetimeMs;
+          const channelOrder = left.channel.localeCompare(right.channel);
+          if (channelOrder !== 0) return channelOrder;
+          return left.signature.localeCompare(right.signature);
+        });
         const bestSource = rankedSourceRepresentatives[0] ?? cluster.primary;
         const averageSubscriberValue = Math.round(
           rankedSourceRepresentatives.reduce((sum, source) => sum + (sourceScores.get(source.channel) ?? 0), 0) /
@@ -1296,7 +1305,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
           media: mergedMedia,
           has_video: mergedMedia.some((item) => item.type === "video"),
           has_photo: mergedMedia.some((item) => item.type === "photo"),
-          sources: rankedSourceRepresentatives.slice(0, 60).map((source) => ({
+          sources: rankedSources.slice(0, 60).map((source) => ({
             signature: source.signature,
             channel: source.channel,
             label: source.label,

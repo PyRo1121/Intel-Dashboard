@@ -6,6 +6,9 @@
   "dependencies": {
     "@intel-dashboard/shared": "workspace:*"
   },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -26,6 +29,7 @@
     "test:backend": "bun run --cwd apps/backend test",
     "test:e2e": "node scripts/run-e2e-with-dev-vars.mjs",
     "test:e2e:browser": "node scripts/run-e2e-with-dev-vars.mjs --test e2e/browser-smoke.test.mjs",
+    "test:e2e:owner-admin": "node scripts/run-e2e-with-dev-vars.mjs --test e2e/browser-owner-admin.test.mjs",
     "test:e2e:strict": "E2E_STRICT=1 node scripts/run-e2e-with-dev-vars.mjs",
     "test:e2e:auth": "E2E_STRICT=1 E2E_REQUIRE_AUTH=1 node scripts/run-e2e-with-dev-vars.mjs",
     "test": "bun run test:web && bun run test:edge && bun run test:backend",

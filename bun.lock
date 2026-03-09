@@ -7,6 +7,9 @@
       "dependencies": {
         "@intel-dashboard/shared": "workspace:*",
       },
+      "devDependencies": {
+        "@playwright/test": "^1.58.2",
+      },
     },
     "apps/backend": {
       "name": "@intel-dashboard/backend",

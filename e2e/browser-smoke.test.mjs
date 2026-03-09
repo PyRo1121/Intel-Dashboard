@@ -1,9 +1,44 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { chromium } from "@playwright/test";
-import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
+import {
+  advanceMockClock,
+  assertNoBrowserDiagnostics,
+  assertLandingCtaDestination,
+  assertPublicAccessSurface,
+  assertSidebarRouteNavigation,
+  openAndAssertNotFoundPage,
+  openAndAssertPublicLanding,
+  openAndAssertPublicAuthRoute,
+  openAndAssertRouteMetadata,
+  openAndAssertPublicAuthEntry,
+  createAirSeaFixture,
+  createBriefingsFixture,
+  createIntelFixture,
+  EDGE_BASE_URL,
+  SESSION_COOKIE,
+  captureBrowserArtifacts,
+  createBrowserContext,
+  createBrowserContextWithCookie,
+  createPublicBrowserContext,
+  installMockClock,
+  parseTrailingCount,
+  trim,
+  waitForProtectedLoginOverlay,
+  navigateByKeyboard,
+  openPage,
+  openDashboardPage,
+  openBillingDashboard,
+  openCrmDashboard,
+  openOwnerCrmPanelByKeyboard,
+  openCrmSelectedUserPanel,
+  assertOwnerBillingBypassNotices,
+  collectBrowserDiagnostics,
+  CRM_AI_WINDOWS,
+  MISSING_BILLING_STATE_PATTERN,
+  waitForCrmAiSurface,
+  waitForMissingBillingState,
+} from "./browser-test-helpers.mjs";
 import {
   AUTHENTICATED_BROWSER_NOERROR_ROUTES,
   AUTHENTICATED_BROWSER_ROUTES,
@@ -12,308 +47,13 @@ import {
   PUBLIC_BROWSER_ROUTES,
 } from "./coverage-manifest.mjs";
 
-function trim(value) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-const EDGE_BASE_URL = (trim(process.env.E2E_EDGE_BASE_URL) || SITE_ORIGIN).replace(/\/+$/, "");
-const SESSION_COOKIE = trim(process.env.E2E_SESSION_COOKIE);
 const SIGNOUT_SESSION_COOKIE = trim(process.env.E2E_SIGNOUT_SESSION_COOKIE);
-const STRICT = process.env.E2E_STRICT === "1";
-const REQUIRE_AUTH = process.env.E2E_REQUIRE_AUTH === "1";
-const ARTIFACT_DIR = join(process.cwd(), "output", "e2e-browser");
-const sessionValidationCache = new Map();
 
-function parseCookieHeader(header) {
-  const trimmed = trim(header);
-  const eq = trimmed.indexOf("=");
-  if (eq <= 0) return null;
-  return {
-    name: trimmed.slice(0, eq),
-    value: trimmed.slice(eq + 1),
-  };
-}
+const SMOKE_IGNORED_CONSOLE_PATTERNS = [
+  /Failed to load resource: the server responded with a status of 401 \(\)/i,
+  /Failed to load resource: the server responded with a status of 404 \(\)/i,
+];
 
-function requireOrSkip(t, value, message) {
-  if (trim(value)) return trim(value);
-  if (REQUIRE_AUTH) {
-    assert.fail(message);
-  }
-  if (STRICT) t.diagnostic(message);
-  t.skip(message);
-  return "";
-}
-
-function isIgnorableConsoleError(text) {
-  return (
-    /^%c%d font-size:0;color:transparent NaN$/.test(text) ||
-    /Note that 'script-src' was not explicitly set, so 'default-src' is used as a fallback\./i.test(text) ||
-    /Failed to load resource: the server responded with a status of 401 \(\)/i.test(text) ||
-    /Failed to load resource: the server responded with a status of 404 \(\)/i.test(text)
-  );
-}
-
-function sanitizeArtifactName(value) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80) || "browser-test";
-}
-
-function parseTrailingCount(text) {
-  const match = trim(text).match(/\((\d+)\)\s*$/);
-  return match ? Number(match[1]) : null;
-}
-
-async function installMockClock(page) {
-  await page.addInitScript(() => {
-    const originalNow = Date.now.bind(Date);
-    let offsetMs = 0;
-    Object.defineProperty(window, "__codexAdvanceNow", {
-      value: (ms) => {
-        offsetMs += Number(ms) || 0;
-      },
-      configurable: true,
-    });
-    Date.now = () => originalNow() + offsetMs;
-  });
-}
-
-async function advanceMockClock(page, ms) {
-  await page.evaluate((delta) => {
-    window.__codexAdvanceNow(delta);
-  }, ms);
-}
-
-async function captureBrowserArtifacts(page, testName, error) {
-  await mkdir(ARTIFACT_DIR, { recursive: true });
-  const slug = sanitizeArtifactName(testName);
-  const screenshotPath = join(ARTIFACT_DIR, `${slug}.png`);
-  const htmlPath = join(ARTIFACT_DIR, `${slug}.html`);
-  const metaPath = join(ARTIFACT_DIR, `${slug}.txt`);
-
-  await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
-  const html = await page.content().catch(() => "");
-  await writeFile(htmlPath, html, "utf8").catch(() => {});
-  await writeFile(
-    metaPath,
-    [
-      `url: ${page.url()}`,
-      `error: ${error instanceof Error ? error.stack || error.message : String(error)}`,
-    ].join("\n\n"),
-    "utf8",
-  ).catch(() => {});
-}
-
-function createIntelFixture({ timestamp, region = "global" } = {}) {
-  return [
-    {
-      title: "Fixture intelligence update",
-      summary: "Deterministic intelligence summary for browser timing verification.",
-      source: "Fixture Source",
-      url: "https://example.com/fixture-intel",
-      timestamp,
-      region,
-      category: "news",
-      severity: "high",
-    },
-  ];
-}
-
-function createBriefingsFixture(timestamp) {
-  return [
-    {
-      id: "fixture-briefing-1",
-      timestamp,
-      content: "Deterministic briefing content for browser timing verification.",
-      severity_summary: { critical: 1, high: 2, medium: 0, low: 0 },
-    },
-  ];
-}
-
-function createAirSeaFixture(timestamp) {
-  return {
-    timestamp,
-    aviation: {
-      timestamp,
-      source: "Fixture OpenSky",
-      emergencies: 0,
-      aircraft: [],
-    },
-    intelFeed: [
-      {
-        id: "fixture-air-1",
-        domain: "air",
-        category: "en_analysis",
-        channel: "Fixture Air",
-        channelUsername: "fixtureair",
-        text: "Deterministic air/sea report for browser timing verification.",
-        datetime: timestamp,
-        link: "https://example.com/fixture-air",
-        views: "100",
-        severity: "high",
-        region: "Global",
-        tags: ["fixture"],
-        media: [],
-      },
-    ],
-    stats: {
-      aircraftCount: 0,
-      airIntelCount: 1,
-      seaIntelCount: 0,
-      totalIntel: 1,
-      critical: 0,
-      high: 1,
-    },
-  };
-}
-
-async function waitForProtectedLoginOverlay(page, { nextPath } = {}) {
-  const githubLink = page.getByRole("link", { name: "Continue with GitHub" }).first();
-  const xLink = page.getByRole("link", { name: "Continue with X" }).first();
-
-  await githubLink.waitFor({ state: "visible", timeout: 30_000 });
-  await xLink.waitFor({ state: "visible", timeout: 30_000 });
-  await page.locator("text=Continue your intelligence workflow with secure OAuth authentication.").first().waitFor({
-    state: "visible",
-    timeout: 30_000,
-  });
-
-  if (nextPath) {
-    assert.equal(await githubLink.getAttribute("href"), `/auth/login?next=${encodeURIComponent(nextPath)}`);
-    assert.equal(await xLink.getAttribute("href"), `/auth/x/login?next=${encodeURIComponent(nextPath)}`);
-  }
-}
-
-function collectBrowserDiagnostics(page, baseUrl) {
-  const pageErrors = [];
-  const consoleErrors = [];
-  const requestFailures = [];
-  const baseOrigin = new URL(baseUrl).origin;
-
-  page.on("pageerror", (error) => {
-    pageErrors.push(error.message);
-  });
-
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      const text = message.text();
-      if (!isIgnorableConsoleError(text)) {
-        consoleErrors.push(text);
-      }
-    }
-  });
-
-  page.on("requestfailed", (request) => {
-    try {
-      const requestUrl = new URL(request.url());
-      const errorText = request.failure()?.errorText || "request_failed";
-      if (requestUrl.origin === baseOrigin) {
-        if (/ERR_ABORTED/i.test(errorText)) {
-          return;
-        }
-        requestFailures.push(`${request.method()} ${request.url()} ${errorText}`);
-      }
-    } catch {
-      // ignore malformed request urls
-    }
-  });
-
-  return { pageErrors, consoleErrors, requestFailures };
-}
-
-async function createBrowserContext(t, options = {}) {
-  return createBrowserContextWithCookie(t, SESSION_COOKIE, "E2E_SESSION_COOKIE is required for browser-authenticated dashboard smoke e2e", options);
-}
-
-async function validateSessionCookie(t, cookieHeader, missingMessage) {
-  const cookie = requireOrSkip(t, cookieHeader, missingMessage);
-  if (!cookie) return "";
-
-  if (!sessionValidationCache.has(cookie)) {
-    sessionValidationCache.set(cookie, (async () => {
-      const response = await fetch(`${EDGE_BASE_URL}/api/auth/me`, {
-        headers: {
-          Cookie: cookie,
-        },
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (response.status !== 200) {
-        return {
-          ok: false,
-          status: response.status,
-        };
-      }
-      const payload = await response.json().catch(() => null);
-      return {
-        ok: payload?.authenticated === true,
-        status: response.status,
-      };
-    })());
-  }
-
-  const validation = await sessionValidationCache.get(cookie);
-  if (!validation.ok) {
-    const detail = `${missingMessage.replace("is required", "is present")} but invalid or expired (auth/me returned ${validation.status}). Refresh it with bun run e2e:save-secrets after logging in again.`;
-    if (REQUIRE_AUTH || STRICT) {
-      assert.fail(detail);
-    }
-    t.skip(detail);
-    return "";
-  }
-
-  return cookie;
-}
-
-async function createBrowserContextWithCookie(t, cookieHeaderValue, missingMessage, options = {}) {
-  const cookieHeader = await validateSessionCookie(
-    t,
-    cookieHeaderValue,
-    missingMessage,
-  );
-  if (!cookieHeader) return null;
-  const parsedCookie = parseCookieHeader(cookieHeader);
-  assert.ok(parsedCookie, "auth e2e session cookie must be a name=value cookie header");
-
-  let browser;
-  try {
-    browser = await chromium.launch({ headless: true });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    t.skip(`Chromium is unavailable for browser e2e: ${message}`);
-    return null;
-  }
-
-  const context = await browser.newContext({ acceptDownloads: true, ...options });
-  await context.addCookies([
-    {
-      name: parsedCookie.name,
-      value: parsedCookie.value,
-      domain: "intel.pyro1121.com",
-      path: "/",
-      secure: true,
-      httpOnly: true,
-      sameSite: "Lax",
-    },
-  ]);
-
-  return { browser, context };
-}
-
-async function createPublicBrowserContext(t, options = {}) {
-  let browser;
-  try {
-    browser = await chromium.launch({ headless: true });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    t.skip(`Chromium is unavailable for browser e2e: ${message}`);
-    return null;
-  }
-
-  const context = await browser.newContext({ acceptDownloads: true, ...options });
-  return { browser, context };
-}
 
 test("browser-authenticated dashboard routes render primary headings without auth bounce", async (t) => {
   const runtime = await createBrowserContext(t);
@@ -326,7 +66,7 @@ test("browser-authenticated dashboard routes render primary headings without aut
       const routes = AUTHENTICATED_BROWSER_ROUTES;
 
       for (const route of routes) {
-        const response = await page.goto(`${EDGE_BASE_URL}${route.path}`, {
+        const response = await openPage(page, route.path, {
           waitUntil: "domcontentloaded",
           timeout: 30_000,
         });
@@ -355,10 +95,7 @@ test("browser-authenticated sidebar renders owner identity and avatar", async (t
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       await page.locator('p').filter({ hasText: /^PyRo1121$/ }).first().waitFor({ state: "visible", timeout: 30_000 });
       await page.locator('p').filter({ hasText: /^@PyRo1121$/ }).first().waitFor({ state: "visible", timeout: 30_000 });
@@ -386,27 +123,8 @@ test("browser-authenticated billing actions surface owner bypass notices", async
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/billing`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
-
-      await page.getByTestId("billing-status-surface").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("billing-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("billing-summary-plan").waitFor({ state: "visible", timeout: 30_000 });
-      const notice = page.getByTestId("billing-notice");
-
-      await page.getByTestId("billing-start-trial").click();
-      await notice.waitFor({ state: "visible", timeout: 30_000 });
-      assert.match((await notice.textContent()) || "", /Owner account detected. Trial activation is not required./i);
-
-      await page.getByTestId("billing-open-checkout").click();
-      await notice.waitFor({ state: "visible", timeout: 30_000 });
-      assert.match((await notice.textContent()) || "", /Owner account detected. Checkout bypass is active./i);
-
-      await page.getByTestId("billing-manage-subscription").click();
-      await notice.waitFor({ state: "visible", timeout: 30_000 });
-      assert.match((await notice.textContent()) || "", /Owner account detected. Stripe portal is not required./i);
+      const notice = await openBillingDashboard(page);
+      await assertOwnerBillingBypassNotices(page, notice);
       const activitySurface = page.getByTestId("billing-activity-surface");
       await activitySurface.waitFor({ state: "visible", timeout: 30_000 });
     } catch (error) {
@@ -427,16 +145,7 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/crm`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
-
-      await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
-      await page.getByTestId("crm-summary-mrr").waitFor({ state: "visible", timeout: 30_000 });
-
-      const search = page.getByTestId("crm-user-search");
+      const search = await openCrmDashboard(page);
       await search.fill("PyRo1121");
 
       const matchingRow = page.locator("tbody tr").filter({ hasText: /PyRo1121/i }).first();
@@ -461,16 +170,15 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
       assert.match(csv, /user_id,name,login,email,providers,plan_status/i, "CRM export should include the expected headers");
       assert.match(csv, /PyRo1121/i, "CRM export should include the owner record");
 
-      await matchingRow.getByRole("button", { name: /Manage /i }).click();
-      await page.getByTestId("crm-selected-user-panel").waitFor({ state: "visible", timeout: 30_000 });
-      assert.match((await page.getByTestId("crm-selected-user-panel").textContent()) || "", /PyRo1121/i, "CRM selected-user panel should render the owner record");
-      await page.waitForFunction(() => {
-        const text = document.body.textContent || "";
-        return /Billing account not found for target user\.|Target user has no Stripe customer id yet\./i.test(text);
-      }, { timeout: 30_000 });
+      const selectedPanel = await openCrmSelectedUserPanel(
+        matchingRow.getByRole("button", { name: /Manage /i }),
+        page,
+      );
+      assert.match((await selectedPanel.textContent()) || "", /PyRo1121/i, "CRM selected-user panel should render the owner record");
+      await waitForMissingBillingState(page);
       assert.match(
         (await page.textContent("body")) || "",
-        /Billing account not found for target user\.|Target user has no Stripe customer id yet\./i,
+        MISSING_BILLING_STATE_PATTERN,
         "CRM should surface a safe non-destructive missing-billing state for the selected owner account",
       );
 
@@ -480,23 +188,14 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
       await page.getByTestId("crm-ops-error").waitFor({ state: "visible", timeout: 10_000 });
       assert.match((await page.getByTestId("crm-ops-error").textContent()) || "", /Refund amount must be a positive number\./i);
 
-      const aiWindows = ["15m", "1h", "24h", "7d", "30d"];
-      for (const window of aiWindows) {
+      for (const window of CRM_AI_WINDOWS) {
         const toggle = page.getByTestId(`crm-ai-window-${window}`);
         await toggle.click();
         assert.equal(await toggle.getAttribute("aria-pressed"), "true", `CRM AI window ${window} should become active`);
         await page.getByTestId("crm-ai-refresh").click();
-        await page.getByTestId("crm-ai-surface").waitFor({ state: "visible", timeout: 30_000 });
-        await page.waitForFunction(() => {
-          const configured = document.querySelector('[data-testid="crm-ai-surface-configured"]');
-          const unavailable = document.querySelector('[data-testid="crm-ai-surface-unavailable"]');
-          const loading = document.querySelector('[data-testid="crm-ai-surface-loading"]');
-          return Boolean(configured || unavailable || !loading);
-        }, { timeout: 30_000 });
-        const hasConfiguredAiSurface = await page.getByTestId("crm-ai-surface-configured").count();
-        const hasUnavailableAiSurface = await page.getByTestId("crm-ai-surface-unavailable").count();
+        const { configuredCount, unavailableCount } = await waitForCrmAiSurface(page);
         assert.ok(
-          hasConfiguredAiSurface > 0 || hasUnavailableAiSurface > 0,
+          configuredCount > 0 || unavailableCount > 0,
           `CRM should render either the configured AI telemetry surface or an explicit unavailable-state banner for ${window}`,
         );
       }
@@ -518,10 +217,7 @@ test("browser-authenticated Telegram controls toggle feed windows and dedupe sur
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/telegram`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/telegram");
 
       await page.waitForSelector("text=Telegram Intel", { timeout: 30_000 });
 
@@ -567,10 +263,7 @@ test("browser-authenticated Telegram latest age ticker updates live", async (t) 
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/telegram`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/telegram");
 
       const latestAgeStat = page.locator('p').filter({ hasText: /^Latest Msg Age$/ }).first();
       await latestAgeStat.waitFor({ state: "visible", timeout: 30_000 });
@@ -602,10 +295,7 @@ test("browser-authenticated billing activity ages update with wall clock drift",
     const page = await context.newPage();
     try {
       await installMockClock(page);
-      await page.goto(`${EDGE_BASE_URL}/billing`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/billing");
 
       const firstAge = page.locator('[data-e2e="billing-event-age"]').first();
       await firstAge.waitFor({ state: "visible", timeout: 30_000 });
@@ -645,10 +335,7 @@ test("browser-authenticated overview feed ages update with wall clock drift", as
           body: JSON.stringify(createIntelFixture({ timestamp: fixtureTimestamp })),
         });
       });
-      await page.goto(`${EDGE_BASE_URL}/overview`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/overview");
 
       const freshnessPill = page.locator('span[title^="Freshness thresholds:"]').first();
       await freshnessPill.waitFor({ state: "visible", timeout: 30_000 });
@@ -729,10 +416,7 @@ test("browser-authenticated feed item ages update with wall clock drift", async 
             });
           });
         }
-        await page.goto(`${EDGE_BASE_URL}${check.path}`, {
-          waitUntil: "networkidle",
-          timeout: 45_000,
-        });
+        await openDashboardPage(page, check.path);
 
         if (typeof check.setup === "function") {
           await check.setup(page);
@@ -771,10 +455,7 @@ test("browser-authenticated Telegram freshness banner reacts to state transition
     const page = await context.newPage();
     try {
       await installMockClock(page);
-      await page.goto(`${EDGE_BASE_URL}/telegram`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/telegram");
 
       const freshnessPill = page.locator('[title^="Freshness thresholds:"]').first();
       await freshnessPill.waitFor({ state: "visible", timeout: 30_000 });
@@ -827,10 +508,7 @@ test("browser-authenticated non-Telegram freshness banners react to state transi
       const page = await context.newPage();
       try {
         await installMockClock(page);
-        await page.goto(`${EDGE_BASE_URL}${check.path}`, {
-          waitUntil: "networkidle",
-          timeout: 45_000,
-        });
+        await openDashboardPage(page, check.path);
 
         const freshnessPill = page.locator('[title^="Freshness thresholds:"]').first();
         await freshnessPill.waitFor({ state: "visible", timeout: 30_000 });
@@ -910,10 +588,7 @@ test("browser-authenticated freshness pills advance with wall clock drift on act
             });
           });
         }
-        await page.goto(`${EDGE_BASE_URL}${route}`, {
-          waitUntil: "networkidle",
-          timeout: 45_000,
-        });
+        await openDashboardPage(page, route);
 
         const freshnessPill = page.locator('span[title^="Freshness thresholds:"]').first();
         await freshnessPill.waitFor({ state: "visible", timeout: 30_000 });
@@ -953,12 +628,11 @@ test("browser-authenticated live feeds stay healthy during refresh dwell", async
     for (const check of checks) {
       const page = await context.newPage();
       try {
-        const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL);
-
-        await page.goto(`${EDGE_BASE_URL}${check.path}`, {
-          waitUntil: "networkidle",
-          timeout: 45_000,
+        const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL, {
+          extraIgnoredConsolePatterns: SMOKE_IGNORED_CONSOLE_PATTERNS,
         });
+
+        await openDashboardPage(page, check.path);
         assert.match((await page.textContent("body")) || "", check.heading, `${check.path} should render the expected heading`);
 
         const freshnessPill = page.locator('[title^="Freshness thresholds:"]').first();
@@ -993,10 +667,7 @@ test("browser-authenticated OSINT severity filters apply the live feed contract"
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       await page.waitForSelector("text=OSINT Feed", { timeout: 30_000 });
 
@@ -1045,10 +716,7 @@ test("browser-authenticated Air/Sea filters honor no-match search and recovery",
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/air-sea`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/air-sea");
 
       await page.waitForSelector("text=Air / Sea Ops", { timeout: 30_000 });
 
@@ -1089,10 +757,7 @@ test("browser-authenticated Threat Map region cards open and close detail state"
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/map`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/map");
 
       await page.waitForSelector("text=Global Threat Overview", { timeout: 30_000 });
 
@@ -1130,20 +795,14 @@ test("browser-authenticated dashboard controls support keyboard activation", asy
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const osintCritical = page.locator("button").filter({ hasText: /^Critical(?:\s*\(\d+\))?$/i }).first();
       await osintCritical.focus();
       await page.keyboard.press("Enter");
       assert.equal(await osintCritical.getAttribute("aria-pressed"), "true", "OSINT critical filter should respond to keyboard activation");
 
-      await page.goto(`${EDGE_BASE_URL}/air-sea`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/air-sea");
 
       const airFilter = page.getByRole("button", { name: "Air domain filter" });
       await airFilter.focus();
@@ -1155,10 +814,7 @@ test("browser-authenticated dashboard controls support keyboard activation", asy
       await page.keyboard.press(" ");
       assert.equal(await highSeverity.getAttribute("aria-pressed"), "true", "Air/Sea high-severity filter should respond to keyboard activation");
 
-      await page.goto(`${EDGE_BASE_URL}/map`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/map");
 
       const regionCard = page.locator('button[aria-label^="Inspect "]').first();
       await regionCard.focus();
@@ -1187,45 +843,16 @@ test("browser-authenticated CRM and sidebar support keyboard-only navigation", a
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/crm`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      const crmSearch = await openCrmDashboard(page);
+      await openOwnerCrmPanelByKeyboard(page, crmSearch);
 
-      const crmSearch = page.getByTestId("crm-user-search");
-      await crmSearch.focus();
-      await page.keyboard.type("PyRo1121");
-
-      const ownerRow = page.locator("tbody tr").filter({ hasText: /olen@latham\.cloud/i }).first();
-      await ownerRow.waitFor({ state: "visible", timeout: 30_000 });
-
-      const manageOwner = ownerRow.getByRole("button", { name: "Manage PyRo1121" });
-      await manageOwner.focus();
-      await manageOwner.press("Enter");
-      await page.getByTestId("crm-selected-user-panel").waitFor({ state: "visible", timeout: 30_000 });
-
-      const refreshCustomer = page.getByTestId("crm-refresh-customer");
-      await refreshCustomer.focus();
-      await refreshCustomer.press("Enter");
-      await page.waitForFunction(() => {
-        const text = document.body.textContent || "";
-        return /Target user has no Stripe customer id yet\.|Billing account not found for target user\./i.test(text);
-      }, { timeout: 30_000 });
-
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const overviewLink = page.getByRole("link", { name: "Overview" }).first();
-      await overviewLink.focus();
-      await overviewLink.press("Enter");
-      await page.waitForURL(/\/overview$/, { timeout: 30_000 });
+      await navigateByKeyboard(overviewLink, page, /\/overview$/);
 
       const telegramLink = page.getByRole("link", { name: "Telegram" }).first();
-      await telegramLink.focus();
-      await telegramLink.press("Enter");
-      await page.waitForURL(/\/telegram$/, { timeout: 30_000 });
+      await navigateByKeyboard(telegramLink, page, /\/telegram$/);
     } catch (error) {
       await captureBrowserArtifacts(page, "authenticated-crm-sidebar-keyboard", error);
       throw error;
@@ -1244,10 +871,7 @@ test("browser desktop sidebar collapse and expand controls toggle nav state", as
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const desktopSidebar = page.locator("#desktop-navigation");
       const collapseSidebar = desktopSidebar.getByRole("button", { name: "Collapse sidebar" });
@@ -1283,10 +907,7 @@ test("browser desktop collapsed nav persists across reload and keeps link routin
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const desktopSidebar = page.locator("#desktop-navigation");
       await desktopSidebar.getByRole("button", { name: "Collapse sidebar" }).click();
@@ -1325,10 +946,7 @@ test("browser mobile drawer opens, navigates, and closes cleanly", async (t) => 
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const openNavigation = page.getByRole("button", { name: "Open navigation" });
       assert.equal(await openNavigation.getAttribute("aria-expanded"), "false", "mobile drawer should start closed");
@@ -1381,10 +999,7 @@ test("browser mobile drawer stays expanded even when desktop collapse preference
         window.localStorage.setItem("sidebar-collapsed", "true");
       });
 
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const openNavigation = page.getByRole("button", { name: "Open navigation" });
       await openNavigation.click();
@@ -1414,19 +1029,23 @@ test("browser-authenticated app pages stay free of uncaught, console, and same-o
   try {
     const page = await context.newPage();
     try {
-      const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL);
+      const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL, {
+        extraIgnoredConsolePatterns: SMOKE_IGNORED_CONSOLE_PATTERNS,
+      });
 
       for (const route of AUTHENTICATED_BROWSER_NOERROR_ROUTES) {
-        await page.goto(`${EDGE_BASE_URL}${route}`, {
-          waitUntil: "networkidle",
-          timeout: 45_000,
-        });
+        await openDashboardPage(page, route);
         await page.waitForTimeout(1_000);
       }
 
-      assert.deepEqual(pageErrors, [], "authenticated dashboard pages should not throw uncaught page errors");
-      assert.deepEqual(consoleErrors, [], "authenticated dashboard pages should not emit console.error messages");
-      assert.deepEqual(requestFailures, [], "authenticated dashboard pages should not have same-origin request failures");
+      assertNoBrowserDiagnostics(
+        { pageErrors, consoleErrors, requestFailures },
+        {
+          pageErrors: "authenticated dashboard pages should not throw uncaught page errors",
+          consoleErrors: "authenticated dashboard pages should not emit console.error messages",
+          requestFailures: "authenticated dashboard pages should not have same-origin request failures",
+        },
+      );
     } catch (error) {
       await captureBrowserArtifacts(page, "authenticated-dashboard-diagnostics", error);
       throw error;
@@ -1448,28 +1067,7 @@ test("browser public auth pages render current Intel Dashboard access UI", async
       const routes = PUBLIC_AUTH_BROWSER_ROUTES;
 
       for (const route of routes) {
-        const response = await page.goto(`${EDGE_BASE_URL}${route.path}`, {
-          waitUntil: "domcontentloaded",
-          timeout: 30_000,
-        });
-        assert.ok(response, `${route.path} should return a response`);
-        assert.equal(response.status(), 200, `${route.path} should render successfully`);
-        const bodyText = (await page.textContent("body")) || "";
-        assert.match(bodyText, new RegExp(route.heading, "i"), `${route.path} should render the current heading`);
-        for (const label of route.labels) {
-          assert.match(bodyText, new RegExp(label, "i"), `${route.path} should render ${label}`);
-        }
-        assert.match(
-          bodyText,
-          /Waiting for security check|Complete the security check before continuing/i,
-          `${route.path} should explain the turnstile gate`,
-        );
-        assert.doesNotMatch(bodyText, /PyRoBOT|PyRo1121Bot/i, `${route.path} should not render legacy branding`);
-        const buttons = await page.getByRole("button").all();
-        assert.ok(buttons.length >= 2, `${route.path} should render gated auth buttons`);
-        for (const button of buttons.slice(0, 2)) {
-          assert.equal(await button.isDisabled(), true, `${route.path} auth CTA should stay disabled until turnstile completes`);
-        }
+        await openAndAssertPublicAuthRoute(page, route);
       }
     } catch (error) {
       await captureBrowserArtifacts(page, "public-auth-pages", error);
@@ -1489,27 +1087,8 @@ test("browser auth pages preserve safe next routes in rendered auth actions", as
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/login?next=${encodeURIComponent("/crm")}`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
-      const loginXHref = await page.getByRole("button", { name: "Continue with X" }).getAttribute("data-auth-href");
-      const loginGithubHref = await page.getByRole("button", { name: "Continue with GitHub" }).getAttribute("data-auth-href");
-      const loginSwitchHref = await page.locator('a[href="/signup?next=%2Fcrm"]').first().getAttribute("href");
-      assert.equal(loginXHref, "/auth/x/login?next=%2Fcrm");
-      assert.equal(loginGithubHref, "/auth/login?next=%2Fcrm");
-      assert.equal(loginSwitchHref, "/signup?next=%2Fcrm");
-
-      await page.goto(`${EDGE_BASE_URL}/signup?next=${encodeURIComponent("/briefings")}`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
-      const signupXHref = await page.getByRole("button", { name: "Create Account with X" }).getAttribute("data-auth-href");
-      const signupGithubHref = await page.getByRole("button", { name: "Create Account with GitHub" }).getAttribute("data-auth-href");
-      const signupSwitchHref = await page.locator('a[href="/login?next=%2Fbriefings"]').first().getAttribute("href");
-      assert.equal(signupXHref, "/auth/x/signup?next=%2Fbriefings");
-      assert.equal(signupGithubHref, "/auth/signup?next=%2Fbriefings");
-      assert.equal(signupSwitchHref, "/login?next=%2Fbriefings");
+      await openAndAssertPublicAuthEntry(page, { mode: "login", nextPath: "/crm" });
+      await openAndAssertPublicAuthEntry(page, { mode: "signup", nextPath: "/briefings" });
     } catch (error) {
       await captureBrowserArtifacts(page, "auth-page-next-routing", error);
       throw error;
@@ -1542,10 +1121,7 @@ test("browser protected routes surface session-unavailable recovery and recover 
         });
       });
 
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
+      await openPublicPage(page, "/osint");
 
       await page.waitForSelector("text=Session Check Unavailable", { timeout: 30_000 });
       await page.waitForSelector("text=Retry Session Check", { timeout: 30_000 });
@@ -1593,10 +1169,7 @@ test("browser protected login overlay preserves the current route in auth action
         });
       });
 
-      await page.goto(`${EDGE_BASE_URL}/billing`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
+      await openPublicPage(page, "/billing");
 
       await waitForProtectedLoginOverlay(page, { nextPath: "/billing" });
     } catch (error) {
@@ -1617,34 +1190,11 @@ test("browser public landing and 404 surfaces render expected production content
   try {
     const page = await context.newPage();
     try {
-      const landingResponse = await page.goto(`${EDGE_BASE_URL}/`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
-      assert.ok(landingResponse, "landing page should return a response");
-      assert.equal(landingResponse.status(), 200, "landing page should render successfully");
-      const landingText = (await page.textContent("body")) || "";
-      assert.match(landingText, /Intel Dashboard/i, "landing should render Intel Dashboard branding");
-      assert.match(landingText, /Start 7-Day Trial/i, "landing should render trial CTA");
-      assert.doesNotMatch(landingText, /PyRoBOT|PyRo1121Bot/i, "landing should not render legacy branding");
+      await openAndAssertPublicLanding(page);
 
-      const notFoundResponse = await page.goto(`${EDGE_BASE_URL}/this-page-should-not-exist-xyz`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
-      assert.ok(notFoundResponse, "404 page should return a response");
-      assert.equal(notFoundResponse.status(), 404, "missing page should return 404");
-      const notFoundText = (await page.textContent("body")) || "";
-      assert.match(notFoundText, /Not Found/i, "missing page should render not found copy");
+      await openAndAssertNotFoundPage(page);
 
-      const shadowedLandingResponse = await page.goto(`${EDGE_BASE_URL}/landing`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
-      assert.ok(shadowedLandingResponse, "shadowed landing route should return a response");
-      assert.equal(shadowedLandingResponse.status(), 404, "shadowed landing route should remain unavailable in production");
-      const shadowedLandingText = (await page.textContent("body")) || "";
-      assert.match(shadowedLandingText, /Not Found/i, "shadowed landing route should render not found copy");
+      await openAndAssertNotFoundPage(page, "/landing");
     } catch (error) {
       await captureBrowserArtifacts(page, "public-landing-and-404", error);
       throw error;
@@ -1663,29 +1213,23 @@ test("browser public landing CTAs navigate to the intended auth surfaces", async
   try {
     const page = await context.newPage();
 
-    await page.goto(`${EDGE_BASE_URL}/`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
+    await assertLandingCtaDestination(page, {
+      ctaName: "Login",
+      expectedUrl: `${EDGE_BASE_URL}/login`,
+      accessMessage: "login CTA should land on a public auth surface",
     });
-    await page.getByRole("link", { name: "Login" }).first().click();
-    await page.waitForURL(`${EDGE_BASE_URL}/login`, { timeout: 30_000 });
-    assert.match((await page.textContent("body")) || "", /Sign in to Intel Dashboard/i);
 
-    await page.goto(`${EDGE_BASE_URL}/`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
+    await assertLandingCtaDestination(page, {
+      ctaName: /Start 7-Day Trial|Start Trial with OAuth/i,
+      expectedUrl: `${EDGE_BASE_URL}/signup`,
+      accessMessage: "trial CTA should land on a public auth surface",
     });
-    await page.getByRole("link", { name: /Start 7-Day Trial|Start Trial with OAuth/i }).first().click();
-    await page.waitForURL(`${EDGE_BASE_URL}/signup`, { timeout: 30_000 });
-    assert.match((await page.textContent("body")) || "", /Create your Intel Dashboard account/i);
 
-    await page.goto(`${EDGE_BASE_URL}/`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
+    await assertLandingCtaDestination(page, {
+      ctaName: /Open Live Dashboard|Open Dashboard/i,
+      expectedUrl: `${EDGE_BASE_URL}/overview`,
+      protectedNextPath: "/overview",
     });
-    await page.getByRole("link", { name: /Open Live Dashboard|Open Dashboard/i }).first().click();
-    await page.waitForURL(`${EDGE_BASE_URL}/overview`, { timeout: 30_000 });
-    await waitForProtectedLoginOverlay(page, { nextPath: "/overview" });
   } finally {
     await context.close();
     await browser.close();
@@ -1712,31 +1256,12 @@ test("browser route metadata stays aligned with production titles and canonical 
         : authRuntime;
       const page = await runtime.context.newPage();
       try {
-        const response = await page.goto(`${EDGE_BASE_URL}${expectation.path}`, {
+        await openAndAssertRouteMetadata(page, expectation, {
           waitUntil: "domcontentloaded",
           timeout: 30_000,
+          titleWaitMs: 750,
+          maxStatusExclusive: 500,
         });
-        assert.ok(response, `${expectation.path} should return a response`);
-        assert.ok(response.status() < 500, `${expectation.path} should not return a server error`);
-        await page.waitForTimeout(750);
-        assert.equal(await page.title(), expectation.title, `${expectation.path} should render the expected document title`);
-        if (expectation.description) {
-          const description = await page.locator('meta[name="description"]').first().getAttribute("content");
-          assert.equal(description, expectation.description, `${expectation.path} should render the expected meta description`);
-        }
-        if (expectation.robotsPattern) {
-          const robotsContent = await page.locator('meta[name="robots"]').first().getAttribute("content");
-          assert.match(robotsContent || "", expectation.robotsPattern, `${expectation.path} should expose the expected robots directive`);
-        }
-        if (expectation.canonicalHref) {
-          const canonicalHrefs = await page.locator('link[rel="canonical"]').evaluateAll((elements) =>
-            elements.map((element) => element.getAttribute("href")).filter(Boolean),
-          );
-          assert.ok(canonicalHrefs.length >= 1, `${expectation.path} should expose at least one canonical href`);
-          for (const canonicalHref of canonicalHrefs) {
-            assert.equal(canonicalHref, expectation.canonicalHref, `${expectation.path} canonical href should stay consistent`);
-          }
-        }
       } catch (error) {
         await captureBrowserArtifacts(page, `route-metadata-${expectation.path}`, error);
         throw error;
@@ -1759,18 +1284,12 @@ test("browser authenticated sidebar navigation opens the expected routes", async
 
   try {
     const page = await context.newPage();
-    await page.goto(`${EDGE_BASE_URL}/osint`, {
-      waitUntil: "networkidle",
-      timeout: 45_000,
-    });
+    await openDashboardPage(page, "/osint");
 
     await page.getByRole("link", { name: "Intel Dashboard home" }).click();
     await page.waitForURL(/\/overview$/, { timeout: 30_000 });
     assert.match((await page.textContent("body")) || "", /Intel Dashboard Overview/i);
-    await page.goto(`${EDGE_BASE_URL}/osint`, {
-      waitUntil: "networkidle",
-      timeout: 45_000,
-    });
+    await openDashboardPage(page, "/osint");
 
     const checks = [
       { label: "Overview", heading: "Intel Dashboard Overview", path: "/overview" },
@@ -1782,11 +1301,7 @@ test("browser authenticated sidebar navigation opens the expected routes", async
       { label: "CRM", heading: "Revenue Command Center", path: "/crm" },
     ];
 
-    for (const check of checks) {
-      await page.getByRole("link", { name: check.label }).first().click();
-      await page.waitForURL(new RegExp(`${check.path}$`), { timeout: 30_000 });
-      assert.match((await page.textContent("body")) || "", new RegExp(check.heading, "i"), `${check.label} should render ${check.heading}`);
-    }
+    await assertSidebarRouteNavigation(page, checks);
   } finally {
     await context.close();
     await browser.close();
@@ -1803,10 +1318,7 @@ test("browser mobile sidebar brand link returns to overview", async (t) => {
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const openNavigation = page.getByRole("button", { name: "Open navigation" }).first();
       await openNavigation.waitFor({ state: "visible", timeout: 30_000 });
@@ -1844,10 +1356,7 @@ test("browser public auth start routes enforce the security gate before provider
       ];
 
       for (const route of expectations) {
-        const response = await page.goto(`${EDGE_BASE_URL}${route.path}`, {
-          waitUntil: "domcontentloaded",
-          timeout: 30_000,
-        });
+        const response = await openPublicPage(page, route.path);
         assert.ok(response, `${route.path} should return a response`);
         const finalUrl = new URL(page.url());
         assert.equal(finalUrl.pathname, route.finalPath, `${route.path} should land on the matching auth page`);
@@ -1871,19 +1380,23 @@ test("browser public pages stay free of uncaught, console, and same-origin reque
   try {
     const page = await context.newPage();
     try {
-      const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL);
+      const { pageErrors, consoleErrors, requestFailures } = collectBrowserDiagnostics(page, EDGE_BASE_URL, {
+        extraIgnoredConsolePatterns: SMOKE_IGNORED_CONSOLE_PATTERNS,
+      });
 
       for (const route of PUBLIC_BROWSER_ROUTES) {
-        await page.goto(`${EDGE_BASE_URL}${route}`, {
-          waitUntil: "domcontentloaded",
-          timeout: 30_000,
-        });
+        await openPublicPage(page, route);
         await page.waitForTimeout(1_000);
       }
 
-      assert.deepEqual(pageErrors, [], "public pages should not throw uncaught page errors");
-      assert.deepEqual(consoleErrors, [], "public pages should not emit console.error messages");
-      assert.deepEqual(requestFailures, [], "public pages should not have same-origin request failures");
+      assertNoBrowserDiagnostics(
+        { pageErrors, consoleErrors, requestFailures },
+        {
+          pageErrors: "public pages should not throw uncaught page errors",
+          consoleErrors: "public pages should not emit console.error messages",
+          requestFailures: "public pages should not have same-origin request failures",
+        },
+      );
     } catch (error) {
       await captureBrowserArtifacts(page, "public-page-diagnostics", error);
       throw error;
@@ -1914,10 +1427,7 @@ test("browser-authenticated sign out clears access and forces re-auth on protect
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const signOut = page.getByRole("button", { name: "Sign out" }).first();
       await signOut.waitFor({ state: "visible", timeout: 30_000 });
@@ -1928,17 +1438,9 @@ test("browser-authenticated sign out clears access and forces re-auth on protect
         return pathname === "/" || pathname === "/login";
       }, { timeout: 30_000 });
 
-      const afterLogoutBody = (await page.textContent("body")) || "";
-      assert.match(
-        afterLogoutBody,
-        /Start 7-Day Trial|Sign in to Intel Dashboard|Create your Intel Dashboard account/i,
-        "sign out should land on a public access surface",
-      );
+      await assertPublicAccessSurface(page, "sign out should land on a public access surface");
 
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const protectedBody = (await page.textContent("body")) || "";
       assert.match(

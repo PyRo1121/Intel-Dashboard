@@ -53,7 +53,7 @@ test("owner-admin CRM controls filter, export, and enforce refund guardrails", a
     const page = await context.newPage();
     try {
       await page.goto(`${EDGE_BASE_URL}/crm`, {
-        waitUntil: "domcontentloaded",
+        waitUntil: "networkidle",
         timeout: 45_000,
       });
 
@@ -155,7 +155,7 @@ test("owner-admin CRM keyboard navigation stays intact", async (t) => {
       }, { timeout: 30_000 });
 
       await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "domcontentloaded",
+        waitUntil: "networkidle",
         timeout: 45_000,
       });
 

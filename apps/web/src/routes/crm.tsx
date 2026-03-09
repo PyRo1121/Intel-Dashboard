@@ -268,12 +268,20 @@ async function postCrmAction(path: string, payload: Record<string, unknown>): Pr
 }
 
 async function fetchAiTelemetry(window: string): Promise<AiTelemetryPayload> {
-  const res = await fetch(`/api/admin/crm/ai-telemetry?window=${encodeURIComponent(window)}`, {
-    method: "GET",
-    credentials: "include",
-    cache: "no-store",
-    signal: AbortSignal.timeout(30_000),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`/api/admin/crm/ai-telemetry?window=${encodeURIComponent(window)}`, {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unable to load AI telemetry.",
+    };
+  }
   const payload = await res.json().catch(() => ({ ok: false, error: "Invalid JSON response" }));
   if (!res.ok) {
     return {
@@ -718,7 +726,7 @@ export default function CrmRoute() {
                     Loading AI telemetry...
                   </div>
                 }>
-                  <Show when={aiTelemetry()?.ok !== false} fallback={
+                  <Show when={aiTelemetry() && aiTelemetry()?.ok !== false} fallback={
                     <div class="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
                       {aiTelemetry()?.error || "Unable to load AI telemetry."}
                     </div>

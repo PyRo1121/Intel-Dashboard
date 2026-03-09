@@ -3,7 +3,7 @@ import { Title, Meta, Link } from "@solidjs/meta";
 import { fetchIntelFeed } from "~/lib/intel-feed";
 import { REGION_ACCENT, REGION_CENTROIDS } from "~/lib/region-map-config";
 import { getRegionThreatLevel } from "~/lib/region-threat";
-import { buildRegionSummaries } from "~/lib/region-summary";
+import { buildRegionSummaries, findRegionSummary, sumRegionSeverity } from "~/lib/region-summary";
 import { readLatestArray } from "~/lib/resource-latest";
 import { REGION_LABELS, type IntelRegion, type IntelItem } from "~/lib/types";
 import {
@@ -45,8 +45,8 @@ export default function ThreatMap() {
   const regions = () => buildRegionSummaries(intelItems());
   const activeRegions = createMemo(() => regions().filter((r) => r.eventCount > 0));
   const totalEvents = () => intelItems().length;
-  const totalCritical = () => regions().reduce((s, r) => s + r.critical, 0);
-  const totalHigh = () => regions().reduce((s, r) => s + r.high, 0);
+  const totalCritical = () => sumRegionSeverity(regions(), "critical");
+  const totalHigh = () => sumRegionSeverity(regions(), "high");
   const latestIntelTs = createMemo(() => maxIsoTimestampBy(intelItems(), (item) => item.timestamp));
   const freshness = useFeedFreshness({
     nowMs,
@@ -55,11 +55,7 @@ export default function ThreatMap() {
     subject: "Threat map feed",
   });
 
-  const selectedSummary = () => {
-    const sel = selectedRegion();
-    if (!sel) return null;
-    return regions().find((r) => r.region === sel) ?? null;
-  };
+  const selectedSummary = () => findRegionSummary(regions(), selectedRegion());
 
   // ── Map setup ────────────────────────────────────────────────────
   onMount(async () => {

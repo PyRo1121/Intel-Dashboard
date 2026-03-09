@@ -1,5 +1,9 @@
+function normalizeEntitlementValue(value: string | undefined, fallback: string): string {
+  return (value || fallback).trim().toLowerCase();
+}
+
 export function formatEntitlementTier(value: string | undefined): string {
-  const raw = (value || "free").trim().toLowerCase();
+  const raw = normalizeEntitlementValue(value, "free");
   if (raw === "owner") return "Owner";
   if (raw === "subscriber") return "Subscriber";
   if (raw === "trial") return "Trial";
@@ -7,7 +11,7 @@ export function formatEntitlementTier(value: string | undefined): string {
 }
 
 export function resolveEntitlementRole(role: string | undefined, tier: string | undefined): string {
-  return (role || tier || "free").trim().toLowerCase();
+  return normalizeEntitlementValue(role || tier, "free");
 }
 
 export type EntitlementViewInput = {
@@ -55,7 +59,7 @@ export function resolveFeedSurfaceLimit(
   surface: string,
   limits: EntitlementLimitsInput | null | undefined,
 ): number | null | undefined {
-  const scope = surface.trim().toLowerCase();
+  const scope = normalizeEntitlementValue(surface, "");
   if (scope === "telegram") return limits?.telegramTotalMessagesMax;
   if (scope === "briefings") return limits?.briefingsMaxItems;
   if (scope === "air-sea") return limits?.airSeaMaxItems;
@@ -63,16 +67,16 @@ export function resolveFeedSurfaceLimit(
 }
 
 export function isEntitledRole(value: string | undefined): boolean {
-  const raw = (value || "").trim().toLowerCase();
+  const raw = normalizeEntitlementValue(value, "");
   return raw === "owner" || raw === "subscriber";
 }
 
 export function isOwnerRole(value: string | undefined): boolean {
-  return (value || "").trim().toLowerCase() === "owner";
+  return normalizeEntitlementValue(value, "") === "owner";
 }
 
 export function entitlementTierTone(value: string | undefined): string {
-  const raw = (value || "free").trim().toLowerCase();
+  const raw = normalizeEntitlementValue(value, "free");
   if (raw === "owner") return "text-emerald-300";
   if (raw === "subscriber") return "text-sky-300";
   if (raw === "trial") return "text-amber-300";
@@ -80,7 +84,7 @@ export function entitlementTierTone(value: string | undefined): string {
 }
 
 export function formatSubscriptionStatus(value: string | undefined): string {
-  const raw = (value || "none").trim().toLowerCase();
+  const raw = normalizeEntitlementValue(value, "none");
   if (raw === "trialing") return "Trialing";
   if (raw === "active") return "Active";
   if (raw === "owner") return "Owner lifetime";

@@ -2,6 +2,7 @@ import { For, Show, createMemo, createSignal, createResource, createEffect, onMo
 import { Title, Meta, Link } from "@solidjs/meta";
 import { A } from "@solidjs/router";
 import { formatTitleLabel } from "~/lib/event-label";
+import { useAuth } from "~/lib/auth";
 import { fetchOsintItems } from "~/lib/osint-client";
 import { loadSessionSnapshot, saveSessionSnapshot } from "~/lib/feed-snapshot-cache";
 import { readLatestArray } from "~/lib/resource-latest";

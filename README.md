@@ -49,6 +49,10 @@ bun run billing:stripe:setup -- --help
 - Pull requests are expected to pass:
   - `CI / validate`
   - `PR Guard / enforce-pr-policy`
+  - dedicated route checks when applicable:
+    - `public-browser`
+    - `owner-admin-browser`
+    - `backend-api-smoke`
 
 ## Support Matrix
 
@@ -84,6 +88,10 @@ See [review-bots.md](docs/review-bots.md) for the detailed reviewer policy and w
 
 - Default smoke E2E: `bun run test:e2e`
 - Browser-authenticated smoke E2E: `bun run test:e2e:browser`
+- Public browser lane: `bun run test:e2e:public-browser`
+- Owner/admin browser lane: `bun run test:e2e:owner-admin`
+- Backend API smoke lane: `bun run test:e2e:backend-api`
+- Browser helper unit tests: `bun run test:e2e:helpers`
 - Full strict E2E (fails if auth vars are missing): `bun run test:e2e:strict`
 - Full test gate (typecheck + worker tests + backend tests + fetch e2e + browser e2e): `bun run test:all`
 - Full live gate (requires authenticated/backend secrets and fails if any are missing): `bun run test:all:live`
@@ -197,19 +205,36 @@ CLOUDFLARE_API_TOKEN=... bun run security:cf:clear-owner-e2e-ip
 GitHub Actions workflow:
 
 - [e2e-production.yml](.github/workflows/e2e-production.yml)
+- [public-browser.yml](.github/workflows/public-browser.yml)
+- [owner-admin-browser.yml](.github/workflows/owner-admin-browser.yml)
+- [backend-api-smoke.yml](.github/workflows/backend-api-smoke.yml)
 
 Expected GitHub Actions secrets:
 
 - `CLOUDFLARE_API_TOKEN`
-- `E2E_SESSION_TOKEN`
-- `E2E_SIGNOUT_SESSION_TOKEN` (optional, recommended for destructive logout coverage)
+- `E2E_SESSION_COOKIE`
+- `E2E_SIGNOUT_SESSION_COOKIE` (optional, recommended for destructive logout coverage)
 - `E2E_CF_ACCESS_CLIENT_ID` (optional, required once `backend-e2e.pyro1121.com` is protected by Cloudflare Access)
 - `E2E_CF_ACCESS_CLIENT_SECRET` (optional, required once `backend-e2e.pyro1121.com` is protected by Cloudflare Access)
 - `E2E_BACKEND_TOKEN`
 - `E2E_USER_ID`
 - `E2E_NON_OWNER_USER_ID`
 
-The workflow:
+Route-specific CI lanes:
+
+1. `public-browser`
+   - production public pages and auth-entry flows
+   - Cloudflare allowlist required so the runner sees real public pages instead of challenge interstitials
+2. `owner-admin-browser`
+   - hardened `/billing` and `/crm` owner flows
+   - requires owner session cookie plus Cloudflare Access and firewall allowlist secrets
+3. `backend-api-smoke`
+   - token-protected backend API smoke against `backend-e2e.pyro1121.com`
+   - requires backend bearer token and Cloudflare Access service-token secrets
+4. `e2e-production`
+   - broad scheduled/manual confidence sweep
+
+Scheduled production sweep:
 
 1. installs dependencies and Chromium
 2. writes `.dev.vars.e2e`

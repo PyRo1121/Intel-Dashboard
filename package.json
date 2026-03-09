@@ -32,6 +32,7 @@
     "test:e2e:owner-admin": "node scripts/run-e2e-with-dev-vars.mjs --test e2e/browser-owner-admin.test.mjs",
     "test:e2e:backend-api": "node scripts/run-e2e-with-dev-vars.mjs --test e2e/backend-api-smoke.test.mjs",
     "test:e2e:public-browser": "node scripts/run-e2e-with-dev-vars.mjs --test e2e/browser-public.test.mjs",
+    "test:e2e:helpers": "node --test e2e/browser-test-helpers.test.mjs",
     "test:e2e:strict": "E2E_STRICT=1 node scripts/run-e2e-with-dev-vars.mjs",
     "test:e2e:auth": "E2E_STRICT=1 E2E_REQUIRE_AUTH=1 node scripts/run-e2e-with-dev-vars.mjs",
     "test": "bun run test:web && bun run test:edge && bun run test:backend",

@@ -2412,6 +2412,63 @@ async function fetchOwnerCrmBackendSummary(params: {
   return { ok: true, payload: result };
 }
 
+async function fetchOwnerCrmAiTelemetry(params: {
+  env: Env;
+  user: VerifiedSession;
+  window: string;
+}): Promise<{ ok: true; payload: Record<string, unknown> } | { ok: false; status: number; error: string }> {
+  const backendToken = resolveBackendApiToken(params.env);
+  if (!backendToken) {
+    return { ok: false, status: 503, error: "Backend API token is not configured." };
+  }
+
+  const backendRequest = new Request(
+    resolveBackendEndpoint(params.env, "/api/intel-dashboard/admin/crm/ai-telemetry"),
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${backendToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        userId: resolveUserId(params.user),
+        userLogin: params.user.login,
+        window: params.window,
+      }),
+      redirect: "manual",
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
+
+  let backendResponse: Response;
+  try {
+    backendResponse = usesBackendServiceBinding(params.env)
+      ? await params.env.INTEL_BACKEND.fetch(backendRequest)
+      : await fetch(backendRequest);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 502,
+      error: error instanceof Error ? error.message : "Backend unavailable",
+    };
+  }
+
+  const parsed = await backendResponse.json().catch(() => null) as { result?: Record<string, unknown>; error?: string } | null;
+  const result = parsed && isRecord(parsed.result) ? parsed.result : null;
+  if (!backendResponse.ok || !result) {
+    const error = parsed && typeof parsed.error === "string"
+      ? parsed.error
+      : `Backend AI telemetry failed with HTTP ${backendResponse.status}`;
+    return {
+      ok: false,
+      status: backendResponse.status || 502,
+      error,
+    };
+  }
+
+  return { ok: true, payload: result };
+}
+
 async function parseOptionalJsonObject(request: Request): Promise<Record<string, unknown>> {
   if (request.method === "GET" || request.method === "HEAD") {
     return {};
@@ -5361,6 +5418,65 @@ export default {
             dataQuality: qualitySummary,
             ...backendSummary.payload,
           },
+        }),
+        {
+          status: 200,
+          headers: privateApiHeaders(origin),
+        },
+      );
+    }
+
+    if (path === "/api/admin/crm/ai-telemetry") {
+      if (request.method !== "GET") {
+        const headers = privateApiHeaders(origin);
+        headers.set("Allow", "GET");
+        return new Response(
+          JSON.stringify({ error: "Method Not Allowed" }),
+          {
+            status: 405,
+            headers,
+          },
+        );
+      }
+
+      const userId = resolveUserId(sessionUser);
+      const entitlement = await fetchFeedEntitlement({
+        env,
+        userId,
+        userLogin: sessionUser.login,
+      });
+      if ((entitlement.role ?? "").toLowerCase() !== "owner") {
+        return new Response(
+          JSON.stringify({ error: "Forbidden" }),
+          {
+            status: 403,
+            headers: privateApiHeaders(origin),
+          },
+        );
+      }
+
+      const window = (url.searchParams.get("window") || "24h").trim();
+      const backendTelemetry = await fetchOwnerCrmAiTelemetry({
+        env,
+        user: sessionUser,
+        window,
+      });
+      if (!backendTelemetry.ok) {
+        return new Response(
+          JSON.stringify({
+            error: backendTelemetry.error,
+          }),
+          {
+            status: backendTelemetry.status,
+            headers: privateApiHeaders(origin),
+          },
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          result: backendTelemetry.payload,
         }),
         {
           status: 200,

@@ -53,7 +53,7 @@ test("owner-admin CRM controls filter, export, and enforce refund guardrails", a
     const page = await context.newPage();
     try {
       await page.goto(`${EDGE_BASE_URL}/crm`, {
-        waitUntil: "domcontentloaded",
+        waitUntil: "networkidle",
         timeout: 45_000,
       });
 

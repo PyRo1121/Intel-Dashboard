@@ -13,8 +13,10 @@ export const OVERVIEW_OG_DESCRIPTION = `${SITE_NAME} live intelligence from Tele
 export const OVERVIEW_TWITTER_DESCRIPTION = `${SITE_NAME} live intelligence from Telegram conflict channels, military tracking, and AI briefings.`;
 export const OSINT_TITLE = `OSINT Feed — Real-Time Conflict Events & Intelligence | ${SITE_NAME}`;
 export const OSINT_DESCRIPTION = "Aggregated OSINT feed from GDELT, RSS sources, and milblogger channels. Severity-rated conflict events across Ukraine, Middle East, Africa, and global hotspots.";
+export const OSINT_SOURCE_PROFILE_TITLE = `OSINT Provider Profile | ${SITE_NAME}`;
 export const TELEGRAM_TITLE = `Telegram OSINT Monitor — 250+ Global Conflict Channels | ${SITE_NAME}`;
 export const TELEGRAM_DESCRIPTION = "Monitor 250+ global Telegram OSINT and conflict channels in real-time. Unified feed with regional filtering, media isolation, cyber tagging, and deep-linking.";
+export const TELEGRAM_SOURCE_HISTORY_TITLE = `Telegram Source History | ${SITE_NAME}`;
 export const MY_FEED_TITLE = `My Feed — Personalized Telegram + OSINT Intelligence | ${SITE_NAME}`;
 export const MY_FEED_DESCRIPTION = "Subscriber-only personalized intelligence feed combining Telegram and OSINT with favorites, watched regions, and ranked signals.";
 export const MY_ALERTS_TITLE = `My Alerts — Subscriber Signal Inbox | ${SITE_NAME}`;
@@ -39,7 +41,9 @@ export const NOT_FOUND_DESCRIPTION = `The page you're looking for doesn't exist 
 
 const DASHBOARD_SHELL_TITLES = [
   { prefix: DASHBOARD_HOME_PATH, title: OVERVIEW_TITLE },
+  { prefix: "/osint/source", title: OSINT_SOURCE_PROFILE_TITLE },
   { prefix: "/osint", title: OSINT_TITLE },
+  { prefix: "/telegram/source", title: TELEGRAM_SOURCE_HISTORY_TITLE },
   { prefix: "/telegram", title: TELEGRAM_TITLE },
   { prefix: "/my-feed", title: MY_FEED_TITLE },
   { prefix: "/my-alerts", title: MY_ALERTS_TITLE },

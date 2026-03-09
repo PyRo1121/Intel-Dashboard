@@ -226,14 +226,22 @@ export default function BillingRoute() {
 
         <Show when={notice()}>
           {(value) => (
-            <div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200" data-testid="billing-notice">
+            <div
+              class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
+              data-testid="billing-notice"
+              aria-live="polite"
+            >
               {value()}
             </div>
           )}
         </Show>
         <Show when={error()}>
           {(value) => (
-            <div class="rounded-2xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-200" data-testid="billing-error">
+            <div
+              class="rounded-2xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+              data-testid="billing-error"
+              aria-live="assertive"
+            >
               {value()}
             </div>
           )}

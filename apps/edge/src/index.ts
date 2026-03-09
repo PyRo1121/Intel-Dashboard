@@ -12,8 +12,9 @@ import { buildDeterministicAvatarDataUrl } from "./avatar-fallback";
 import { resolveBackendEndpointUrl, usesBackendServiceBinding } from "./backend-origin";
 import { buildClientXProfileDiagnostics, type XProfileSyncDiagnostics } from "./auth-diagnostics";
 import { normalizeSafeAuthRedirectLocation } from "./auth-redirect";
-import { summarizeCrmDataQuality } from "./crm-quality";
 import { buildOwnerCrmAiTelemetryFailureResponse } from "./crm-ai-telemetry-proxy";
+import { postOwnerBackendJson } from "./owner-backend-json";
+import { buildOwnerCrmOverviewPayload, type CrmDirectoryUser } from "./crm-overview";
 import { corsHeaders, mergeVary, privateApiHeaders } from "./private-api-headers";
 import { getDashboardAppRoutePrefixes, normalizeSafePostAuthPath } from "./post-auth-path";
 import { createTurnstileGateToken, type TurnstileMode, verifyTurnstileGateToken } from "./turnstile";
@@ -193,17 +194,6 @@ type BackendCrmSummaryResponse = {
   ok?: unknown;
   result?: Record<string, unknown>;
   error?: unknown;
-};
-
-type CrmDirectoryUser = {
-  id: string;
-  login: string;
-  name: string;
-  email: string;
-  avatarUrl: string;
-  providers: string[];
-  createdAtMs: number;
-  updatedAtMs: number;
 };
 
 type FeedEntitlement = {
@@ -1002,15 +992,15 @@ function withDefaultSecurityHeaders(response: Response): Response {
   return response;
 }
 
-function withSensitiveNoStore(response: Response): Response {
+function withSensitiveNoStore(
+  response: Response,
+  varyKeys: string[] = ["Origin", "Cookie", "Authorization"],
+): Response {
   response.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
   response.headers.set("CDN-Cache-Control", "no-store");
   response.headers.set("Pragma", "no-cache");
   response.headers.set("Expires", "0");
-  response.headers.set(
-    "Vary",
-    mergeVary(response.headers.get("Vary"), ["Origin", "Cookie", "Authorization"]),
-  );
+  response.headers.set("Vary", mergeVary(response.headers.get("Vary"), varyKeys));
   return withDefaultSecurityHeaders(response);
 }
 
@@ -2235,6 +2225,12 @@ function resolveBackendApiToken(env: Env): string {
   return (env.USAGE_DATA_SOURCE_TOKEN || env.INTEL_API_TOKEN || "").trim();
 }
 
+function resolveBackendFetch(env: Env): typeof fetch {
+  return usesBackendServiceBinding(env)
+    ? env.INTEL_BACKEND.fetch.bind(env.INTEL_BACKEND) as typeof fetch
+    : fetch;
+}
+
 function parseProviderList(raw: unknown): string[] {
   const value = normalizeString(raw);
   if (!value) {
@@ -2324,55 +2320,14 @@ async function fetchOwnerCrmBackendSummary(params: {
   env: Env;
   user: VerifiedSession;
 }): Promise<{ ok: true; payload: Record<string, unknown> } | { ok: false; status: number; error: string }> {
-  const backendToken = resolveBackendApiToken(params.env);
-  if (!backendToken) {
-    return { ok: false, status: 503, error: "Backend API token is not configured." };
-  }
-
-  const backendRequest = new Request(
-    resolveBackendEndpoint(params.env, "/api/intel-dashboard/admin/crm/summary"),
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${backendToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        userId: resolveUserId(params.user),
-        userLogin: params.user.login,
-      }),
-      redirect: "manual",
-      signal: AbortSignal.timeout(30_000),
-    },
-  );
-
-  let backendResponse: Response;
-  try {
-    backendResponse = usesBackendServiceBinding(params.env)
-      ? await params.env.INTEL_BACKEND.fetch(backendRequest)
-      : await fetch(backendRequest);
-  } catch (error) {
-    return {
-      ok: false,
-      status: 502,
-      error: error instanceof Error ? error.message : "Backend unavailable",
-    };
-  }
-
-  const parsed = await backendResponse.json().catch(() => null) as BackendCrmSummaryResponse | null;
-  const result = parsed && isRecord(parsed.result) ? parsed.result : null;
-  if (!backendResponse.ok || !result) {
-    const error = parsed && typeof parsed.error === "string"
-      ? parsed.error
-      : `Backend CRM summary failed with HTTP ${backendResponse.status}`;
-    return {
-      ok: false,
-      status: backendResponse.status || 502,
-      error,
-    };
-  }
-
-  return { ok: true, payload: result };
+  return postOwnerBackendJson({
+    backendToken: resolveBackendApiToken(params.env),
+    url: resolveBackendEndpoint(params.env, "/api/intel-dashboard/admin/crm/summary"),
+    userId: resolveUserId(params.user),
+    userLogin: params.user.login,
+    errorPrefix: "Backend CRM summary",
+    fetchImpl: resolveBackendFetch(params.env),
+  });
 }
 
 type OwnerCrmAiTelemetryFetchResult =
@@ -2384,56 +2339,15 @@ async function fetchOwnerCrmAiTelemetry(params: {
   user: VerifiedSession;
   window: string;
 }): Promise<OwnerCrmAiTelemetryFetchResult> {
-  const backendToken = resolveBackendApiToken(params.env);
-  if (!backendToken) {
-    return { ok: false, status: 503, error: "Backend API token is not configured." };
-  }
-
-  const backendRequest = new Request(
-    resolveBackendEndpoint(params.env, "/api/intel-dashboard/admin/crm/ai-telemetry"),
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${backendToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        userId: resolveUserId(params.user),
-        userLogin: params.user.login,
-        window: params.window,
-      }),
-      redirect: "manual",
-      signal: AbortSignal.timeout(30_000),
-    },
-  );
-
-  let backendResponse: Response;
-  try {
-    backendResponse = usesBackendServiceBinding(params.env)
-      ? await params.env.INTEL_BACKEND.fetch(backendRequest)
-      : await fetch(backendRequest);
-  } catch (error) {
-    return {
-      ok: false,
-      status: 502,
-      error: error instanceof Error ? error.message : "Backend unavailable",
-    };
-  }
-
-  const parsed = await backendResponse.json().catch(() => null) as { result?: Record<string, unknown>; error?: string } | null;
-  const result = parsed && isRecord(parsed.result) ? parsed.result : null;
-  if (!backendResponse.ok || !result) {
-    const error = parsed && typeof parsed.error === "string"
-      ? parsed.error
-      : `Backend AI telemetry failed with HTTP ${backendResponse.status}`;
-    return {
-      ok: false,
-      status: backendResponse.status || 502,
-      error,
-    };
-  }
-
-  return { ok: true, payload: result };
+  return postOwnerBackendJson({
+    backendToken: resolveBackendApiToken(params.env),
+    url: resolveBackendEndpoint(params.env, "/api/intel-dashboard/admin/crm/ai-telemetry"),
+    userId: resolveUserId(params.user),
+    userLogin: params.user.login,
+    extraBody: { window: params.window },
+    errorPrefix: "Backend AI telemetry",
+    fetchImpl: resolveBackendFetch(params.env),
+  });
 }
 
 function normalizeOwnerAiTelemetryWindow(rawValue: string | null): string | null {
@@ -2524,9 +2438,7 @@ async function proxySessionBillingRoute(params: {
 
   let backendResponse: Response;
   try {
-    backendResponse = usesBackendServiceBinding(params.env)
-      ? await params.env.INTEL_BACKEND.fetch(backendRequest)
-      : await fetch(backendRequest);
+    backendResponse = await resolveBackendFetch(params.env)(backendRequest);
   } catch (error) {
     return new Response(
       JSON.stringify({
@@ -2678,10 +2590,7 @@ async function handleStripeWebhook(params: {
     for (const [k, v] of Object.entries(corsHeaders(params.origin))) {
       response.headers.set(k, v);
     }
-    response.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
-    response.headers.set("CDN-Cache-Control", "no-store");
-    response.headers.set("Vary", mergeVary(response.headers.get("Vary"), ["Origin"]));
-    return response;
+    return withSensitiveNoStore(response, ["Origin"]);
   } catch (error) {
     return new Response(
       JSON.stringify({
@@ -5368,33 +5277,13 @@ export default {
         );
       }
 
-      const billing = isRecord(backendSummary.payload.billing)
-        ? backendSummary.payload.billing
-        : {};
-      const trackedUsers = Math.max(
-        0,
-        Math.floor(normalizeNumber((billing as Record<string, unknown>).trackedUsers) ?? 0),
-      );
-      const qualitySummary = summarizeCrmDataQuality({
-        users: directory.users,
-        totalUsers: directory.totalUsers,
-        trackedUsers,
-      });
-
       return new Response(
-        JSON.stringify({
-          ok: true,
-          result: {
-            generatedAtMs: Date.now(),
-            directory: {
-              ...directory,
-              untrackedUsers: qualitySummary.untrackedUsers,
-              orphanTrackedUsers: qualitySummary.orphanTrackedUsers,
-            },
-            dataQuality: qualitySummary,
-            ...backendSummary.payload,
-          },
-        }),
+        JSON.stringify(
+          buildOwnerCrmOverviewPayload({
+            directory,
+            backendSummary: backendSummary.payload,
+          }),
+        ),
         {
           status: 200,
           headers: privateApiHeaders(origin),
@@ -5556,13 +5445,10 @@ export default {
         status: doRes.status,
         headers: doRes.headers,
       });
-      response.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
-      response.headers.set("CDN-Cache-Control", "no-store");
-      response.headers.set("Vary", mergeVary(response.headers.get("Vary"), ["Origin", "Cookie", "Authorization"]));
       for (const [k, v] of Object.entries(corsHeaders(origin))) {
         response.headers.set(k, v);
       }
-      return response;
+      return withSensitiveNoStore(response);
     }
 
     // ----------------------------------------------------------------
@@ -5781,11 +5667,7 @@ export default {
       for (const [k, v] of Object.entries(corsHeaders(origin))) {
         response.headers.set(k, v);
       }
-      response.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
-      response.headers.set("CDN-Cache-Control", "no-store");
-      response.headers.set("Vary", mergeVary(response.headers.get("Vary"), ["Origin", "Cookie", "Authorization"]));
-
-      return response;
+      return withSensitiveNoStore(response);
     }
 
     if (path.startsWith("/api/intel-dashboard/")) {
@@ -5893,10 +5775,7 @@ export default {
       for (const [k, v] of Object.entries(corsHeaders(origin))) {
         response.headers.set(k, v);
       }
-      response.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
-      response.headers.set("CDN-Cache-Control", "no-store");
-      response.headers.set("Vary", mergeVary(response.headers.get("Vary"), ["Origin", "Cookie", "Authorization"]));
-      return response;
+      return withSensitiveNoStore(response);
     }
 
     if (path.startsWith("/api/")) {

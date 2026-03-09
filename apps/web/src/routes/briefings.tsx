@@ -9,25 +9,17 @@ import {
   maxIsoTimestamp,
   useFreshnessTransitionNotice,
 } from "~/lib/freshness";
+import { fetchPublicJson } from "~/lib/client-json";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
-import { formatAgeCompactFromMs } from "~/lib/utils";
+import { formatAgeCompactFromMs, formatLongDateTime, formatShortDateTime } from "~/lib/utils";
 import { FileText, ChevronDown, Clock, Send } from "lucide-solid";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { BRIEFINGS_DESCRIPTION, BRIEFINGS_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 
 async function loadBriefings(): Promise<Briefing[]> {
-  try {
-    const res = await fetch("/api/briefings", {
-      signal: AbortSignal.timeout(30_000),
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+  const result = await fetchPublicJson<unknown>("/api/briefings");
+  return result.ok && Array.isArray(result.data) ? result.data : [];
 }
 
 export default function Briefings() {
@@ -58,30 +50,6 @@ export default function Briefings() {
   });
   const latestFeedAgeLabel = createMemo(() => formatAgeCompactFromMs(latestFeedAgeMs()));
   const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "Briefing feed");
-
-  const formatBriefingTime = (ts: string) => {
-    const d = new Date(ts);
-    return d.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-  };
-
-  const formatFullDate = (ts: string) => {
-    const d = new Date(ts);
-    return d.toLocaleString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-  };
 
   const totalEvents = (s: Briefing["severity_summary"]) =>
     s.critical + s.high + s.medium + s.low;
@@ -203,7 +171,7 @@ export default function Briefings() {
                           <div class="flex items-center gap-1.5">
                             <Clock size={13} class="text-zinc-600" />
                             <span class="text-sm font-semibold font-mono-data text-white">
-                              {formatBriefingTime(briefing.timestamp)}
+                              {formatShortDateTime(briefing.timestamp)}
                             </span>
                           </div>
                           <span class="text-[11px] text-zinc-600 font-mono-data">
@@ -276,7 +244,7 @@ export default function Briefings() {
                       {/* Full date when expanded */}
                       <Show when={isExpanded()}>
                         <div class="mt-4 pt-3 border-t border-white/[0.04]">
-                          <span class="text-[11px] text-zinc-700 font-mono-data">{formatFullDate(briefing.timestamp)}</span>
+                          <span class="text-[11px] text-zinc-700 font-mono-data">{formatLongDateTime(briefing.timestamp)}</span>
                         </div>
                       </Show>
                     </div>

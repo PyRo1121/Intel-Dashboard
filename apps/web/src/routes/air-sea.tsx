@@ -1,6 +1,8 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
 import { Plane, Ship, ExternalLink, Clock, Eye, Navigation, Search, Radio, ChevronUp, ChevronDown, MapPin } from "lucide-solid";
+import { getAviationSourceLabel, getAviationSourceNote } from "~/lib/air-sea-aviation";
+import { formatTitleLabel } from "~/lib/event-label";
 import {
   buildFreshnessStatusAt,
   freshnessPillTone,
@@ -8,6 +10,7 @@ import {
   useFreshnessTransitionNotice,
   freshnessBannerTone,
 } from "~/lib/freshness";
+import { fetchPublicJson } from "~/lib/client-json";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import { formatAgeCompactFromMs, formatRelativeTimeAt, formatNumber } from "~/lib/utils";
 import type { Severity } from "~/lib/types";
@@ -59,6 +62,7 @@ interface AirSeaPayload {
   aviation: {
     timestamp: string;
     source: string;
+    fetchedAtMs: number;
     emergencies: number;
     aircraft: Aircraft[];
   };
@@ -75,7 +79,7 @@ interface AirSeaPayload {
 
 const EMPTY: AirSeaPayload = {
   timestamp: "",
-  aviation: { timestamp: "", source: "OpenSky Network", emergencies: 0, aircraft: [] },
+  aviation: { timestamp: "", source: "", fetchedAtMs: 0, emergencies: 0, aircraft: [] },
   intelFeed: [],
   stats: { aircraftCount: 0, airIntelCount: 0, seaIntelCount: 0, totalIntel: 0, critical: 0, high: 0 },
 };
@@ -137,9 +141,7 @@ function sevMapColor(s: Severity): string {
   return "#71717a";
 }
 
-function regionLabel(r: string): string {
-  return r.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
+function regionLabel(r: string): string { return formatTitleLabel(r, "—"); }
 
 function parseViews(v: string): number {
   const upper = v.replace(/,/g, "").trim().toUpperCase();
@@ -155,13 +157,8 @@ function parseViews(v: string): number {
 /* ── Data loader ───────────────────────────────────────────────────── */
 
 async function loadAirSea(): Promise<AirSeaPayload> {
-  try {
-    const res = await fetch("/api/air-sea", { signal: AbortSignal.timeout(30_000), cache: "no-store" });
-    if (!res.ok) return EMPTY;
-    return (await res.json()) as AirSeaPayload;
-  } catch {
-    return EMPTY;
-  }
+  const result = await fetchPublicJson<AirSeaPayload>("/api/air-sea");
+  return result.ok ? result.data : EMPTY;
 }
 
 /* ── Component ─────────────────────────────────────────────────────── */
@@ -199,6 +196,12 @@ export default function AirSeaOps() {
     return Math.max(0, nowMs() - ts);
   });
   const latestFeedAgeLabel = createMemo(() => formatAgeCompactFromMs(latestFeedAgeMs()));
+  const aviationSnapshotAgeMs = createMemo(() => {
+    const fetchedAtMs = data().aviation.fetchedAtMs;
+    if (!Number.isFinite(fetchedAtMs) || fetchedAtMs <= 0) return null;
+    return Math.max(0, nowMs() - fetchedAtMs);
+  });
+  const aviationSnapshotAgeLabel = createMemo(() => formatAgeCompactFromMs(aviationSnapshotAgeMs()));
   const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "Air/Sea feed");
 
   // Filtered intel feed
@@ -391,7 +394,10 @@ export default function AirSeaOps() {
           <Plane size={15} class="text-cyan-400" />
           <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Military Aircraft Tracker</h2>
           <span class="ml-auto text-[10px] text-zinc-600 font-mono-data">
-            Source: {data().aviation.source} &bull; {data().aviation.timestamp || "n/a"}
+            Source: {getAviationSourceLabel(data().aviation.source)}
+            <Show when={aviationSnapshotAgeMs() !== null}> &bull; snapshot age {aviationSnapshotAgeLabel()}</Show>
+            {" • "}
+            {data().aviation.timestamp || "n/a"}
           </span>
         </div>
 
@@ -417,7 +423,7 @@ export default function AirSeaOps() {
                 <div class="flex flex-col items-center justify-center h-full p-8 text-center">
                   <Plane size={28} class="text-zinc-700 mb-2" />
                   <p class="text-sm text-zinc-500">No military aircraft currently tracked</p>
-                  <p class="text-xs text-zinc-700 mt-1">OpenSky data refreshes every 5 minutes</p>
+                  <p class="text-xs text-zinc-700 mt-1">{getAviationSourceNote(data().aviation.source)}</p>
                 </div>
               }
             >
@@ -536,7 +542,7 @@ export default function AirSeaOps() {
                           {report.domain === "air" ? "AIR" : "SEA"}
                         </span>
                         <span class={`rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-wider font-medium ${cs.bg} ${cs.border} ${cs.text}`}>
-                          {report.category.replace(/_/g, " ")}
+                          {formatTitleLabel(report.category)}
                         </span>
                         <span class="text-xs font-medium text-zinc-300">{report.channel}</span>
                         <span data-e2e="air-sea-item-age" class="text-[10px] text-zinc-600 ml-auto shrink-0 flex items-center gap-1">

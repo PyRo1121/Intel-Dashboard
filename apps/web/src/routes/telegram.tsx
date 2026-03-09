@@ -8,8 +8,10 @@ import {
   freshnessTooltip,
   useFreshnessTransitionNotice,
 } from "~/lib/freshness";
+import { fetchClientJson, fetchPublicJson } from "~/lib/client-json";
+import { formatEventLabel } from "~/lib/event-label";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
-import { formatAgeCompactFromMs } from "~/lib/utils";
+import { formatAgeCompactFromMs, formatRelativeTimeAt, parseTimestampMs as parseTs } from "~/lib/utils";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { TELEGRAM_DESCRIPTION, TELEGRAM_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
@@ -227,31 +229,6 @@ const DEFAULT_STYLE = { bg: "bg-zinc-500/10", border: "border-zinc-500/20", text
 
 function getCategoryStyle(category: string) {
   return CATEGORY_STYLES[category] ?? DEFAULT_STYLE;
-}
-
-function parseTs(input: string) {
-  const ts = new Date(input).getTime();
-  return Number.isFinite(ts) ? ts : 0;
-}
-
-function formatRelativeTimeLive(input: string, nowMs: number): string {
-  const ts = parseTs(input);
-  if (!ts) return "unknown";
-  const delta = Math.max(0, nowMs - ts);
-  const totalSeconds = Math.floor(delta / 1000);
-  if (totalSeconds < 60) return `${totalSeconds}s ago`;
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes < 60) return `${minutes}m ${String(seconds).padStart(2, "0")}s ago`;
-
-  const hours = Math.floor(minutes / 60);
-  const remMinutes = minutes % 60;
-  if (hours < 24) return `${hours}h ${String(remMinutes).padStart(2, "0")}m ago`;
-
-  const days = Math.floor(hours / 24);
-  const remHours = hours % 24;
-  return `${days}d ${String(remHours).padStart(2, "0")}h ago`;
 }
 
 function messageText(msg: TelegramMessage) {
@@ -879,7 +856,7 @@ function MessageCard(props: {
           <header class="telegram-tweet-header">
             <div class="telegram-tweet-author">
               <p class="telegram-tweet-author-name">{channelName()}</p>
-              <span class="telegram-tweet-time">· {formatRelativeTimeLive(props.entry.message.datetime, props.nowMs)}</span>
+              <span class="telegram-tweet-time">· {formatRelativeTimeAt(props.entry.message.datetime, props.nowMs)}</span>
               <Show when={props.showCategory}>
                 <span class={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${style().bg} ${style().border} ${style().text}`}>
                   {props.categoryLabel}
@@ -991,7 +968,7 @@ function MessageCard(props: {
                 </Show>
                 <Show when={props.entry.dedupe?.verificationState}>
                   <span class="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
-                    {props.entry.dedupe?.verificationState?.replaceAll("_", " ")}
+                    {formatEventLabel(props.entry.dedupe?.verificationState)}
                   </span>
                 </Show>
                 <Show when={props.entry.dedupe?.latencyTier}>
@@ -1003,7 +980,7 @@ function MessageCard(props: {
                   <For each={props.entry.dedupe?.domainTags?.slice(0, 6) ?? []}>
                     {(tag) => (
                       <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-zinc-400">
-                        {tag.replaceAll("_", " ")}
+                        {formatEventLabel(tag)}
                       </span>
                     )}
                   </For>
@@ -1142,38 +1119,31 @@ export default function TelegramPage() {
   let lastTimestamp = "";
 
   const refreshDedupeFeedbackStatus = async (): Promise<void> => {
-    try {
-      const res = await fetch("/api/telegram/dedupe-feedback", {
-        signal: AbortSignal.timeout(8_000),
-        cache: "no-store",
-      });
-      if (res.status === 403) {
+    const result = await fetchClientJson<{ count?: unknown }>("/api/telegram/dedupe-feedback", {
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!result.ok) {
+      if (result.status === 403) {
         setOwnerDedupeEnabled(false);
         setDedupeFeedbackCount(0);
-        return;
       }
-      if (!res.ok) {
-        return;
-      }
-      const payload = await res.json() as { count?: unknown };
-      setOwnerDedupeEnabled(true);
-      const count = typeof payload.count === "number" && Number.isFinite(payload.count) ? Math.max(0, Math.floor(payload.count)) : 0;
-      setDedupeFeedbackCount(count);
-    } catch {
       // Best-effort owner capability detection.
+      return;
     }
+    setOwnerDedupeEnabled(true);
+    const count = typeof result.data.count === "number" && Number.isFinite(result.data.count) ? Math.max(0, Math.floor(result.data.count)) : 0;
+    setDedupeFeedbackCount(count);
   };
 
   const refreshTelegram = async (): Promise<boolean> => {
     if (refreshing()) return false;
     setRefreshing(true);
     try {
-      const res = await fetch("/api/telegram", {
+      const result = await fetchPublicJson<TelegramData>("/api/telegram", {
         signal: AbortSignal.timeout(15_000),
-        cache: "no-store",
       });
-      if (!res.ok) return false;
-      const next = (await res.json()) as TelegramData;
+      if (!result.ok) return false;
+      const next = result.data;
 
       const prev = data();
       if (prev) {
@@ -1532,18 +1502,16 @@ export default function TelegramPage() {
     setAdminBusy(true);
     setAdminStatus("");
     try {
-      const res = await fetch("/api/telegram/dedupe-feedback", {
+      const result = await fetchClientJson<unknown>("/api/telegram/dedupe-feedback", {
         method: "POST",
-        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: args.action,
           signatures: args.signatures,
           ...(args.targetCluster ? { targetCluster: args.targetCluster } : {}),
         }),
       });
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        setAdminStatus(`Dedupe action failed (${res.status}) ${body.slice(0, 120)}`);
+      if (!result.ok) {
+        setAdminStatus(`Dedupe action failed (${result.status ?? "?"}) ${result.error.slice(0, 120)}`);
         return;
       }
       setAdminStatus(`${args.action} applied to ${args.signatures.length} signatures`);

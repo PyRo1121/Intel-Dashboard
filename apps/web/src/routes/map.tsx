@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
+import { fetchIntelFeed } from "~/lib/intel-feed";
 import { REGION_LABELS, type IntelRegion, type IntelItem } from "~/lib/types";
 import {
   buildFreshnessStatusAt,
@@ -78,15 +79,7 @@ function threatLevel(summary: RegionSummary): { label: string; color: string; ma
 /* ── Data loader ───────────────────────────────────────────────────── */
 
 async function loadIntel(): Promise<IntelItem[]> {
-  try {
-    const res = await fetch("/api/intel", {
-      signal: AbortSignal.timeout(30_000),
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
-  } catch { return []; }
+  return fetchIntelFeed();
 }
 
 function buildRegions(items: IntelItem[]): RegionSummary[] {

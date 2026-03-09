@@ -5,6 +5,7 @@ import {
   formatEntitlementTier,
   formatSubscriptionStatus,
   isEntitledRole,
+  isOwnerRole,
 } from "@intel-dashboard/shared/entitlement.ts";
 
 test("shared entitlement helpers normalize tier labels and entitlement roles", () => {
@@ -19,6 +20,11 @@ test("shared entitlement helpers normalize tier labels and entitlement roles", (
   assert.equal(isEntitledRole("trial"), false);
   assert.equal(isEntitledRole("free"), false);
   assert.equal(isEntitledRole(undefined), false);
+
+  assert.equal(isOwnerRole("owner"), true);
+  assert.equal(isOwnerRole("OWNER"), true);
+  assert.equal(isOwnerRole("subscriber"), false);
+  assert.equal(isOwnerRole(undefined), false);
 
   assert.equal(entitlementTierTone("owner"), "text-emerald-300");
   assert.equal(entitlementTierTone("subscriber"), "text-sky-300");

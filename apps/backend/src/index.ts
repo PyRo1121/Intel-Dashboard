@@ -314,6 +314,7 @@ type CrmStatusCounts = {
 
 type CrmSummaryDegradedState = {
   partial: boolean;
+  stale: boolean;
   accountsTruncated: boolean;
   activityTruncated: boolean;
   reasons: string[];
@@ -409,7 +410,7 @@ type StripeCrmLiveSummary = {
 type StripeCrmLiveFallback = {
   live: false;
   source: "internal_snapshot" | "stripe_cache_stale";
-  syncedAtMs: number;
+  syncedAtMs?: number;
   error: string;
 };
 
@@ -487,6 +488,7 @@ type PublicAirSeaPayload = {
   aviation: {
     timestamp: string;
     source: string;
+    fetchedAtMs: number;
     emergencies: number;
     aircraft: Array<Record<string, unknown>>;
   };
@@ -4167,9 +4169,11 @@ function createEmptyCrmStatusCounts(): CrmStatusCounts {
 function createCrmSummaryDegradedState(args?: {
   accountsTruncated?: boolean;
   activityTruncated?: boolean;
+  stale?: boolean;
 }): CrmSummaryDegradedState {
   const accountsTruncated = Boolean(args?.accountsTruncated);
   const activityTruncated = Boolean(args?.activityTruncated);
+  const stale = Boolean(args?.stale);
   const reasons: string[] = [];
   if (accountsTruncated) {
     reasons.push("billing_accounts_truncated");
@@ -4177,8 +4181,12 @@ function createCrmSummaryDegradedState(args?: {
   if (activityTruncated) {
     reasons.push("billing_activity_truncated");
   }
+  if (stale) {
+    reasons.push("summary_stale");
+  }
   return {
     partial: accountsTruncated || activityTruncated,
+    stale,
     accountsTruncated,
     activityTruncated,
     reasons,
@@ -4321,6 +4329,7 @@ function normalizeCrmSummarySnapshot(value: unknown): CrmSummarySnapshot | null 
         ? {
             accountsTruncated: normalizeBoolean(value.degraded.accountsTruncated, false),
             activityTruncated: normalizeBoolean(value.degraded.activityTruncated, false),
+            stale: normalizeBoolean(value.degraded.stale, false),
           }
         : undefined,
     ),
@@ -4923,8 +4932,19 @@ async function buildCrmSummarySnapshot(env: WorkerEnv): Promise<CrmSummarySnapsh
 }
 
 async function resolveCrmSummarySnapshot(env: WorkerEnv): Promise<CrmSummarySnapshot> {
+  const ttlMs = normalizeCrmSummaryCacheTtlSeconds(env.CRM_SUMMARY_CACHE_TTL_SECONDS) * 1000;
   const cached = await loadCachedCrmSummary(env);
   if (cached) {
+    if (ttlMs > 0 && Date.now() - cached.generatedAtMs > ttlMs) {
+      return {
+        ...cached,
+        degraded: createCrmSummaryDegradedState({
+          accountsTruncated: cached.degraded.accountsTruncated,
+          activityTruncated: cached.degraded.activityTruncated,
+          stale: true,
+        }),
+      };
+    }
     return cached;
   }
   const built = await buildCrmSummarySnapshot(env);
@@ -5451,6 +5471,18 @@ async function resolveStripeCrmSummary(env: WorkerEnv): Promise<
     };
   }
 
+  if (cached) {
+    return {
+      fallback: {
+        live: false,
+        source: "stripe_cache_stale",
+        syncedAtMs: cached.syncedAtMs,
+        error: "Stripe cache is stale; awaiting scheduled refresh.",
+      },
+      cacheHit: true,
+    };
+  }
+
   const stripeResult = await fetchStripeLiveCrmSummary(env);
   if (stripeResult.ok) {
     await saveCachedStripeCrmSummary(env, stripeResult.summary);
@@ -5460,23 +5492,10 @@ async function resolveStripeCrmSummary(env: WorkerEnv): Promise<
     };
   }
 
-  if (cached) {
-    return {
-      fallback: {
-        live: false,
-        source: "stripe_cache_stale",
-        syncedAtMs: cached.syncedAtMs,
-        error: stripeResult.error,
-      },
-      cacheHit: true,
-    };
-  }
-
   return {
     fallback: {
       live: false,
       source: "internal_snapshot",
-      syncedAtMs: nowMs,
       error: stripeResult.error,
     },
     cacheHit: false,
@@ -5656,9 +5675,35 @@ async function handleAdminCrmCustomer(args: {
     return errorJson(409, "Target user has no Stripe customer id yet.");
   }
   const cachedSnapshot = await loadCachedCrmCustomerStripeSnapshot(args.env, context.targetUserId);
+  const requestedSubscriptionId = trimString((isRecord(args.body) ? args.body.subscriptionId : undefined));
+  const forceRefresh = isRecord(args.body) && args.body.refresh === true;
+  const customerCacheTtlMs = normalizeCrmCustomerCacheTtlSeconds(args.env.CRM_CUSTOMER_CACHE_TTL_SECONDS) * 1000;
+  const cacheEligible =
+    cachedSnapshot &&
+    cachedSnapshot.accountUpdatedAtMs === context.account.updatedAtMs &&
+    (!requestedSubscriptionId || cachedSnapshot.stripe.subscription?.id === requestedSubscriptionId);
+  const cacheStale =
+    cachedSnapshot && customerCacheTtlMs > 0
+      ? Date.now() - cachedSnapshot.fetchedAtMs > customerCacheTtlMs
+      : false;
+  if (!forceRefresh && cacheEligible) {
+    return responseJson(200, {
+      ok: true,
+      result: {
+        targetUserId: context.targetUserId,
+        account: context.account,
+        stripe: cachedSnapshot.stripe,
+        cache: {
+          source: cacheStale ? "crm_customer_cache_stale" : "crm_customer_cache",
+          stale: cacheStale,
+          fetchedAtMs: cachedSnapshot.fetchedAtMs,
+        },
+      },
+    });
+  }
 
   const subscriptionId =
-    trimString((isRecord(args.body) ? args.body.subscriptionId : undefined)) ??
+    requestedSubscriptionId ??
     (await resolveStripeSubscriptionIdForTarget({
       env: args.env,
       stripeCustomerId: context.stripeCustomerId,
@@ -5771,6 +5816,11 @@ async function handleAdminCrmCustomer(args: {
       targetUserId: context.targetUserId,
       account: context.account,
       stripe: snapshot.stripe,
+      cache: {
+        source: "stripe_live",
+        stale: false,
+        fetchedAtMs: snapshot.fetchedAtMs,
+      },
     },
   });
 }
@@ -10061,17 +10111,17 @@ async function resolveAirSeaAviationSnapshot(env: WorkerEnv): Promise<AirSeaAvia
     return cached;
   }
 
-  const live = await fetchAirSeaAviationSnapshot(env);
-  if (live) {
-    await storeAirSeaAviationSnapshot(env, live);
-    return live;
-  }
-
   if (cached && nowMs - cached.fetchedAtMs <= staleMs) {
     return {
       ...cached,
       source: cached.source.includes("cached") ? cached.source : `${cached.source} (cached)`,
     };
+  }
+
+  const live = await fetchAirSeaAviationSnapshot(env);
+  if (live) {
+    await storeAirSeaAviationSnapshot(env, live);
+    return live;
   }
   return null;
 }
@@ -10122,12 +10172,14 @@ async function handlePublicAirSeaFeed(args: {
     ? {
         timestamp: aviationSnapshot.timestamp,
         source: aviationSnapshot.source,
+        fetchedAtMs: aviationSnapshot.fetchedAtMs,
         emergencies: aviationSnapshot.emergencies,
         aircraft: aviationSnapshot.aircraft,
       }
     : {
         timestamp: "",
-        source: "OpenSky Network",
+        source: "",
+        fetchedAtMs: 0,
         emergencies: 0,
         aircraft: [] as Array<Record<string, unknown>>,
       };

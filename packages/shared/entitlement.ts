@@ -11,6 +11,10 @@ export function isEntitledRole(value: string | undefined): boolean {
   return raw === "owner" || raw === "subscriber";
 }
 
+export function isOwnerRole(value: string | undefined): boolean {
+  return (value || "").trim().toLowerCase() === "owner";
+}
+
 export function entitlementTierTone(value: string | undefined): string {
   const raw = (value || "free").trim().toLowerCase();
   if (raw === "owner") return "text-emerald-300";

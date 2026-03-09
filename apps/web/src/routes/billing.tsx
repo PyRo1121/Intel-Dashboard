@@ -1,9 +1,11 @@
 import { Meta, Title } from "@solidjs/meta";
 import { Show, createResource, createSignal } from "solid-js";
 import { PREMIUM_PRICE_USD, formatDelayMinutesShortLabel } from "@intel-dashboard/shared/access-offers.ts";
-import { formatEntitlementTier, formatSubscriptionStatus } from "@intel-dashboard/shared/entitlement.ts";
+import { formatEntitlementTier, formatSubscriptionStatus, isOwnerRole } from "@intel-dashboard/shared/entitlement.ts";
+import { fetchClientJson } from "~/lib/client-json";
+import { formatActivityKindLabel } from "~/lib/event-label";
 import { useWallClock } from "~/lib/live-refresh";
-import { formatAgeCompactFromMs } from "~/lib/utils";
+import { formatAgeAgoAt } from "~/lib/utils";
 import { BILLING_DESCRIPTION, BILLING_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 
 type BillingStatusPayload = {
@@ -60,62 +62,28 @@ type BillingActivityPayload = {
 };
 
 async function fetchBillingStatus(): Promise<BillingStatusPayload | null> {
-  const res = await fetch("/api/billing/status", {
+  const result = await fetchClientJson<BillingStatusPayload>("/api/billing/status", {
     method: "GET",
-    credentials: "include",
-    signal: AbortSignal.timeout(30_000),
-    cache: "no-store",
   });
-  if (!res.ok) {
-    return null;
-  }
-  return await res.json() as BillingStatusPayload;
+  return result.ok ? result.data : null;
 }
 
 async function fetchBillingActivity(): Promise<BillingActivityPayload | null> {
-  const res = await fetch("/api/billing/activity", {
+  const result = await fetchClientJson<BillingActivityPayload>("/api/billing/activity", {
     method: "GET",
-    credentials: "include",
-    signal: AbortSignal.timeout(30_000),
-    cache: "no-store",
   });
-  if (!res.ok) {
-    return null;
-  }
-  return await res.json() as BillingActivityPayload;
+  return result.ok ? result.data : null;
 }
 
 async function callBillingAction(path: string): Promise<BillingActionPayload> {
-  const res = await fetch(path, {
+  const result = await fetchClientJson<BillingActionPayload>(path, {
     method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: "{}",
-    signal: AbortSignal.timeout(30_000),
   });
-  const payload = await res.json().catch(() => ({ ok: false, error: "Invalid JSON response" }));
-  if (!res.ok) {
-    const message = typeof payload?.error === "string"
-      ? payload.error
-      : `Request failed with HTTP ${res.status}`;
-    return { ok: false, error: message };
+  if (!result.ok) {
+    return { ok: false, error: result.error };
   }
-  return payload as BillingActionPayload;
-}
-
-function formatActivityKind(value: string | undefined): string {
-  const normalized = (value || "event").replaceAll(/[._-]+/g, " ").trim();
-  if (!normalized) return "Event";
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
-}
-
-function formatActivityAgeAt(atMs: number | undefined, nowMs: number): string {
-  if (typeof atMs !== "number" || !Number.isFinite(atMs)) {
-    return "Unknown";
-  }
-  return `${formatAgeCompactFromMs(Math.max(0, nowMs - atMs))} ago`;
+  return result.data;
 }
 
 export default function BillingRoute() {
@@ -126,7 +94,7 @@ export default function BillingRoute() {
   const [error, setError] = createSignal<string>("");
   const nowMs = useWallClock(1000);
   const portalAvailable = () => status()?.result?.subscription?.portalAvailable === true;
-  const ownerBypass = () => (status()?.result?.role || "").toLowerCase() === "owner";
+  const ownerBypass = () => isOwnerRole(status()?.result?.role);
 
   const runStartTrial = async () => {
     setBusyAction("trial");
@@ -357,9 +325,9 @@ export default function BillingRoute() {
                 <article class="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5" data-testid="billing-activity-item">
                   <div class="flex flex-wrap items-center gap-2">
                     <span class="inline-flex items-center rounded-full border border-zinc-600 bg-zinc-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-300">
-                      {formatActivityKind(event.kind)}
+                      {formatActivityKindLabel(event.kind)}
                     </span>
-                    <span data-e2e="billing-event-age" class="text-xs text-zinc-500">{formatActivityAgeAt(event.atMs, nowMs())}</span>
+                    <span data-e2e="billing-event-age" class="text-xs text-zinc-500">{formatAgeAgoAt(event.atMs, nowMs())}</span>
                     <Show when={event.source}>
                       <span class="text-[11px] text-zinc-500">{event.source}</span>
                     </Show>

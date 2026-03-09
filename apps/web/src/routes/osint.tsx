@@ -1,5 +1,7 @@
 import { For, Show, createMemo, createSignal, createResource } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
+import { fetchIntelFeed } from "~/lib/intel-feed";
+import { formatTitleLabel } from "~/lib/event-label";
 import SeverityBadge from "~/components/ui/SeverityBadge";
 import {
   buildFreshnessStatusAt,
@@ -87,21 +89,12 @@ function normalizeIntelItem(item: IntelItem): IntelItem {
 }
 
 async function loadOsint(): Promise<IntelItem[]> {
-  try {
-    const res = await fetch("/api/intel", {
-      signal: AbortSignal.timeout(30_000),
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data)
-      ? data
-        .filter((item): item is IntelItem => item && typeof item === "object")
-        .map((item) => normalizeIntelItem(item))
-      : [];
-  } catch {
-    return [];
-  }
+  const data = await fetchIntelFeed();
+  return Array.isArray(data)
+    ? data
+      .filter((item): item is IntelItem => item && typeof item === "object")
+      .map((item) => normalizeIntelItem(item))
+    : [];
 }
 
 export default function OsintFeed() {
@@ -224,7 +217,7 @@ export default function OsintFeed() {
                     : ""
                 }`}
               >
-                {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
+                {f === "all" ? "All" : formatTitleLabel(f)}
                 <Show when={count() > 0}>
                   <span class="ml-1 opacity-50 text-[10px]">({count()})</span>
                 </Show>

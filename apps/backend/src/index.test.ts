@@ -1522,10 +1522,11 @@ describe("intel-dashboard backend worker", () => {
 
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
-      aviation: { source: string; emergencies: number; aircraft: Array<{ callsign: string; severity: string }> };
+      aviation: { source: string; fetchedAtMs: number; emergencies: number; aircraft: Array<{ callsign: string; severity: string }> };
       stats: { aircraftCount: number };
     };
     expect(body.aviation.source).toContain("OpenSky");
+    expect(body.aviation.fetchedAtMs).toBeGreaterThan(0);
     expect(body.aviation.emergencies).toBe(1);
     expect(body.stats.aircraftCount).toBeGreaterThan(0);
     expect(body.aviation.aircraft.some((item) => item.callsign === "RCH123" && item.severity === "critical")).toBe(
@@ -1578,12 +1579,68 @@ describe("intel-dashboard backend worker", () => {
 
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
-      aviation: { source: string; aircraft: Array<{ callsign: string }> };
+      aviation: { source: string; fetchedAtMs: number; aircraft: Array<{ callsign: string }> };
       stats: { aircraftCount: number };
     };
     expect(body.aviation.source).toContain("cached");
+    expect(body.aviation.fetchedAtMs).toBe(now - 5 * 60_000);
     expect(body.stats.aircraftCount).toBe(1);
     expect(body.aviation.aircraft[0]?.callsign).toBe("FORTE10");
+  });
+
+  it("serves stale aviation snapshot without live OpenSky fetch while still inside stale window", async () => {
+    const now = Date.now();
+    const kv = createKvMapBinding({
+      "intel-dashboard:usage:airsea:aviation:snapshot": {
+        timestamp: new Date(now - 60_000).toISOString(),
+        source: "OpenSky Network",
+        emergencies: 0,
+        aircraft: [
+          {
+            icao24: "feed01",
+            callsign: "FORTE10",
+            type: "ISR",
+            country: "United States",
+            region: "middle_east",
+            squawk: "",
+            latitude: 24.1,
+            longitude: 54.4,
+            altitudeFt: 51_000,
+            speedKts: 330,
+            heading: 210,
+            verticalRateFpm: 0,
+            onGround: false,
+            severity: "high",
+            tags: ["military"],
+            description: "FORTE10 — United States",
+            links: { adsbexchange: "https://globe.adsbexchange.com/?icao=feed01" },
+          },
+        ],
+        fetchedAtMs: now - 5 * 60_000,
+      },
+    });
+
+    const fetchMock = vi.fn(async () => new Response("should not hit OpenSky", { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/air-sea"),
+      {
+        PUBLIC_FEED_ROUTES_ENABLED: "true",
+        AIRSEA_AVIATION_REFRESH_SECONDS: "60",
+        AIRSEA_AVIATION_STALE_SECONDS: "900",
+        USAGE_KV: kv.binding,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      aviation: { source: string; fetchedAtMs: number; aircraft: Array<{ callsign: string }> };
+    };
+    expect(body.aviation.source).toContain("cached");
+    expect(body.aviation.fetchedAtMs).toBe(now - 5 * 60_000);
+    expect(body.aviation.aircraft[0]?.callsign).toBe("FORTE10");
+    expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 
   it("serves filtered sources catalog and enforces auth", async () => {
@@ -2078,6 +2135,7 @@ describe("intel-dashboard backend worker", () => {
         ],
         degraded: {
           partial: false,
+          stale: false,
           accountsTruncated: false,
           activityTruncated: false,
           reasons: [],
@@ -2118,6 +2176,11 @@ describe("intel-dashboard backend worker", () => {
         telemetry: {
           events7d: 1,
         },
+        degraded: {
+          partial: false,
+          stale: true,
+          reasons: ["summary_stale"],
+        },
       },
     });
   });
@@ -2154,6 +2217,7 @@ describe("intel-dashboard backend worker", () => {
         latestEvents: [],
         degraded: {
           partial: false,
+          stale: false,
           accountsTruncated: false,
           activityTruncated: false,
           reasons: [],
@@ -2217,6 +2281,7 @@ describe("intel-dashboard backend worker", () => {
         },
         degraded: {
           partial: false,
+          stale: false,
         },
       },
     });
@@ -2732,7 +2797,28 @@ describe("intel-dashboard backend worker", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
+    const payload = (await response.json()) as {
+      ok: boolean;
+      result: {
+        billing: {
+          stripe: {
+            live: boolean;
+            source: string;
+            syncedAtMs?: number;
+          };
+          mrrActiveUsd: number;
+          arrActiveUsd: number;
+        };
+        commandCenter: {
+          revenue: {
+            mrrActiveUsd: number;
+            arrActiveUsd: number;
+            source: string;
+          };
+        };
+      };
+    };
+    expect(payload).toMatchObject({
       ok: true,
       result: {
         billing: {
@@ -2752,10 +2838,11 @@ describe("intel-dashboard backend worker", () => {
         },
       },
     });
+    expect(payload.result.billing.stripe.syncedAtMs).toBeUndefined();
     expect(stripeFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to stale cached Stripe summary when live sync fails", async () => {
+  it("serves stale cached Stripe summary without live Stripe fetch on owner CRM reads", async () => {
     const now = Date.now();
     const kv = createKvMapBinding({
       "intel-dashboard:billing:account:user-a": {
@@ -2790,7 +2877,7 @@ describe("intel-dashboard backend worker", () => {
       },
     });
 
-    const stripeFetch = vi.fn(async () => new Response("upstream down", { status: 503 }));
+    const stripeFetch = vi.fn(async () => new Response("should not hit stripe", { status: 500 }));
     vi.stubGlobal("fetch", stripeFetch);
 
     const response = await worker.fetch(
@@ -2820,6 +2907,7 @@ describe("intel-dashboard backend worker", () => {
           stripe: {
             live: false,
             source: "stripe_cache_stale",
+            error: "Stripe cache is stale; awaiting scheduled refresh.",
           },
           mrrActiveUsd: 29,
           arrActiveUsd: 348,
@@ -2832,7 +2920,7 @@ describe("intel-dashboard backend worker", () => {
         },
       },
     });
-    expect(stripeFetch).toHaveBeenCalledTimes(1);
+    expect(stripeFetch).toHaveBeenCalledTimes(0);
   });
 
   it("returns safe zero command-center metrics with empty CRM data", async () => {
@@ -3012,6 +3100,285 @@ describe("intel-dashboard backend worker", () => {
           },
           invoices: [{ id: "in_123" }],
           charges: [{ id: "ch_123" }],
+        },
+      },
+    });
+    expect(stripeFetch).toHaveBeenCalledTimes(4);
+  });
+
+  it("reuses fresh cached CRM customer snapshot for owner CRM read path", async () => {
+    const now = Date.now();
+    const kv = createKvMapBinding({
+      "intel-dashboard:billing:account:user-a": {
+        userId: "user-a",
+        status: "active",
+        monthlyPriceUsd: 29,
+        stripeCustomerId: "cus_123",
+        stripeSubscriptionId: "sub_123",
+        updatedAtMs: now,
+      },
+      "intel-dashboard:billing:crm:customer:user-a": {
+        fetchedAtMs: now,
+        accountUpdatedAtMs: now,
+        stripe: {
+          customer: {
+            id: "cus_123",
+            email: "customer@example.com",
+            name: "Customer A",
+            currency: "usd",
+            delinquent: false,
+            createdAtMs: now,
+            balanceUsd: 0,
+          },
+          subscription: {
+            id: "sub_123",
+            status: "active",
+            cancelAtPeriodEnd: false,
+            cancelAtMs: null,
+            currentPeriodEndMs: now + 10 * 24 * 60 * 60 * 1000,
+            canceledAtMs: null,
+          },
+          invoices: [{ id: "in_123", status: "paid", amountDueUsd: 29, amountPaidUsd: 29, paid: true, createdAtMs: now }],
+          charges: [{ id: "ch_123", status: "succeeded", amountUsd: 29, refundedUsd: 0, paid: true, refunded: false, createdAtMs: now }],
+        },
+      },
+    });
+
+    const stripeFetch = vi.fn(async () => new Response("should not hit stripe", { status: 500 }));
+    vi.stubGlobal("fetch", stripeFetch);
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/admin/crm/customer", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "owner-id", targetUserId: "user-a" }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+        BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+        CRM_CUSTOMER_CACHE_TTL_SECONDS: "60",
+        STRIPE_SECRET_KEY: "sk_test_123",
+        USAGE_KV: kv.binding,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      result: {
+        targetUserId: "user-a",
+        cache: {
+          source: "crm_customer_cache",
+          stale: false,
+          fetchedAtMs: now,
+        },
+        stripe: {
+          customer: {
+            id: "cus_123",
+          },
+          subscription: {
+            id: "sub_123",
+          },
+          invoices: [{ id: "in_123" }],
+          charges: [{ id: "ch_123" }],
+        },
+      },
+    });
+    expect(stripeFetch).toHaveBeenCalledTimes(0);
+  });
+
+  it("reuses stale cached CRM customer snapshot on owner CRM reads until explicitly refreshed", async () => {
+    const now = Date.now();
+    const kv = createKvMapBinding({
+      "intel-dashboard:billing:account:user-a": {
+        userId: "user-a",
+        status: "active",
+        monthlyPriceUsd: 29,
+        stripeCustomerId: "cus_123",
+        stripeSubscriptionId: "sub_123",
+        updatedAtMs: now,
+      },
+      "intel-dashboard:billing:crm:customer:user-a": {
+        fetchedAtMs: now - 5 * 60_000,
+        accountUpdatedAtMs: now,
+        stripe: {
+          customer: {
+            id: "cus_123",
+            email: "customer@example.com",
+            name: "Customer A",
+            currency: "usd",
+            delinquent: false,
+            createdAtMs: now,
+            balanceUsd: 0,
+          },
+          subscription: {
+            id: "sub_123",
+            status: "active",
+            cancelAtPeriodEnd: false,
+            cancelAtMs: null,
+            currentPeriodEndMs: now + 10 * 24 * 60 * 60 * 1000,
+            canceledAtMs: null,
+          },
+          invoices: [],
+          charges: [],
+        },
+      },
+    });
+
+    const stripeFetch = vi.fn(async () => new Response("should not hit stripe", { status: 500 }));
+    vi.stubGlobal("fetch", stripeFetch);
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/admin/crm/customer", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "owner-id", targetUserId: "user-a" }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+        BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+        CRM_CUSTOMER_CACHE_TTL_SECONDS: "60",
+        STRIPE_SECRET_KEY: "sk_test_123",
+        USAGE_KV: kv.binding,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      result: {
+        cache: {
+          source: "crm_customer_cache_stale",
+          stale: true,
+          fetchedAtMs: now - 5 * 60_000,
+        },
+        stripe: {
+          customer: {
+            id: "cus_123",
+          },
+        },
+      },
+    });
+    expect(stripeFetch).toHaveBeenCalledTimes(0);
+  });
+
+  it("forces live Stripe refresh for owner CRM customer reads when refresh is requested", async () => {
+    const now = Date.now();
+    const kv = createKvMapBinding({
+      "intel-dashboard:billing:account:user-a": {
+        userId: "user-a",
+        status: "active",
+        monthlyPriceUsd: 29,
+        stripeCustomerId: "cus_123",
+        stripeSubscriptionId: "sub_123",
+        updatedAtMs: now,
+      },
+      "intel-dashboard:billing:crm:customer:user-a": {
+        fetchedAtMs: now,
+        accountUpdatedAtMs: now,
+        stripe: {
+          customer: {
+            id: "cus_cached",
+            email: "cached@example.com",
+            name: "Cached Customer",
+            currency: "usd",
+            delinquent: false,
+            createdAtMs: now,
+            balanceUsd: 0,
+          },
+          subscription: {
+            id: "sub_cached",
+            status: "active",
+            cancelAtPeriodEnd: false,
+            cancelAtMs: null,
+            currentPeriodEndMs: now + 10 * 24 * 60 * 60 * 1000,
+            canceledAtMs: null,
+          },
+          invoices: [],
+          charges: [],
+        },
+      },
+    });
+
+    const stripeFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/v1/customers/cus_123")) {
+        return new Response(
+          JSON.stringify({
+            id: "cus_123",
+            email: "customer@example.com",
+            name: "Customer A",
+            currency: "usd",
+            balance: 0,
+            delinquent: false,
+            created: Math.floor(now / 1000),
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("/v1/invoices?")) {
+        return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.includes("/v1/charges?")) {
+        return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (url.includes("/v1/subscriptions/sub_123")) {
+        return new Response(
+          JSON.stringify({
+            id: "sub_123",
+            status: "active",
+            cancel_at_period_end: false,
+            current_period_end: Math.floor((now + 10 * 24 * 60 * 60 * 1000) / 1000),
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", stripeFetch);
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/admin/crm/customer", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "owner-id", targetUserId: "user-a", refresh: true }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+        BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+        CRM_CUSTOMER_CACHE_TTL_SECONDS: "60",
+        STRIPE_SECRET_KEY: "sk_test_123",
+        USAGE_KV: kv.binding,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      result: {
+        cache: {
+          source: "stripe_live",
+          stale: false,
+        },
+        stripe: {
+          customer: {
+            id: "cus_123",
+          },
+          subscription: {
+            id: "sub_123",
+          },
         },
       },
     });

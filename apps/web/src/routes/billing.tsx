@@ -3,6 +3,11 @@ import { Show, createResource, createSignal } from "solid-js";
 import { PREMIUM_PRICE_USD, formatDelayMinutesShortLabel } from "@intel-dashboard/shared/access-offers.ts";
 import { formatEntitlementTier, formatSubscriptionStatus, isOwnerRole } from "@intel-dashboard/shared/entitlement.ts";
 import {
+  getBillingCheckoutBypassNotice,
+  getBillingPortalBypassNotice,
+  getBillingTrialNotice,
+} from "~/lib/billing-action-result";
+import {
   callBillingAction,
   fetchBillingActivity,
   fetchBillingStatus,
@@ -35,15 +40,7 @@ export default function BillingRoute() {
       setBusyAction(null);
       return;
     }
-    if (result.result?.owner === true) {
-      setNotice("Owner account detected. Trial activation is not required.");
-    } else if (result.result?.trialStarted === true) {
-      setNotice("Trial started. Entitlements updated.");
-    } else if (result.result?.trialEligible === false) {
-      setNotice("Trial is not available for this account.");
-    } else {
-      setNotice("Trial status updated.");
-    }
+    setNotice(getBillingTrialNotice(result.result));
     await refetch();
     await refetchActivity();
     setBusyAction(null);
@@ -60,7 +57,7 @@ export default function BillingRoute() {
       return;
     }
     if (result.result?.bypassCheckout === true || result.result?.owner === true) {
-      setNotice("Owner account detected. Checkout bypass is active.");
+      setNotice(getBillingCheckoutBypassNotice());
       await refetch();
       await refetchActivity();
       setBusyAction(null);
@@ -91,7 +88,7 @@ export default function BillingRoute() {
       return;
     }
     if (result.result?.bypassPortal === true || result.result?.owner === true) {
-      setNotice("Owner account detected. Stripe portal is not required.");
+      setNotice(getBillingPortalBypassNotice());
       await refetchActivity();
       setBusyAction(null);
       return;

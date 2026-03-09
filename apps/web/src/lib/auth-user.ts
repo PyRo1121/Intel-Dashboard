@@ -18,7 +18,7 @@ export function isAuthUserOwner(user: AuthUserLike): boolean {
   return isOwnerRole(resolveAuthUserRole(user));
 }
 
-export function resolveAuthUserDisplay(user: AuthUserLike | null | undefined): {
+export function resolveAuthUserDisplay(user: AuthUserLike): {
   displayName: string;
   displayLogin: string;
   avatarUrl: string;

@@ -4,6 +4,7 @@ export const DEFAULT_POST_AUTH_PATH = DASHBOARD_HOME_PATH;
 export const AUTH_NEXT_ROUTE_PREFIXES = [
   DASHBOARD_HOME_PATH,
   "/osint",
+  "/my-feed",
   "/telegram",
   "/map",
   "/air-sea",

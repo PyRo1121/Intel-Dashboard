@@ -26,7 +26,10 @@ export default function MyFeedPage() {
   const [watchCategoriesInput, setWatchCategoriesInput] = createSignal("");
   const nowMs = useWallClock(1000);
 
-  const [preferences, { refetch: refetchPreferences }] = createResource(fetchSubscriberFeedPreferences);
+  const [preferences, { refetch: refetchPreferences }] = createResource(
+    () => true,
+    () => fetchSubscriberFeedPreferences(),
+  );
   const [feed, { refetch: refetchFeed }] = createResource(scope, (nextScope) => fetchSubscriberFeed(nextScope));
 
   const items = () => feed()?.items ?? [];
@@ -41,10 +44,13 @@ export default function MyFeedPage() {
     setWatchCategoriesInput(prefs.watchCategories.join(", "));
   };
 
-  createResource(preferences, async (prefs) => {
-    applyPreferencesToForm(prefs);
-    return null;
-  });
+  createResource(
+    preferences,
+    async (prefs) => {
+      applyPreferencesToForm(prefs);
+      return null;
+    },
+  );
 
   const persistPreferences = async () => {
     setSaving(true);

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   advanceMockClock,
   assertNoBrowserDiagnostics,
+  assertSidebarRouteNavigation,
   openAndAssertPublicAuthRoute,
   assertRouteMetadata,
   openAndAssertPublicAuthEntry,
@@ -1307,11 +1308,7 @@ test("browser authenticated sidebar navigation opens the expected routes", async
       { label: "CRM", heading: "Revenue Command Center", path: "/crm" },
     ];
 
-    for (const check of checks) {
-      await page.getByRole("link", { name: check.label }).first().click();
-      await page.waitForURL(new RegExp(`${check.path}$`), { timeout: 30_000 });
-      assert.match((await page.textContent("body")) || "", new RegExp(check.heading, "i"), `${check.label} should render ${check.heading}`);
-    }
+    await assertSidebarRouteNavigation(page, checks);
   } finally {
     await context.close();
     await browser.close();

@@ -533,6 +533,14 @@ export async function openOwnerCrmPanelByKeyboard(page, crmSearch) {
   return selectedPanel;
 }
 
+export async function assertSidebarRouteNavigation(page, checks) {
+  for (const check of checks) {
+    await page.getByRole("link", { name: check.label }).first().click();
+    await page.waitForURL(new RegExp(`${check.path}$`), { timeout: 30_000 });
+    assert.match((await page.textContent("body")) || "", new RegExp(check.heading, "i"), `${check.label} should render ${check.heading}`);
+  }
+}
+
 export function collectBrowserDiagnostics(page, baseUrl, options = {}) {
   const pageErrors = [];
   const consoleErrors = [];

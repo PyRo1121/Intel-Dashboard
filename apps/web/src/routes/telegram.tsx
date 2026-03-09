@@ -315,6 +315,7 @@ export default function TelegramPage() {
             sourceType: event.source_type,
             acquisitionMethod: event.acquisition_method,
             subscriberValueScore: typeof event.subscriber_value_score === "number" ? event.subscriber_value_score : undefined,
+            signalProfileId: event.signal_profile_id,
             signalScore: typeof event.signal_score === "number" ? event.signal_score : undefined,
             signalGrade: event.signal_grade,
             signalReasons: Array.isArray(event.signal_reasons) ? event.signal_reasons : [],

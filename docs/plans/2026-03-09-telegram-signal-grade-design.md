@@ -14,7 +14,8 @@ Add a world-class, explainable subscriber signal grading system for the Telegram
 Each canonical Telegram event will carry:
 - `signal_score` (0-100)
 - `signal_grade` (`A`, `B`, `C`, `D`)
-- `rank_reasons[]`
+- `signal_reasons[]`
+- `signal_profile_id`
 - `grade_breakdown` (owner/debug surfaces only)
 
 ## Scoring model
@@ -47,14 +48,15 @@ Store durable and auditable grading state in D1:
   - persisted channel history used to inform source-quality scoring
 
 ### KV
-Use KV for hot reads and precomputed summaries:
-- active profile cache
+Use KV for precomputed summaries and optional hot caches:
 - cached leaderboard snapshots (`24h`, `7d`, `30d`)
 - top first-reporter summaries
 
+D1 remains the authoritative source for the active grading profile. KV may mirror hot profile reads, but reproducibility must come from D1 plus the persisted `signal_profile_id` on each event.
+
 ## Runtime flow
 1. Telegram scraper DO canonicalizes an event cluster.
-2. It loads the active grading profile from KV, falling back to D1 when cold.
+2. It loads the active grading profile from D1 (with optional hot caching), not KV as the source of truth.
 3. It computes feature vector + score + grade.
 4. It updates source-history aggregates.
 5. It includes grade metadata on the canonical event payload.

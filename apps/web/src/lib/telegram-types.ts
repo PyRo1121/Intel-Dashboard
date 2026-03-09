@@ -56,6 +56,7 @@ export interface TelegramDedupeMeta {
   sourceType?: "official" | "milblog" | "osint" | "analysis" | "journalism";
   acquisitionMethod?: "telegram_public";
   subscriberValueScore?: number;
+  signalProfileId?: string;
   signalScore?: number;
   signalGrade?: "A" | "B" | "C" | "D";
   signalReasons?: string[];
@@ -80,6 +81,7 @@ export interface TelegramCanonicalEvent {
   source_type?: "official" | "milblog" | "osint" | "analysis" | "journalism";
   acquisition_method?: "telegram_public";
   subscriber_value_score?: number;
+  signal_profile_id?: string;
   signal_score?: number;
   signal_grade?: "A" | "B" | "C" | "D";
   signal_reasons?: string[];

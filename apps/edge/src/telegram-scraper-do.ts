@@ -134,6 +134,7 @@ interface TelegramCanonicalEvent {
   source_type?: ChannelConfig["sourceType"];
   acquisition_method?: ChannelConfig["acquisitionMethod"];
   subscriber_value_score?: number;
+  signal_profile_id?: string;
   signal_score?: number;
   signal_grade?: TelegramSignalGrade;
   signal_reasons?: string[];
@@ -567,7 +568,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
         "CREATE TABLE IF NOT EXISTS telegram_cycle_messages (channel_username TEXT NOT NULL, message_id TEXT NOT NULL, source TEXT NOT NULL, label TEXT NOT NULL, category TEXT NOT NULL, message_link TEXT NOT NULL, datetime TEXT, text_original TEXT NOT NULL, text_en TEXT NOT NULL, image_text_en TEXT, views TEXT, language TEXT, has_video INTEGER NOT NULL, has_photo INTEGER NOT NULL, media_json TEXT, first_seen_cycle_id TEXT NOT NULL, updated_cycle_id TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (channel_username, message_id));",
         "CREATE INDEX IF NOT EXISTS idx_telegram_cycle_messages_datetime ON telegram_cycle_messages(datetime DESC);",
         "CREATE INDEX IF NOT EXISTS idx_telegram_cycle_messages_updated_cycle ON telegram_cycle_messages(updated_cycle_id);",
-        "CREATE TABLE IF NOT EXISTS telegram_canonical_events (event_id TEXT PRIMARY KEY, event_key TEXT NOT NULL, datetime TEXT NOT NULL, category TEXT NOT NULL, categories_json TEXT NOT NULL, source_count INTEGER NOT NULL, duplicate_count INTEGER NOT NULL, source_labels_json TEXT NOT NULL, source_channels_json TEXT NOT NULL, text_original TEXT NOT NULL, text_en TEXT NOT NULL, image_text_en TEXT, language TEXT, media_json TEXT NOT NULL, has_video INTEGER NOT NULL, has_photo INTEGER NOT NULL, signal_score REAL, signal_grade TEXT, signal_reasons_json TEXT, cycle_id TEXT NOT NULL, updated_at TEXT NOT NULL);",
+        "CREATE TABLE IF NOT EXISTS telegram_canonical_events (event_id TEXT PRIMARY KEY, event_key TEXT NOT NULL, datetime TEXT NOT NULL, category TEXT NOT NULL, categories_json TEXT NOT NULL, source_count INTEGER NOT NULL, duplicate_count INTEGER NOT NULL, source_labels_json TEXT NOT NULL, source_channels_json TEXT NOT NULL, text_original TEXT NOT NULL, text_en TEXT NOT NULL, image_text_en TEXT, language TEXT, media_json TEXT NOT NULL, has_video INTEGER NOT NULL, has_photo INTEGER NOT NULL, signal_profile_id TEXT, signal_score REAL, signal_grade TEXT, signal_reasons_json TEXT, cycle_id TEXT NOT NULL, updated_at TEXT NOT NULL);",
         "CREATE INDEX IF NOT EXISTS idx_telegram_canonical_events_datetime ON telegram_canonical_events(datetime DESC);",
         "CREATE INDEX IF NOT EXISTS idx_telegram_canonical_events_cycle_id ON telegram_canonical_events(cycle_id);",
         "CREATE TABLE IF NOT EXISTS telegram_canonical_event_sources (event_id TEXT NOT NULL, signature TEXT NOT NULL, channel TEXT NOT NULL, label TEXT NOT NULL, category TEXT NOT NULL, message_id TEXT NOT NULL, message_link TEXT NOT NULL, datetime TEXT, views TEXT, cycle_id TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (event_id, signature));",
@@ -596,6 +597,11 @@ export class TelegramScraperDO extends DurableObject<Env> {
         "PRAGMA table_info(telegram_canonical_events);",
       ).all<{ name: string }>();
       const canonicalInfo = Array.isArray(canonicalInfoRaw.results) ? canonicalInfoRaw.results : [];
+      if (!canonicalInfo.some((col) => col.name === "signal_profile_id")) {
+        await this.env.INTEL_DB.prepare(
+          "ALTER TABLE telegram_canonical_events ADD COLUMN signal_profile_id TEXT;",
+        ).run();
+      }
       if (!canonicalInfo.some((col) => col.name === "signal_score")) {
         await this.env.INTEL_DB.prepare(
           "ALTER TABLE telegram_canonical_events ADD COLUMN signal_score REAL;",
@@ -1490,6 +1496,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
           source_type: bestSource.sourceType,
           acquisition_method: bestSource.acquisitionMethod,
           subscriber_value_score: averageSubscriberValue,
+          signal_profile_id: signalProfile.profileId,
           signal_score: signalGrade.score,
           signal_grade: signalGrade.grade,
           signal_reasons: signalGrade.reasons,
@@ -3015,8 +3022,8 @@ export class TelegramScraperDO extends DurableObject<Env> {
               event_id, event_key, datetime, category, categories_json,
               source_count, duplicate_count, source_labels_json, source_channels_json,
               text_original, text_en, image_text_en, language, media_json, has_video, has_photo,
-              signal_score, signal_grade, signal_reasons_json, cycle_id, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              signal_profile_id, signal_score, signal_grade, signal_reasons_json, cycle_id, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             event.event_id,
@@ -3035,6 +3042,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
             JSON.stringify(event.media),
             event.has_video ? 1 : 0,
             event.has_photo ? 1 : 0,
+            event.signal_profile_id ?? null,
             typeof event.signal_score === "number" ? event.signal_score : null,
             event.signal_grade ?? null,
             JSON.stringify(event.signal_reasons ?? []),

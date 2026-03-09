@@ -1,0 +1,57 @@
+apps/edge/src/private-api-headers.ts
+  fbdbb1d68cb02f36 23-29,36
+  1d2d0219b5c1d340 1-2,30-35,37-48,61-90
+apps/edge/src/index.ts
+  d9cab6b7788d67e8 21,5398,5440,5449,5463
+  1d2d0219b5c1d340 11,14,16-17,29,33,1101,1105,1109,1117,1127,1132,2053,2115-2145,2148-2159,2310-2315,2321,2328,2353,2379,2392,2421,2434,2439,2457,2462,2465,4872,5014,5076,5079-5081,5088,5099,5102-5104,5108,5114,5117-5119,5124,5135,5172-5174,5178,5200,5268,5310,5352
+  fbdbb1d68cb02f36 25,28,2265-2266,5388,5458
+apps/edge/test/private-api-headers.test.ts
+  1d2d0219b5c1d340 1-2,12-55
+  fbdbb1d68cb02f36 3-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.8",
+  "base_commit_sha": "c1812898043b795cf3dc05ab904ae4e73527af06",
+  "prompts": {
+    "1d2d0219b5c1d340": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd078-bf9e-7dd3-9530-3d34271b7311",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 207,
+      "overriden_lines": 0
+    },
+    "d9cab6b7788d67e8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd14d-7a27-7f52-a15c-311809a93474",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    },
+    "fbdbb1d68cb02f36": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd0d9-c76f-7c23-b348-713dec4ebf33",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 23,
+      "overriden_lines": 0
+    }
+  }
+}

@@ -44,10 +44,15 @@ export default function TelegramSourceHistoryPage() {
   const watchCategory = () => includesSubscriberPreferenceValue(preferences()?.watchCategories ?? [], history()?.source.category);
 
   const persistPreferences = async (updater: (current: ReturnType<typeof cloneSubscriberFeedPreferences>) => void) => {
+    const current = preferences();
+    if (!current) {
+      setControlsSaved("Preferences are still loading");
+      return;
+    }
     setSaving(true);
     setControlsSaved("");
     try {
-      const next = cloneSubscriberFeedPreferences(preferences());
+      const next = cloneSubscriberFeedPreferences(current);
       updater(next);
       const saved = await saveSubscriberFeedPreferences(next);
       if (!saved) {

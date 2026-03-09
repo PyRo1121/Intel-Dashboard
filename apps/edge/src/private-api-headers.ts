@@ -20,15 +20,20 @@ export function corsHeaders(origin?: string | null): Record<string, string> {
   return buildCorsHeaders({ origin, fallbackOrigin: DEFAULT_APP_ORIGIN });
 }
 
+export function applyCorsHeaders(headers: Headers, origin?: string | null): Headers {
+  for (const [key, value] of Object.entries(corsHeaders(origin))) {
+    headers.set(key, value);
+  }
+  return headers;
+}
+
 export function corsJson(
   origin: string | null,
   status: number,
   payload: Record<string, unknown>,
   extraHeaders?: HeadersInit,
 ): Response {
-  const headers = new Headers({
-    ...corsHeaders(origin),
-  });
+  const headers = applyCorsHeaders(new Headers(), origin);
   if (extraHeaders) {
     const extra = new Headers(extraHeaders);
     for (const [key, value] of extra.entries()) {

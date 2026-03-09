@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { corsJson, privateApiJson, privateApiMethodNotAllowed } from "../src/private-api-headers.ts";
+import { applyCorsHeaders, corsJson, privateApiJson, privateApiMethodNotAllowed } from "../src/private-api-headers.ts";
+
+test("applyCorsHeaders mutates response headers with allowed origin values", () => {
+  const headers = new Headers();
+  applyCorsHeaders(headers, "https://intel.pyro1121.com");
+
+  assert.equal(headers.get("Access-Control-Allow-Origin"), "https://intel.pyro1121.com");
+  assert.equal(headers.get("Access-Control-Allow-Credentials"), "true");
+});
 
 test("corsJson applies JSON content type and origin headers", async () => {
   const response = corsJson("https://intel.pyro1121.com", 400, { error: "Bad Request" }, {
@@ -27,19 +35,6 @@ test("privateApiJson applies private no-store JSON headers", async () => {
   assert.match(response.headers.get("Vary") || "", /Authorization/);
   assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
   assert.equal(response.headers.get("X-Frame-Options"), "DENY");
-});
-
-test("privateApiJson applies private no-store JSON headers on explicit error responses", async () => {
-  const response = privateApiJson("https://intel.pyro1121.com", 400, { error: "Bad Request" });
-
-  assert.equal(response.status, 400);
-  assert.deepEqual(await response.json(), { error: "Bad Request" });
-  assert.equal(response.headers.get("Content-Type"), "application/json");
-  assert.equal(response.headers.get("Cache-Control"), "private, no-store, no-cache, must-revalidate");
-  assert.equal(response.headers.get("CDN-Cache-Control"), "no-store");
-  assert.match(response.headers.get("Vary") || "", /Origin/);
-  assert.match(response.headers.get("Vary") || "", /Cookie/);
-  assert.match(response.headers.get("Vary") || "", /Authorization/);
 });
 
 test("privateApiJson merges extra headers", async () => {

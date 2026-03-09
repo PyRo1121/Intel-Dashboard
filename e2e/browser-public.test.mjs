@@ -3,7 +3,7 @@ import test from "node:test";
 import { BROWSER_METADATA_EXPECTATIONS } from "./coverage-manifest.mjs";
 import {
   assertNoBrowserDiagnostics,
-  assertPublicAuthEntrySurface,
+  openAndAssertPublicAuthEntry,
   captureBrowserArtifacts,
   collectBrowserDiagnostics,
   createPublicBrowserContext,
@@ -19,11 +19,8 @@ test("public auth entry pages render the current Intel Dashboard access contract
   try {
     const page = await context.newPage();
     try {
-      await openPublicPage(page, `/login?next=${encodeURIComponent("/crm")}`);
-      await assertPublicAuthEntrySurface(page, { mode: "login", nextPath: "/crm" });
-
-      await openPublicPage(page, `/signup?next=${encodeURIComponent("/briefings")}`);
-      await assertPublicAuthEntrySurface(page, { mode: "signup", nextPath: "/briefings" });
+      await openAndAssertPublicAuthEntry(page, { mode: "login", nextPath: "/crm" });
+      await openAndAssertPublicAuthEntry(page, { mode: "signup", nextPath: "/briefings" });
     } catch (error) {
       await captureBrowserArtifacts(page, "public-auth-contract", error);
       throw error;

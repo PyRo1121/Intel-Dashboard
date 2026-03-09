@@ -231,6 +231,21 @@ export async function assertPublicAuthEntrySurface(page, options) {
   throw new Error(`Unsupported auth entry mode: ${mode}`);
 }
 
+export async function openAndAssertPublicAuthEntry(page, options) {
+  const {
+    mode,
+    nextPath,
+  } = options;
+
+  const route = mode === "login" ? "/login" : mode === "signup" ? "/signup" : null;
+  if (!route) {
+    throw new Error(`Unsupported auth entry mode: ${mode}`);
+  }
+
+  await openPublicPage(page, `${route}?next=${encodeURIComponent(nextPath)}`);
+  await assertPublicAuthEntrySurface(page, { mode, nextPath });
+}
+
 export async function waitForCrmDashboard(page) {
   await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });

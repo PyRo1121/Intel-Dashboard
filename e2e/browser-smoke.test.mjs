@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   advanceMockClock,
   assertNoBrowserDiagnostics,
+  assertRouteMetadata,
   openAndAssertPublicAuthEntry,
   createAirSeaFixture,
   createBriefingsFixture,
@@ -1324,25 +1325,7 @@ test("browser route metadata stays aligned with production titles and canonical 
         });
         assert.ok(response, `${expectation.path} should return a response`);
         assert.ok(response.status() < 500, `${expectation.path} should not return a server error`);
-        await page.waitForTimeout(750);
-        assert.equal(await page.title(), expectation.title, `${expectation.path} should render the expected document title`);
-        if (expectation.description) {
-          const description = await page.locator('meta[name="description"]').first().getAttribute("content");
-          assert.equal(description, expectation.description, `${expectation.path} should render the expected meta description`);
-        }
-        if (expectation.robotsPattern) {
-          const robotsContent = await page.locator('meta[name="robots"]').first().getAttribute("content");
-          assert.match(robotsContent || "", expectation.robotsPattern, `${expectation.path} should expose the expected robots directive`);
-        }
-        if (expectation.canonicalHref) {
-          const canonicalHrefs = await page.locator('link[rel="canonical"]').evaluateAll((elements) =>
-            elements.map((element) => element.getAttribute("href")).filter(Boolean),
-          );
-          assert.ok(canonicalHrefs.length >= 1, `${expectation.path} should expose at least one canonical href`);
-          for (const canonicalHref of canonicalHrefs) {
-            assert.equal(canonicalHref, expectation.canonicalHref, `${expectation.path} canonical href should stay consistent`);
-          }
-        }
+        await assertRouteMetadata(page, expectation, { titleWaitMs: 750 });
       } catch (error) {
         await captureBrowserArtifacts(page, `route-metadata-${expectation.path}`, error);
         throw error;

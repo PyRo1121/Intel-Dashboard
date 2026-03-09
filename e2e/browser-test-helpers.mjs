@@ -348,6 +348,35 @@ export async function assertNotFoundPage(page) {
   assert.match((await page.textContent("body")) || "", /404|not found/i);
 }
 
+export async function assertRouteMetadata(page, expectation, options = {}) {
+  const {
+    titleWaitMs = 750,
+  } = options;
+
+  await page.waitForTimeout(titleWaitMs);
+  assert.equal(await page.title(), expectation.title, `${expectation.path} should render the expected document title`);
+
+  if (expectation.description) {
+    const description = await page.locator('meta[name="description"]').first().getAttribute("content");
+    assert.equal(description, expectation.description, `${expectation.path} should render the expected meta description`);
+  }
+
+  if (expectation.robotsPattern) {
+    const robotsContent = await page.locator('meta[name="robots"]').first().getAttribute("content");
+    assert.match(robotsContent || "", expectation.robotsPattern, `${expectation.path} should expose the expected robots directive`);
+  }
+
+  if (expectation.canonicalHref) {
+    const canonicalHrefs = await page.locator('link[rel="canonical"]').evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute("href")).filter(Boolean),
+    );
+    assert.ok(canonicalHrefs.length >= 1, `${expectation.path} should expose at least one canonical href`);
+    for (const canonicalHref of canonicalHrefs) {
+      assert.equal(canonicalHref, expectation.canonicalHref, `${expectation.path} canonical href should stay consistent`);
+    }
+  }
+}
+
 export async function waitForCrmDashboard(page) {
   await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });

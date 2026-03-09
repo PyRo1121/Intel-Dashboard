@@ -7,6 +7,7 @@ import {
   verifyStripeWebhookSignature,
 } from "./security-guards";
 import { TelegramScraperDO } from "./telegram-scraper-do";
+import { queryTelegramSourceLeaderboard } from "./telegram-source-leaderboard";
 import { createEdgeAuth } from "./auth";
 import { misconfiguredApiResponse, unauthorizedApiResponse } from "./auth-api-response";
 import { buildDeterministicAvatarDataUrl } from "./avatar-fallback";
@@ -5322,6 +5323,29 @@ export default {
       return scraperStub.fetch(new Request("https://do/stream", {
         headers: request.headers,
       }));
+    }
+
+    if (path === "/api/telegram/source-leaderboard") {
+      if (!env.INTEL_DB) {
+        return privateApiJson(origin, 503, { error: "Telegram leaderboard unavailable" });
+      }
+      const entitlement = await resolveOptionalFeedEntitlement({ env, user });
+      if (!entitlement.entitled && entitlement.tier !== "subscriber" && entitlement.role !== "owner") {
+        return privateApiJson(origin, 403, { error: "Forbidden" });
+      }
+      const payload = await queryTelegramSourceLeaderboard({
+        db: env.INTEL_DB,
+        windowRaw: url.searchParams.get("window"),
+      });
+      return new Response(JSON.stringify(payload), {
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "private, no-store, no-cache, must-revalidate",
+          "CDN-Cache-Control": "no-store",
+          "Vary": mergeVary(null, ["Origin", "Cookie", "Authorization"]),
+          ...corsHeaders(origin),
+        },
+      });
     }
 
     if (

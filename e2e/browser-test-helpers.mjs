@@ -63,6 +63,11 @@ export function sanitizeArtifactName(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "browser-test";
 }
 
+export function parseTrailingCount(text) {
+  const match = trim(text).match(/\((\d+)\)\s*$/);
+  return match ? Number(match[1]) : null;
+}
+
 export async function captureBrowserArtifacts(page, testName, error) {
   await mkdir(ARTIFACT_DIR, { recursive: true });
   const slug = sanitizeArtifactName(testName);
@@ -81,6 +86,26 @@ export async function captureBrowserArtifacts(page, testName, error) {
     ].join("\n\n"),
     "utf8",
   ).catch(() => {});
+}
+
+export async function installMockClock(page) {
+  await page.addInitScript(() => {
+    const originalNow = Date.now.bind(Date);
+    let offsetMs = 0;
+    Object.defineProperty(window, "__codexAdvanceNow", {
+      value: (ms) => {
+        offsetMs += Number(ms) || 0;
+      },
+      configurable: true,
+    });
+    Date.now = () => originalNow() + offsetMs;
+  });
+}
+
+export async function advanceMockClock(page, ms) {
+  await page.evaluate((delta) => {
+    window.__codexAdvanceNow(delta);
+  }, ms);
 }
 
 export async function validateSessionCookie(t, cookieHeader, missingMessage) {

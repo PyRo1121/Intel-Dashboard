@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  advanceMockClock,
   assertNoBrowserDiagnostics,
   openAndAssertPublicAuthEntry,
   EDGE_BASE_URL,
@@ -9,6 +10,8 @@ import {
   createBrowserContext,
   createBrowserContextWithCookie,
   createPublicBrowserContext,
+  installMockClock,
+  parseTrailingCount,
   trim,
   waitForProtectedLoginOverlay,
   navigateByKeyboard,
@@ -38,31 +41,6 @@ const SMOKE_IGNORED_CONSOLE_PATTERNS = [
   /Failed to load resource: the server responded with a status of 401 \(\)/i,
   /Failed to load resource: the server responded with a status of 404 \(\)/i,
 ];
-
-function parseTrailingCount(text) {
-  const match = trim(text).match(/\((\d+)\)\s*$/);
-  return match ? Number(match[1]) : null;
-}
-
-async function installMockClock(page) {
-  await page.addInitScript(() => {
-    const originalNow = Date.now.bind(Date);
-    let offsetMs = 0;
-    Object.defineProperty(window, "__codexAdvanceNow", {
-      value: (ms) => {
-        offsetMs += Number(ms) || 0;
-      },
-      configurable: true,
-    });
-    Date.now = () => originalNow() + offsetMs;
-  });
-}
-
-async function advanceMockClock(page, ms) {
-  await page.evaluate((delta) => {
-    window.__codexAdvanceNow(delta);
-  }, ms);
-}
 
 function createIntelFixture({ timestamp, region = "global" } = {}) {
   return [

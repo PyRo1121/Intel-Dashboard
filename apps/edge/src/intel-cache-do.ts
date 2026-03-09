@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { resolveBackendEndpointUrl, usesBackendServiceBinding } from "./backend-origin";
 import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
+import { normalizeNumber, normalizeString } from "./value-normalization";
 
 interface Env extends Cloudflare.Env {
   BACKEND_URL?: string;
@@ -69,19 +70,6 @@ const WEBHOOK_EVENT_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 function normalizeWhaleAlertApiKey(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-
-function normalizeString(value: unknown, fallback = "unknown"): string {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
-}
-
-function normalizeNumber(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim().length > 0) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return 0;
 }
 
 
@@ -620,17 +608,17 @@ export class IntelCacheDO extends DurableObject<Env> {
 
       const data = await res.json() as { transactions?: WhaleAlertApiTransaction[] };
       const alerts = (Array.isArray(data.transactions) ? data.transactions : []).map((tx) => {
-        const fromOwnerType = normalizeString(tx.from?.owner_type, "");
-        const hash = normalizeString(tx.hash, crypto.randomUUID());
+        const fromOwnerType = normalizeString(tx.from?.owner_type) ?? "";
+        const hash = normalizeString(tx.hash) ?? crypto.randomUUID();
         return {
           id: hash,
           type: fromOwnerType === "exchange" ? "exchange_flow" : "large_transfer",
-          blockchain: normalizeString(tx.blockchain),
-          amount: normalizeNumber(tx.amount),
-          amountUSD: normalizeNumber(tx.amount_usd),
-          from: normalizeString(tx.from?.address),
-          to: normalizeString(tx.to?.address),
-          timestamp: normalizeNumber(tx.timestamp),
+          blockchain: normalizeString(tx.blockchain) ?? "unknown",
+          amount: normalizeNumber(tx.amount) ?? 0,
+          amountUSD: normalizeNumber(tx.amount_usd) ?? 0,
+          from: normalizeString(tx.from?.address) ?? "unknown",
+          to: normalizeString(tx.to?.address) ?? "unknown",
+          timestamp: normalizeNumber(tx.timestamp) ?? 0,
           txHash: hash,
         };
       });

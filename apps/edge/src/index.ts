@@ -18,10 +18,11 @@ import {
 } from "./backend-origin";
 import { buildClientXProfileDiagnostics, type XProfileSyncDiagnostics } from "./auth-diagnostics";
 import { normalizeSafeAuthRedirectLocation } from "./auth-redirect";
+import { clearCookie, getSetCookieValues, parseCookies } from "./cookies";
 import { buildOwnerCrmAiTelemetryFailureResponse } from "./crm-ai-telemetry-proxy";
 import { postOwnerBackendJson } from "./owner-backend-json";
 import { buildOwnerCrmOverviewPayload, type CrmDirectoryUser } from "./crm-overview";
-import { corsHeaders, corsJson, mergeVary, privateApiHeaders, privateApiJson, privateApiMethodNotAllowed } from "./private-api-headers";
+import { applyCorsHeaders, corsHeaders, corsJson, mergeVary, privateApiHeaders, privateApiJson, privateApiMethodNotAllowed } from "./private-api-headers";
 import { getDashboardAppRoutePrefixes, normalizeSafePostAuthPath } from "./post-auth-path";
 import { createTurnstileGateToken, type TurnstileMode, verifyTurnstileGateToken } from "./turnstile";
 import { isRecord } from "./type-guards";
@@ -283,25 +284,6 @@ const feedEntitlementCache = new Map<string, { value: FeedEntitlement; expiresAt
 let mediaProxySigningKeyCache: { secret: string; key: CryptoKey } | null = null;
 
 // ============================================================================
-// Cookie Helpers
-// ============================================================================
-
-function parseCookies(header: string | null): Record<string, string> {
-  if (!header) return {};
-  const cookies: Record<string, string> = {};
-  header.split(";").forEach((c) => {
-    const eq = c.indexOf("=");
-    if (eq > 0) {
-      cookies[c.slice(0, eq).trim()] = c.slice(eq + 1).trim();
-    }
-  });
-  return cookies;
-}
-
-function setSessionCookie(value: string, maxAge: number): string {
-  return `${SESSION_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
-}
-
 function normalizeExternalMediaUrl(rawUrl: string): string | null {
   const candidate = rawUrl.trim();
   if (!candidate) return null;
@@ -526,27 +508,10 @@ async function rewriteTelegramMediaUrlsForResponse(params: {
   return changed;
 }
 
-function clearCookie(name: string): string {
-  return `${name}=deleted; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
-}
-
 type BetterAuthSessionResult = {
   user?: Record<string, unknown> | null;
   session?: Record<string, unknown> | null;
 };
-
-function getSetCookieValues(headers: Headers): string[] {
-  const withGetSetCookie = headers as Headers & { getSetCookie?: () => string[] };
-  if (typeof withGetSetCookie.getSetCookie === "function") {
-    return withGetSetCookie.getSetCookie();
-  }
-  const raw = headers.get("set-cookie");
-  if (!raw) return [];
-  return raw
-    .split(/,(?=[^;,=\s]+=[^;,]+)/g)
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-}
 
 async function redirectFromAuthApiResponse(response: Response): Promise<Response> {
   let location = response.headers.get("location");
@@ -2494,9 +2459,7 @@ async function handleStripeWebhook(params: {
       status: backendResponse.status,
       headers: backendResponse.headers,
     });
-    for (const [k, v] of Object.entries(corsHeaders(params.origin))) {
-      response.headers.set(k, v);
-    }
+    applyCorsHeaders(response.headers, params.origin);
     return withSensitiveNoStore(response, ["Origin"]);
   } catch (error) {
     return corsJson(params.origin, 502, {
@@ -5234,9 +5197,7 @@ export default {
         status: doRes.status,
         headers: doRes.headers,
       });
-      for (const [k, v] of Object.entries(corsHeaders(origin))) {
-        response.headers.set(k, v);
-      }
+      applyCorsHeaders(response.headers, origin);
       return withSensitiveNoStore(response);
     }
 
@@ -5424,10 +5385,7 @@ export default {
         status: doRes.status,
         headers: responseHeaders,
       });
-
-      for (const [k, v] of Object.entries(corsHeaders(origin))) {
-        response.headers.set(k, v);
-      }
+      applyCorsHeaders(response.headers, origin);
       return withSensitiveNoStore(response);
     }
 
@@ -5497,9 +5455,7 @@ export default {
         status: backendRes.status,
         headers: backendRes.headers,
       });
-      for (const [k, v] of Object.entries(corsHeaders(origin))) {
-        response.headers.set(k, v);
-      }
+      applyCorsHeaders(response.headers, origin);
       return withSensitiveNoStore(response);
     }
 

@@ -35,10 +35,15 @@ export default function OsintSourceProfilePage() {
   );
 
   const loadingInitial = () => isInitialResourceLoading(profile.state, profile()?.recentItems?.length ?? 0);
-  const title = () => profile()?.source.name || provider() || "OSINT Source";
-  const favoriteSource = () => includesSubscriberPreferenceValue(preferences()?.favoriteSources ?? [], profile()?.source.name);
+  const sourceName = () => profile()?.source.name || provider() || "OSINT Source";
+  const title = () => sourceName();
+  const favoriteSource = () => includesSubscriberPreferenceValue(preferences()?.favoriteSources ?? [], sourceName());
 
   const persistPreferences = async (updater: (current: ReturnType<typeof cloneSubscriberFeedPreferences>) => void) => {
+    if (preferences.loading || !preferences()) {
+      setControlsSaved("Preferences still loading");
+      return;
+    }
     setSaving(true);
     setControlsSaved("");
     try {
@@ -135,7 +140,7 @@ export default function OsintSourceProfilePage() {
                         type="button"
                         disabled={saving()}
                         onClick={() => void persistPreferences((next) => {
-                          next.favoriteSources = toggleSubscriberPreferenceValue(next.favoriteSources, payload().source.name);
+                          next.favoriteSources = toggleSubscriberPreferenceValue(next.favoriteSources, sourceName());
                         })}
                         class={`rounded-xl border px-3 py-2 text-sm ${favoriteSource() ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
                       >

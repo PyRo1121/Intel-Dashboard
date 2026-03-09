@@ -8,6 +8,7 @@ import {
 } from "./security-guards";
 import { TelegramScraperDO } from "./telegram-scraper-do";
 import { queryTelegramSourceLeaderboard } from "./telegram-source-leaderboard";
+import { queryTelegramSourceHistory } from "./telegram-source-history";
 import {
   createEmptySubscriberFeedPreferences,
   filterSubscriberFeedItems,
@@ -5768,6 +5769,42 @@ export default {
       } catch (error) {
         return privateApiJson(origin, 500, {
           error: "Telegram leaderboard query failed",
+          detail: error instanceof Error ? error.message : "unknown_error",
+        });
+      }
+    }
+
+    if (path.startsWith("/api/telegram/source-history/")) {
+      if (request.method !== "GET") {
+        return privateApiMethodNotAllowed(origin, "GET");
+      }
+      if (!env.INTEL_DB) {
+        return privateApiJson(origin, 503, { error: "Telegram source history unavailable" });
+      }
+      const entitlement = await resolveOptionalFeedEntitlement({ env, user });
+      if (!entitlement.entitled && entitlement.tier !== "subscriber" && entitlement.role !== "owner") {
+        return privateApiJson(origin, 403, { error: "Forbidden" });
+      }
+
+      const channel = decodeURIComponent(path.slice("/api/telegram/source-history/".length)).trim().toLowerCase();
+      if (!channel) {
+        return privateApiJson(origin, 400, { error: "Invalid channel" });
+      }
+
+      try {
+        const payload = await queryTelegramSourceHistory({
+          db: env.INTEL_DB,
+          channelRaw: channel,
+          windowRaw: url.searchParams.get("window"),
+          owner: (entitlement.role ?? entitlement.tier ?? "").toLowerCase() === "owner",
+        });
+        if (!payload) {
+          return privateApiJson(origin, 404, { error: "Source not found" });
+        }
+        return privateApiJson(origin, 200, payload);
+      } catch (error) {
+        return privateApiJson(origin, 500, {
+          error: "Telegram source history query failed",
           detail: error instanceof Error ? error.message : "unknown_error",
         });
       }

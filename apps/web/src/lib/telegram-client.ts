@@ -1,5 +1,6 @@
 import { fetchClientJson, fetchPublicJson } from "./client-json.ts";
 import type { TelegramData, TelegramSourceLeaderboardResponse, TelegramSourceLeaderboardWindow } from "./telegram-types.ts";
+import type { TelegramSourceHistoryResponse, TelegramSourceHistoryWindow } from "@intel-dashboard/shared/telegram-source-history.ts";
 
 export type TelegramDedupeFeedbackStatus = {
   ownerEnabled: boolean;
@@ -32,6 +33,18 @@ export async function fetchTelegramSourceLeaderboard(
 ): Promise<TelegramSourceLeaderboardResponse | null> {
   const result = await fetchClientJson<TelegramSourceLeaderboardResponse>(
     `/api/telegram/source-leaderboard?window=${encodeURIComponent(window)}`,
+    withOptionalSignal(signal),
+  );
+  return result.ok ? result.data : null;
+}
+
+export async function fetchTelegramSourceHistory(
+  channel: string,
+  window: TelegramSourceHistoryWindow,
+  signal?: AbortSignal,
+): Promise<TelegramSourceHistoryResponse | null> {
+  const result = await fetchClientJson<TelegramSourceHistoryResponse>(
+    `/api/telegram/source-history/${encodeURIComponent(channel)}?window=${encodeURIComponent(window)}`,
     withOptionalSignal(signal),
   );
   return result.ok ? result.data : null;

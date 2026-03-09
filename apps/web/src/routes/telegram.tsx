@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { A } from "@solidjs/router";
 import { Title, Meta, Link } from "@solidjs/meta";
 import { Clock, Image, LoaderCircle, MessageSquare, Radio, Video } from "lucide-solid";
 import TelegramMessageCard from "~/components/telegram/TelegramMessageCard";
@@ -663,7 +664,9 @@ export default function TelegramPage() {
                   {(entry, index) => (
                     <div class="rounded-xl border border-white/[0.08] bg-black/20 p-3">
                       <div class="flex items-center justify-between gap-2">
-                        <p class="truncate text-[12px] font-semibold text-white">{index() + 1}. {entry.label}</p>
+                        <A href={`/telegram/source/${encodeURIComponent(entry.channel)}`} class="truncate text-[12px] font-semibold text-white no-underline hover:text-violet-200">
+                          {index() + 1}. {entry.label}
+                        </A>
                         <span class="rounded-full border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-200">
                           Score {entry.leaderboardScore}
                         </span>

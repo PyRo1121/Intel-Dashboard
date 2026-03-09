@@ -470,10 +470,16 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
       await page.getByRole("button", { name: "15m" }).click();
       await page.getByTestId("crm-ai-refresh").click();
       await page.getByTestId("crm-ai-surface").waitFor({ state: "visible", timeout: 30_000 });
-      const hasConfiguredAiSurface = await page.getByTestId("crm-ai-surface-configured").isVisible().catch(() => false);
-      const hasUnavailableAiSurface = await page.getByTestId("crm-ai-surface-unavailable").isVisible().catch(() => false);
+      await page.waitForFunction(() => {
+        const configured = document.querySelector('[data-testid="crm-ai-surface-configured"]');
+        const unavailable = document.querySelector('[data-testid="crm-ai-surface-unavailable"]');
+        const loading = document.querySelector('[data-testid="crm-ai-surface-loading"]');
+        return Boolean(configured || unavailable || !loading);
+      }, { timeout: 30_000 });
+      const hasConfiguredAiSurface = await page.getByTestId("crm-ai-surface-configured").count();
+      const hasUnavailableAiSurface = await page.getByTestId("crm-ai-surface-unavailable").count();
       assert.ok(
-        hasConfiguredAiSurface || hasUnavailableAiSurface,
+        hasConfiguredAiSurface > 0 || hasUnavailableAiSurface > 0,
         "CRM should render either the configured AI telemetry surface or an explicit unavailable-state banner",
       );
     } catch (error) {

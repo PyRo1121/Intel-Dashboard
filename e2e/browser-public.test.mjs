@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BROWSER_METADATA_EXPECTATIONS } from "./coverage-manifest.mjs";
 import {
+  assertPublicAuthEntrySurface,
   captureBrowserArtifacts,
   collectBrowserDiagnostics,
   createPublicBrowserContext,
@@ -18,22 +19,10 @@ test("public auth entry pages render the current Intel Dashboard access contract
     const page = await context.newPage();
     try {
       await openPublicPage(page, `/login?next=${encodeURIComponent("/crm")}`);
-      await page.waitForSelector('[data-testid="auth-access-login"]', { timeout: 30_000 });
-      const loginBody = (await page.textContent('[data-testid="auth-access-login"]')) || "";
-      assert.match(loginBody, /Continue with X/i);
-      assert.match(loginBody, /Continue with GitHub/i);
-      assert.equal(await page.getAttribute('[data-testid="auth-access-login-x"]', "href"), "/auth/x/login?next=%2Fcrm");
-      assert.equal(await page.getAttribute('[data-testid="auth-access-login-github"]', "href"), "/auth/login?next=%2Fcrm");
-      assert.equal(await page.getAttribute('[data-testid="auth-access-login-switch"]', "href"), "/signup?next=%2Fcrm");
+      await assertPublicAuthEntrySurface(page, { mode: "login", nextPath: "/crm" });
 
       await openPublicPage(page, `/signup?next=${encodeURIComponent("/briefings")}`);
-      await page.waitForSelector('[data-testid="auth-access-signup"]', { timeout: 30_000 });
-      const signupBody = (await page.textContent('[data-testid="auth-access-signup"]')) || "";
-      assert.match(signupBody, /Create Account with X/i);
-      assert.match(signupBody, /Create Account with GitHub/i);
-      assert.equal(await page.getAttribute('[data-testid="auth-access-signup-x"]', "href"), "/auth/x/signup?next=%2Fbriefings");
-      assert.equal(await page.getAttribute('[data-testid="auth-access-signup-github"]', "href"), "/auth/signup?next=%2Fbriefings");
-      assert.equal(await page.getAttribute('[data-testid="auth-access-signup-switch"]', "href"), "/login?next=%2Fbriefings");
+      await assertPublicAuthEntrySurface(page, { mode: "signup", nextPath: "/briefings" });
     } catch (error) {
       await captureBrowserArtifacts(page, "public-auth-contract", error);
       throw error;

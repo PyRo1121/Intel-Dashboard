@@ -198,6 +198,39 @@ export async function waitForProtectedLoginOverlay(page, { nextPath } = {}) {
   }
 }
 
+export async function assertPublicAuthEntrySurface(page, options) {
+  const {
+    mode,
+    nextPath,
+  } = options;
+
+  const encodedNext = encodeURIComponent(nextPath);
+
+  if (mode === "login") {
+    await page.waitForSelector('[data-testid="auth-access-login"]', { timeout: 30_000 });
+    const body = (await page.textContent('[data-testid="auth-access-login"]')) || "";
+    assert.match(body, /Continue with X/i);
+    assert.match(body, /Continue with GitHub/i);
+    assert.equal(await page.getAttribute('[data-testid="auth-access-login-x"]', "href"), `/auth/x/login?next=${encodedNext}`);
+    assert.equal(await page.getAttribute('[data-testid="auth-access-login-github"]', "href"), `/auth/login?next=${encodedNext}`);
+    assert.equal(await page.getAttribute('[data-testid="auth-access-login-switch"]', "href"), `/signup?next=${encodedNext}`);
+    return;
+  }
+
+  if (mode === "signup") {
+    await page.waitForSelector('[data-testid="auth-access-signup"]', { timeout: 30_000 });
+    const body = (await page.textContent('[data-testid="auth-access-signup"]')) || "";
+    assert.match(body, /Create Account with X/i);
+    assert.match(body, /Create Account with GitHub/i);
+    assert.equal(await page.getAttribute('[data-testid="auth-access-signup-x"]', "href"), `/auth/x/signup?next=${encodedNext}`);
+    assert.equal(await page.getAttribute('[data-testid="auth-access-signup-github"]', "href"), `/auth/signup?next=${encodedNext}`);
+    assert.equal(await page.getAttribute('[data-testid="auth-access-signup-switch"]', "href"), `/login?next=${encodedNext}`);
+    return;
+  }
+
+  throw new Error(`Unsupported auth entry mode: ${mode}`);
+}
+
 export async function waitForCrmDashboard(page) {
   await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });

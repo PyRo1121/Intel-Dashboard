@@ -4,6 +4,7 @@ import { Plane, Ship, ExternalLink, Clock, Eye, Navigation, Search, Radio, Chevr
 import {
   EMPTY_AIR_SEA_PAYLOAD,
   fetchAirSeaPayload,
+  resolveAirSeaPayload,
   type AirSeaIntelReport as IntelReport,
   type Aircraft,
 } from "~/lib/air-sea-client";
@@ -54,7 +55,7 @@ export default function AirSeaOps() {
 
   useLiveRefresh(() => void refetch(), 35_000, { runImmediately: true });
 
-  const airSea = () => payload.latest ?? payload() ?? EMPTY_AIR_SEA_PAYLOAD;
+  const airSea = () => resolveAirSeaPayload(payload.latest, payload());
 
   const latestFeedTs = createMemo(() => parseTimestampMs(airSea().timestamp || ""));
   const freshness = useFeedFreshness({

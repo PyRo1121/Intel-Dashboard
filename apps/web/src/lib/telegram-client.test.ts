@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fetchTelegramDedupeFeedbackStatus, fetchTelegramFeed, postTelegramDedupeFeedback } from "./telegram-client.ts";
+import {
+  EMPTY_TELEGRAM_DATA,
+  fetchTelegramDedupeFeedbackStatus,
+  fetchTelegramFeed,
+  postTelegramDedupeFeedback,
+  resolveTelegramFeedData,
+} from "./telegram-client.ts";
 
 test("fetchTelegramFeed returns payload on success and null on failure", async () => {
   const originalFetch = globalThis.fetch;
@@ -48,6 +54,17 @@ test("telegram client respects caller signal without disabling default requests"
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("resolveTelegramFeedData provides a stable empty feed fallback", () => {
+  const populated = {
+    ...EMPTY_TELEGRAM_DATA,
+    timestamp: "2026-03-09T12:00:00.000Z",
+    total_messages: 3,
+  };
+
+  assert.equal(resolveTelegramFeedData(populated).timestamp, "2026-03-09T12:00:00.000Z");
+  assert.equal(resolveTelegramFeedData(null), EMPTY_TELEGRAM_DATA);
 });
 
 test("fetchTelegramDedupeFeedbackStatus normalizes owner capability and count", async () => {

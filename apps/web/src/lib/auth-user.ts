@@ -1,4 +1,4 @@
-import { isOwnerRole, resolveEntitlementRole } from "@intel-dashboard/shared/entitlement.ts";
+import { isOwnerRole, resolveEntitlementRole, resolveEntitlementView } from "@intel-dashboard/shared/entitlement.ts";
 
 export type AuthUserLike = {
   login?: string;
@@ -7,6 +7,8 @@ export type AuthUserLike = {
   entitlement?: {
     role?: string;
     tier?: string;
+    entitled?: boolean;
+    delayMinutes?: number;
   };
 } | null | undefined;
 
@@ -16,6 +18,10 @@ export function resolveAuthUserRole(user: AuthUserLike): string {
 
 export function isAuthUserOwner(user: AuthUserLike): boolean {
   return isOwnerRole(resolveAuthUserRole(user));
+}
+
+export function resolveAuthUserEntitlementView(user: AuthUserLike) {
+  return resolveEntitlementView(user?.entitlement);
 }
 
 export function resolveAuthUserDisplay(user: AuthUserLike): {

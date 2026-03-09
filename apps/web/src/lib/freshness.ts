@@ -59,6 +59,20 @@ export function maxIsoTimestamp(values: Array<string | undefined | null>): numbe
   return latest;
 }
 
+export function maxIsoTimestampBy<T>(
+  items: readonly T[],
+  select: (item: T) => string | undefined | null,
+): number {
+  let latest = 0;
+  for (const item of items) {
+    const value = select(item);
+    if (!value) continue;
+    const ts = Date.parse(value);
+    if (Number.isFinite(ts) && ts > latest) latest = ts;
+  }
+  return latest;
+}
+
 export function freshnessTooltip(thresholds: FreshnessThresholds): string {
   return `Freshness thresholds: live <= ${thresholds.liveMaxMinutes}m, delayed <= ${thresholds.delayedMaxMinutes}m, stale > ${thresholds.delayedMaxMinutes}m.`;
 }

@@ -10,7 +10,7 @@ import {
   freshnessBannerTone,
   freshnessPillTone,
   freshnessTooltip,
-  maxIsoTimestamp,
+  maxIsoTimestampBy,
   STANDARD_FEED_FRESHNESS_THRESHOLDS,
   useFeedFreshness,
 } from "~/lib/freshness";
@@ -47,7 +47,7 @@ export default function ThreatMap() {
   const totalEvents = () => intelItems().length;
   const totalCritical = () => regions().reduce((s, r) => s + r.critical, 0);
   const totalHigh = () => regions().reduce((s, r) => s + r.high, 0);
-  const latestIntelTs = createMemo(() => maxIsoTimestamp(intelItems().map((item) => item.timestamp)));
+  const latestIntelTs = createMemo(() => maxIsoTimestampBy(intelItems(), (item) => item.timestamp));
   const freshness = useFeedFreshness({
     nowMs,
     latestTimestampMs: latestIntelTs,

@@ -1,4 +1,5 @@
 import { fetchClientJson, fetchPublicJson } from "./client-json.ts";
+import type { TelegramData } from "./telegram-types.ts";
 
 export type TelegramDedupeFeedbackStatus = {
   ownerEnabled: boolean;
@@ -7,7 +8,14 @@ export type TelegramDedupeFeedbackStatus = {
 
 export type TelegramDedupeFeedbackAction = "merge" | "split" | "clear";
 
-type ClientJsonUnknownResult = Awaited<ReturnType<typeof fetchClientJson<unknown>>>;
+export const EMPTY_TELEGRAM_DATA: TelegramData = {
+  timestamp: "",
+  total_channels: 0,
+  channels_fetched: 0,
+  total_messages: 0,
+  categories: {},
+  channels: [],
+};
 
 function withOptionalSignal(signal?: AbortSignal): { signal?: AbortSignal } {
   return signal ? { signal } : {};
@@ -16,6 +24,10 @@ function withOptionalSignal(signal?: AbortSignal): { signal?: AbortSignal } {
 export async function fetchTelegramFeed<T>(signal?: AbortSignal): Promise<T | null> {
   const result = await fetchPublicJson<T>("/api/telegram", withOptionalSignal(signal));
   return result.ok ? result.data : null;
+}
+
+export function resolveTelegramFeedData(data: TelegramData | null | undefined): TelegramData {
+  return data ?? EMPTY_TELEGRAM_DATA;
 }
 
 export async function fetchTelegramDedupeFeedbackStatus(signal?: AbortSignal): Promise<TelegramDedupeFeedbackStatus | null> {
@@ -37,7 +49,7 @@ export async function postTelegramDedupeFeedback(args: {
   action: TelegramDedupeFeedbackAction;
   signatures: string[];
   targetCluster?: string;
-}): Promise<ClientJsonUnknownResult> {
+}): Promise<Awaited<ReturnType<typeof fetchClientJson<unknown>>>> {
   return fetchClientJson<unknown>("/api/telegram/dedupe-feedback", {
     method: "POST",
     body: JSON.stringify({

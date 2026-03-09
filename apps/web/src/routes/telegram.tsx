@@ -24,7 +24,12 @@ import {
 } from "~/lib/telegram-entry";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import { getLatestTelegramMessageTimestamp, sortTelegramChannelsByMessageTime } from "~/lib/telegram-feed";
-import { fetchTelegramDedupeFeedbackStatus, fetchTelegramFeed, postTelegramDedupeFeedback } from "~/lib/telegram-client";
+import {
+  fetchTelegramDedupeFeedbackStatus,
+  fetchTelegramFeed,
+  postTelegramDedupeFeedback,
+  resolveTelegramFeedData,
+} from "~/lib/telegram-client";
 import { reconcileTelegramData } from "~/lib/telegram-reconcile";
 import type {
   TelegramAgeWindow as AgeWindow,
@@ -198,9 +203,10 @@ export default function TelegramPage() {
 
   useLiveRefresh(refreshTelegram, 60_000, { runImmediately: false, jitterRatio: 0.15 });
 
-  const categories = () => data()?.categories ?? {};
-  const channels = () => data()?.channels ?? [];
-  const timestamp = () => data()?.timestamp ?? "";
+  const telegramData = createMemo(() => resolveTelegramFeedData(data()));
+  const categories = () => telegramData().categories;
+  const channels = () => telegramData().channels;
+  const timestamp = () => telegramData().timestamp;
 
   const normalizedChannels = createMemo(() => sortTelegramChannelsByMessageTime(channels()));
   const latestMessageTimestamp = createMemo(() => getLatestTelegramMessageTimestamp(normalizedChannels()));
@@ -350,9 +356,6 @@ export default function TelegramPage() {
   });
 
   const activeGroup = createMemo(() => TELEGRAM_FILTER_GROUP_BY_ID.get(groupFilter()) ?? TELEGRAM_FILTER_GROUPS[0]);
-  const activeGroupCount = createMemo(() => {
-    return TELEGRAM_FILTER_GROUPS.filter((group) => group.id !== "all" && (groupCounts()[group.id] || 0) > 0).length;
-  });
   const verifiedCount = createMemo(() => entries().filter((entry) => isVerifiedEntry(entry)).length);
   const mediaCount = createMemo(() => entries().filter((entry) => entry.message.media.length > 0).length);
   const selectedSignatures = createMemo(() => {

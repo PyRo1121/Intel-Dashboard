@@ -36,10 +36,16 @@ if (accessClientId && accessClientSecret) {
   headers["CF-Access-Client-Secret"] = accessClientSecret;
 }
 
-const response = await fetch(`${edgeBaseUrl}/api/auth/me`, {
-  headers,
-  signal: AbortSignal.timeout(20_000),
-});
+let response;
+try {
+  response = await fetch(`${edgeBaseUrl}/api/auth/me`, {
+    headers,
+    signal: AbortSignal.timeout(20_000),
+  });
+} catch (error) {
+  console.error(`Failed to reach ${edgeBaseUrl}/api/auth/me: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+}
 
 if (response.status !== 200) {
   console.error(`E2E_SESSION_COOKIE is invalid: /api/auth/me returned HTTP ${response.status}.`);
@@ -49,6 +55,12 @@ if (response.status !== 200) {
 const payload = await response.json().catch(() => null);
 if (payload?.authenticated !== true || typeof payload?.user?.login !== "string") {
   console.error("E2E_SESSION_COOKIE check returned an unexpected authenticated payload.");
+  process.exit(1);
+}
+
+const role = typeof payload?.entitlement?.role === "string" ? payload.entitlement.role.toLowerCase() : "";
+if (role !== "owner" && role !== "admin") {
+  console.error(`E2E_SESSION_COOKIE authenticated as "${payload?.user?.login}" but role "${role || "unknown"}" is not owner or admin.`);
   process.exit(1);
 }
 

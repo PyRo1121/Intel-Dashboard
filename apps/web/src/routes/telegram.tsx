@@ -24,6 +24,7 @@ import {
   isVerifiedEntry,
   messageText,
 } from "~/lib/telegram-entry";
+import { applyTelegramPremiumFeed } from "~/lib/telegram-premium-feed";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import { getLatestTelegramMessageTimestamp, sortTelegramChannelsByMessageTime } from "~/lib/telegram-feed";
 import {
@@ -43,11 +44,14 @@ import type {
 } from "~/lib/telegram-types";
 import { isTelegramMessageVisible } from "~/lib/telegram-visibility";
 import { parseTimestampMs as parseTs, truncateText } from "~/lib/utils";
+import { useAuth } from "~/lib/auth";
+import { isAuthUserSignalSubscriber } from "~/lib/auth-user";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { TELEGRAM_DESCRIPTION, TELEGRAM_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 
 export default function TelegramPage() {
+  const auth = useAuth();
   const [data, setData] = createSignal<TelegramData | null>(null);
   const [loadingInitial, setLoadingInitial] = createSignal(true);
   const [refreshing, setRefreshing] = createSignal(false);
@@ -63,8 +67,12 @@ export default function TelegramPage() {
   const [adminBusy, setAdminBusy] = createSignal(false);
   const [adminStatus, setAdminStatus] = createSignal("");
   const [streamConnected, setStreamConnected] = createSignal(false);
+  const [signalFirst, setSignalFirst] = createSignal(false);
+  const [hidePremiumNoise, setHidePremiumNoise] = createSignal(false);
   const feedThresholds = STANDARD_FEED_FRESHNESS_THRESHOLDS;
   let lastTimestamp = "";
+  let signalFirstTouched = false;
+  let hidePremiumNoiseTouched = false;
 
   const refreshDedupeFeedbackStatus = async (): Promise<void> => {
     const status = await fetchTelegramDedupeFeedbackStatus(AbortSignal.timeout(8_000));
@@ -229,6 +237,19 @@ export default function TelegramPage() {
 
   const mergeDuplicates = createMemo(() => feedMode() !== "raw");
   const verifiedOnly = createMemo(() => feedMode() === "verified");
+  const signalSubscriber = createMemo(() => isAuthUserSignalSubscriber(auth.user()));
+  const premiumSignalEnabled = createMemo(() => signalSubscriber() && mergeDuplicates() && signalFirst());
+  const premiumNoiseEnabled = createMemo(() => signalSubscriber() && mergeDuplicates() && hidePremiumNoise());
+
+  createEffect(() => {
+    if (!signalSubscriber()) {
+      if (!signalFirstTouched) setSignalFirst(false);
+      if (!hidePremiumNoiseTouched) setHidePremiumNoise(false);
+      return;
+    }
+    if (!signalFirstTouched) setSignalFirst(true);
+    if (!hidePremiumNoiseTouched) setHidePremiumNoise(true);
+  });
 
   const rawEntries = createMemo<TelegramEntry[]>((prev) => {
     const previous = prev ?? [];
@@ -295,6 +316,9 @@ export default function TelegramPage() {
             freshnessTier: event.freshness_tier,
             verificationState: event.verification_state,
             rankScore: typeof event.rank_score === "number" ? event.rank_score : undefined,
+            firstReporterLabel: event.first_reporter_label,
+            firstReporterChannel: event.first_reporter_channel,
+            firstReportedAt: event.first_reported_at,
             sources: Array.isArray(event.sources) ? event.sources : [],
             sourceSignatures: Array.isArray(event.sources)
               ? event.sources
@@ -343,7 +367,7 @@ export default function TelegramPage() {
     return TELEGRAM_FILTER_GROUPS.filter((group) => group.id === "all" || (groupCounts()[group.id] || 0) > 0);
   });
 
-  const filteredEntries = createMemo(() => {
+  const baseFilteredEntries = createMemo(() => {
     const activeGroupId = groupFilter();
     const group = resolveTelegramFilterGroup(activeGroupId);
     return entries().filter((entry) => {
@@ -356,6 +380,14 @@ export default function TelegramPage() {
       return true;
     });
   });
+  const filteredEntries = createMemo(() =>
+    applyTelegramPremiumFeed({
+      entries: baseFilteredEntries(),
+      signalFirst: premiumSignalEnabled(),
+      hideNoise: premiumNoiseEnabled(),
+    }),
+  );
+  const premiumNoiseHiddenCount = createMemo(() => Math.max(0, baseFilteredEntries().length - filteredEntries().length));
 
   const activeGroup = createMemo(() => resolveTelegramFilterGroup(groupFilter()));
   const verifiedCount = createMemo(() => countVerifiedTelegramEntries(entries()));
@@ -640,12 +672,47 @@ export default function TelegramPage() {
           >
             Media only
           </button>
+          <Show when={signalSubscriber()}>
+            <button
+              type="button"
+              onClick={() => {
+                signalFirstTouched = true;
+                setSignalFirst(!signalFirst());
+              }}
+              aria-pressed={signalFirst()}
+              class={`min-h-11 cursor-pointer rounded-xl border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
+                signalFirst() ? "border-sky-400/30 bg-sky-500/10 text-sky-200" : "border-white/[0.08] bg-black/20 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Signal-first
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                hidePremiumNoiseTouched = true;
+                setHidePremiumNoise(!hidePremiumNoise());
+              }}
+              aria-pressed={hidePremiumNoise()}
+              class={`min-h-11 cursor-pointer rounded-xl border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
+                hidePremiumNoise() ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-white/[0.08] bg-black/20 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Hide noise
+              <Show when={premiumNoiseEnabled() && premiumNoiseHiddenCount() > 0}>
+                <span class="ml-1 text-[10px] opacity-75">({premiumNoiseHiddenCount()})</span>
+              </Show>
+            </button>
+          </Show>
           <div class="rounded-xl border border-white/[0.08] bg-black/20 px-3 py-1.5 text-[11px] text-zinc-400">
             {feedMode() === "raw"
               ? "Raw view shows single-source flow for operator triage."
               : feedMode() === "verified"
                 ? "Verified view biases toward multi-source and media-backed clusters."
-                : "Deduped view collapses near-duplicates into a cleaner timeline."}
+                : premiumSignalEnabled()
+                  ? "Premium signal-first mode ranks higher-confidence events ahead of follow-on chatter."
+                  : premiumNoiseEnabled()
+                    ? "Premium noise filter hides low-signal duplicate chatter by default."
+                    : "Deduped view collapses near-duplicates into a cleaner timeline."}
           </div>
         </div>
 
@@ -733,10 +800,23 @@ export default function TelegramPage() {
         <section class="space-y-3">
           <div class="flex items-center gap-3 border-b border-white/[0.06] pb-2">
             <div class="h-5 w-1 rounded-full bg-blue-500" />
-            <h2 class="text-base font-semibold text-white">{groupFilter() === "all" ? "All Messages" : `${activeGroup().label} Messages`}</h2>
+            <h2 class="text-base font-semibold text-white">
+              {premiumSignalEnabled()
+                ? groupFilter() === "all"
+                  ? "Premium Signal Feed"
+                  : `${activeGroup().label} Signal Feed`
+                : groupFilter() === "all"
+                  ? "All Messages"
+                  : `${activeGroup().label} Messages`}
+            </h2>
             <span class="rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[11px] font-mono-data text-zinc-300">
               {filteredEntries().length} msgs
             </span>
+            <Show when={premiumNoiseEnabled() && premiumNoiseHiddenCount() > 0}>
+              <span class="rounded-md border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-mono-data text-emerald-200">
+                -{premiumNoiseHiddenCount()} noise
+              </span>
+            </Show>
           </div>
           <div class="space-y-0">
             <For each={filteredEntries()}>

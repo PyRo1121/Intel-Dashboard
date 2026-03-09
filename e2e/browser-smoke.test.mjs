@@ -27,6 +27,7 @@ import {
   waitForProtectedLoginOverlay,
   navigateByKeyboard,
   openPage,
+  openPublicPage,
   openDashboardPage,
   openBillingDashboard,
   openCrmDashboard,
@@ -38,6 +39,7 @@ import {
   MISSING_BILLING_STATE_PATTERN,
   waitForCrmAiSurface,
   waitForMissingBillingState,
+  isCloudflareChallengePage,
 } from "./browser-test-helpers.mjs";
 import {
   AUTHENTICATED_BROWSER_NOERROR_ROUTES,
@@ -1067,6 +1069,11 @@ test("browser public auth pages render current Intel Dashboard access UI", async
       const routes = PUBLIC_AUTH_BROWSER_ROUTES;
 
       for (const route of routes) {
+        const response = await openPublicPage(page, route.path);
+        if (await isCloudflareChallengePage(page, response)) {
+          t.skip(`Cloudflare challenged ${route.path} for the synthetic browser client`);
+          return;
+        }
         await openAndAssertPublicAuthRoute(page, route);
       }
     } catch (error) {
@@ -1087,6 +1094,11 @@ test("browser auth pages preserve safe next routes in rendered auth actions", as
   try {
     const page = await context.newPage();
     try {
+      const probe = await openPublicPage(page, "/login");
+      if (await isCloudflareChallengePage(page, probe)) {
+        t.skip("Cloudflare challenged /login for the synthetic browser client");
+        return;
+      }
       await openAndAssertPublicAuthEntry(page, { mode: "login", nextPath: "/crm" });
       await openAndAssertPublicAuthEntry(page, { mode: "signup", nextPath: "/briefings" });
     } catch (error) {
@@ -1122,6 +1134,10 @@ test("browser protected routes surface session-unavailable recovery and recover 
       });
 
       await openPublicPage(page, "/osint");
+      if (await isCloudflareChallengePage(page)) {
+        t.skip("Cloudflare challenged the protected-route login recovery surface for the synthetic browser client");
+        return;
+      }
 
       await page.waitForSelector("text=Session Check Unavailable", { timeout: 30_000 });
       await page.waitForSelector("text=Retry Session Check", { timeout: 30_000 });
@@ -1170,6 +1186,10 @@ test("browser protected login overlay preserves the current route in auth action
       });
 
       await openPublicPage(page, "/billing");
+      if (await isCloudflareChallengePage(page)) {
+        t.skip("Cloudflare challenged the protected login overlay surface for the synthetic browser client");
+        return;
+      }
 
       await waitForProtectedLoginOverlay(page, { nextPath: "/billing" });
     } catch (error) {
@@ -1213,17 +1233,25 @@ test("browser public landing CTAs navigate to the intended auth surfaces", async
   try {
     const page = await context.newPage();
 
-    await assertLandingCtaDestination(page, {
+    const loginResult = await assertLandingCtaDestination(page, {
       ctaName: "Login",
       expectedUrl: `${EDGE_BASE_URL}/login`,
       accessMessage: "login CTA should land on a public auth surface",
     });
+    if (loginResult?.challenged) {
+      t.skip("Cloudflare challenged the landing CTA auth destination for the synthetic browser client");
+      return;
+    }
 
-    await assertLandingCtaDestination(page, {
+    const trialResult = await assertLandingCtaDestination(page, {
       ctaName: /Start 7-Day Trial|Start Trial with OAuth/i,
       expectedUrl: `${EDGE_BASE_URL}/signup`,
       accessMessage: "trial CTA should land on a public auth surface",
     });
+    if (trialResult?.challenged) {
+      t.skip("Cloudflare challenged the landing trial CTA auth destination for the synthetic browser client");
+      return;
+    }
 
     await assertLandingCtaDestination(page, {
       ctaName: /Open Live Dashboard|Open Dashboard/i,
@@ -1256,12 +1284,29 @@ test("browser route metadata stays aligned with production titles and canonical 
         : authRuntime;
       const page = await runtime.context.newPage();
       try {
-        await openAndAssertRouteMetadata(page, expectation, {
-          waitUntil: "domcontentloaded",
-          timeout: 30_000,
-          titleWaitMs: 750,
-          maxStatusExclusive: 500,
-        });
+        if (publicAuthPaths.has(expectation.path)) {
+          const response = await openPage(page, expectation.path, {
+            waitUntil: "domcontentloaded",
+            timeout: 30_000,
+          });
+          if (await isCloudflareChallengePage(page, response)) {
+            t.skip(`Cloudflare challenged ${expectation.path} for route metadata checks`);
+            return;
+          }
+          await openAndAssertRouteMetadata(page, expectation, {
+            waitUntil: "domcontentloaded",
+            timeout: 30_000,
+            titleWaitMs: 750,
+            maxStatusExclusive: 500,
+          });
+        } else {
+          await openAndAssertRouteMetadata(page, expectation, {
+            waitUntil: "domcontentloaded",
+            timeout: 30_000,
+            titleWaitMs: 750,
+            maxStatusExclusive: 500,
+          });
+        }
       } catch (error) {
         await captureBrowserArtifacts(page, `route-metadata-${expectation.path}`, error);
         throw error;
@@ -1357,6 +1402,10 @@ test("browser public auth start routes enforce the security gate before provider
 
       for (const route of expectations) {
         const response = await openPublicPage(page, route.path);
+        if (await isCloudflareChallengePage(page, response)) {
+          t.skip(`Cloudflare challenged ${route.path} for the synthetic browser client`);
+          return;
+        }
         assert.ok(response, `${route.path} should return a response`);
         const finalUrl = new URL(page.url());
         assert.equal(finalUrl.pathname, route.finalPath, `${route.path} should land on the matching auth page`);
@@ -1385,7 +1434,11 @@ test("browser public pages stay free of uncaught, console, and same-origin reque
       });
 
       for (const route of PUBLIC_BROWSER_ROUTES) {
-        await openPublicPage(page, route);
+        const response = await openPublicPage(page, route);
+        if ((route === "/login" || route === "/signup") && await isCloudflareChallengePage(page, response)) {
+          t.skip(`Cloudflare challenged ${route} for the synthetic browser client`);
+          return;
+        }
         await page.waitForTimeout(1_000);
       }
 

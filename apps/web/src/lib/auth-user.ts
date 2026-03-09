@@ -26,6 +26,11 @@ export function isAuthUserOwner(user: AuthUserLike): boolean {
   return isOwnerRole(resolveAuthUserRole(user));
 }
 
+export function isAuthUserSignalSubscriber(user: AuthUserLike): boolean {
+  const role = resolveAuthUserRole(user);
+  return role === "owner" || role === "subscriber";
+}
+
 export function resolveAuthUserEntitlementView(user: AuthUserLike) {
   return resolveEntitlementView(user?.entitlement);
 }

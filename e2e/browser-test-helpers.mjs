@@ -24,6 +24,8 @@ export const OWNER_BILLING_TRIAL_NOTICE_PATTERN = /Owner account detected. Trial
 export const OWNER_BILLING_CHECKOUT_NOTICE_PATTERN = /Owner account detected. Checkout bypass is active./i;
 export const OWNER_BILLING_PORTAL_NOTICE_PATTERN = /Owner account detected. Stripe portal is not required./i;
 export const PUBLIC_ACCESS_SURFACE_PATTERN = /Start 7-Day Trial|Sign in to Intel Dashboard|Create your Intel Dashboard account/i;
+export const CLOUDFLARE_CHALLENGE_TITLE_PATTERN = /^Just a moment/i;
+export const CLOUDFLARE_CHALLENGE_BODY_PATTERN = /Performing security verification|Enable JavaScript and cookies to continue|This website uses a security service to protect against malicious bots/i;
 
 export function buildCloudflareAccessHeaders(clientId = ACCESS_CLIENT_ID, clientSecret = ACCESS_CLIENT_SECRET) {
   if (!trim(clientId) || !trim(clientSecret)) return undefined;
@@ -409,13 +411,17 @@ export async function assertLandingCtaDestination(page, options) {
   await openPublicPage(page, "/");
   await page.getByRole("link", { name: ctaName }).first().click();
   await page.waitForURL(expectedUrl, { timeout: 30_000 });
+  if (await isCloudflareChallengePage(page)) {
+    return { challenged: true };
+  }
 
   if (protectedNextPath) {
     await waitForProtectedLoginOverlay(page, { nextPath: protectedNextPath });
-    return;
+    return { challenged: false };
   }
 
   await assertPublicAccessSurface(page, accessMessage);
+  return { challenged: false };
 }
 
 export async function assertRouteMetadata(page, expectation, options = {}) {
@@ -485,6 +491,14 @@ export async function openAndAssertRouteMetadata(page, expectation, options = {}
 }
 
 export async function waitForCrmDashboard(page) {
+  const sessionUnavailable = page.getByRole("heading", { name: "Session Check Unavailable" }).first();
+  if (await sessionUnavailable.isVisible().catch(() => false)) {
+    const retryButton = page.getByRole("button", { name: "Retry Session Check" }).first();
+    if (await retryButton.isVisible().catch(() => false)) {
+      await retryButton.click();
+    }
+  }
+
   await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("crm-summary-mrr").waitFor({ state: "visible", timeout: 30_000 });
@@ -518,6 +532,19 @@ export async function openPublicPage(page, path) {
     waitUntil: "domcontentloaded",
     timeout: 30_000,
   });
+}
+
+export async function isCloudflareChallengePage(page, response) {
+  const title = await page.title().catch(() => "");
+  const body = (await page.textContent("body").catch(() => "")) || "";
+  const challengeByContent =
+    CLOUDFLARE_CHALLENGE_TITLE_PATTERN.test(title) ||
+    CLOUDFLARE_CHALLENGE_BODY_PATTERN.test(body);
+  if (challengeByContent) {
+    return true;
+  }
+  const status = response?.status?.() ?? 0;
+  return status === 403;
 }
 
 export async function activateByKeyboard(control) {

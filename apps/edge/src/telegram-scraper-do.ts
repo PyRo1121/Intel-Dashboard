@@ -19,6 +19,10 @@ import {
 import { resolveAiGatewayToken } from "./gateway-token";
 import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
+import {
+  updateTelegramSourcePerformanceStats,
+  type TelegramSourcePerformanceStats,
+} from "./telegram-source-performance";
 
 // ============================================================================
 // Types
@@ -125,6 +129,9 @@ interface TelegramCanonicalEvent {
   freshness_tier?: "breaking" | "fresh" | "watch";
   verification_state?: "verified" | "corroborated" | "single_source";
   rank_score?: number;
+  first_reporter_label?: string;
+  first_reporter_channel?: string;
+  first_reported_at?: string;
   source_count: number;
   duplicate_count: number;
   source_labels: string[];
@@ -174,6 +181,19 @@ interface CanonicalSourceRecord {
   tokenSet: Set<string>;
   simhash: bigint;
   mediaSignature: string;
+}
+
+interface TelegramSourcePerformanceRow {
+  channel: string;
+  total_events: number;
+  lead_reports: number;
+  follow_on_reports: number;
+  corroborated_reports: number;
+  single_source_reports: number;
+  score: number;
+  last_lead_at: number | null;
+  last_seen_at: number | null;
+  updated_at: number | null;
 }
 
 type PersistMessageSource = "new" | "backfill" | "media_backfill";
@@ -428,6 +448,31 @@ export class TelegramScraperDO extends DurableObject<Env> {
       this.ctx.storage.sql.exec(
         `CREATE INDEX IF NOT EXISTS idx_dedupe_feedback_updated_at ON dedupe_feedback(updated_at)`,
       );
+      this.ctx.storage.sql.exec(`
+        CREATE TABLE IF NOT EXISTS telegram_source_performance (
+          channel TEXT PRIMARY KEY,
+          total_events REAL NOT NULL DEFAULT 0,
+          lead_reports REAL NOT NULL,
+          follow_on_reports REAL NOT NULL,
+          corroborated_reports REAL NOT NULL,
+          single_source_reports REAL NOT NULL,
+          score REAL NOT NULL,
+          last_lead_at INTEGER,
+          last_seen_at INTEGER,
+          updated_at INTEGER
+        )
+      `);
+      this.ctx.storage.sql.exec(
+        `CREATE INDEX IF NOT EXISTS idx_telegram_source_performance_score ON telegram_source_performance(score DESC)`,
+      );
+      const sourcePerformanceInfo = this.ctx.storage.sql
+        .exec("PRAGMA table_info(telegram_source_performance)")
+        .toArray() as Array<{ name: string }>;
+      if (!sourcePerformanceInfo.some((column) => column.name === "total_events")) {
+        this.ctx.storage.sql.exec(
+          "ALTER TABLE telegram_source_performance ADD COLUMN total_events REAL NOT NULL DEFAULT 0",
+        );
+      }
 
       await this.ensureD1Schema();
 
@@ -757,6 +802,56 @@ export class TelegramScraperDO extends DurableObject<Env> {
     return map;
   }
 
+  private loadSourcePerformanceStats(): Map<string, TelegramSourcePerformanceStats> {
+    const rows = this.ctx.storage.sql
+      .exec(
+        `SELECT channel, total_events, lead_reports, follow_on_reports, corroborated_reports,
+          single_source_reports, score, last_lead_at, last_seen_at, updated_at
+         FROM telegram_source_performance`,
+      )
+      .toArray() as unknown as TelegramSourcePerformanceRow[];
+    const map = new Map<string, TelegramSourcePerformanceStats>();
+    for (const row of rows) {
+      const channel = (row.channel || "").trim();
+      if (!channel) continue;
+      map.set(channel, {
+        totalEvents: Number.isFinite(row.total_events) ? row.total_events : 0,
+        leadReports: Number.isFinite(row.lead_reports) ? row.lead_reports : 0,
+        followOnReports: Number.isFinite(row.follow_on_reports) ? row.follow_on_reports : 0,
+        corroboratedReports: Number.isFinite(row.corroborated_reports) ? row.corroborated_reports : 0,
+        singleSourceReports: Number.isFinite(row.single_source_reports) ? row.single_source_reports : 0,
+        score: Number.isFinite(row.score) ? Math.round(row.score) : 0,
+        lastLeadAtMs: Number.isFinite(row.last_lead_at) ? row.last_lead_at : null,
+        lastSeenAtMs: Number.isFinite(row.last_seen_at) ? row.last_seen_at : null,
+        updatedAtMs: Number.isFinite(row.updated_at) ? row.updated_at : null,
+      });
+    }
+    return map;
+  }
+
+  private persistSourcePerformanceStats(statsByChannel: Map<string, TelegramSourcePerformanceStats>): void {
+    for (const [channel, stats] of statsByChannel.entries()) {
+      const normalizedChannel = channel.trim();
+      if (!normalizedChannel) continue;
+      this.ctx.storage.sql.exec(
+        `INSERT OR REPLACE INTO telegram_source_performance (
+          channel, total_events, lead_reports, follow_on_reports, corroborated_reports,
+          single_source_reports, score, last_lead_at, last_seen_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        normalizedChannel,
+        stats.totalEvents,
+        stats.leadReports,
+        stats.followOnReports,
+        stats.corroboratedReports,
+        stats.singleSourceReports,
+        stats.score,
+        stats.lastLeadAtMs,
+        stats.lastSeenAtMs,
+        stats.updatedAtMs,
+      );
+    }
+  }
+
   private buildCanonicalSourceRecords(channels: ChannelState[]): CanonicalSourceRecord[] {
     const out: CanonicalSourceRecord[] = [];
     for (const channel of channels) {
@@ -901,6 +996,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
 
     const sourceRecords = this.buildCanonicalSourceRecords(channels);
     const feedback = await this.loadDedupeFeedbackRules();
+    const sourcePerformanceStats = this.loadSourcePerformanceStats();
     const clusters: CanonicalCluster[] = [];
     const clusterByKey = new Map<string, number>();
     const canonicalIndex = new Map<string, number[]>();
@@ -1062,6 +1158,12 @@ export class TelegramScraperDO extends DurableObject<Env> {
           }
         }
         const sortedSources = [...cluster.sources].sort((left, right) => right.datetimeMs - left.datetimeMs);
+        const sourceRepresentatives = [...cluster.sources]
+          .sort((left, right) => left.datetimeMs - right.datetimeMs)
+          .filter((source, index, allSources) =>
+            allSources.findIndex((candidate) => candidate.channel === source.channel) === index,
+          );
+        const firstReporter = sourceRepresentatives[0] ?? cluster.primary;
         const mediaSeen = new Set<string>();
         const mergedMedia = sortedSources
           .flatMap((source) => source.media)
@@ -1075,7 +1177,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
         const visualPrimary =
           sortedSources.find((source) => source.media.length > 0 || (source.imageTextEn || "").trim().length > 0) ??
           cluster.primary;
-        const sourceCount = Math.max(1, cluster.sourceChannels.size);
+        const sourceCount = Math.max(1, sourceRepresentatives.length);
         const trustTier = cluster.trustTiers.has("core")
           ? "core"
           : cluster.trustTiers.has("verified")
@@ -1097,17 +1199,66 @@ export class TelegramScraperDO extends DurableObject<Env> {
           : sourceCount === 2
             ? "corroborated"
             : "single_source";
-        const averageSubscriberValue = Math.round(cluster.subscriberValueScoreSum / sourceCount);
+        const earliestSourceMs =
+          sourceRepresentatives.find((source) => source.datetimeMs > 0)?.datetimeMs ?? cluster.latestMs;
+        const sourceScores = new Map<string, number>();
+        const sourceStatsByChannel = new Map<string, TelegramSourcePerformanceStats>();
+        for (const source of sourceRepresentatives) {
+          const intraClusterDuplicates = Math.max(
+            0,
+            cluster.sources.filter((candidate) => candidate.channel === source.channel).length - 1,
+          );
+          const leadSource =
+            sourceCount > 1 &&
+            Number.isFinite(earliestSourceMs) &&
+            earliestSourceMs > 0 &&
+            source.datetimeMs - earliestSourceMs <= 3 * 60 * 1000;
+          const nextStats = updateTelegramSourcePerformanceStats({
+            previous: sourcePerformanceStats.get(source.channel) ?? null,
+            contribution: {
+              totalEvents: 1,
+              leadReports: leadSource ? 1 : 0,
+              followOnReports: intraClusterDuplicates + (sourceCount > 1 && !leadSource ? 1 : 0),
+              corroboratedReports: sourceCount > 1 ? 1 : 0,
+              singleSourceReports: sourceCount === 1 ? 1 : 0,
+              ...(leadSource ? { lastLeadAtMs: source.datetimeMs > 0 ? source.datetimeMs : nowMs } : {}),
+              lastSeenAtMs: source.datetimeMs > 0 ? source.datetimeMs : nowMs,
+            },
+            baseScore: source.subscriberValueScore,
+            trustTier: source.trustTier,
+            latencyTier: source.latencyTier,
+            nowMs,
+          });
+          sourcePerformanceStats.set(source.channel, nextStats);
+          sourceStatsByChannel.set(source.channel, nextStats);
+          sourceScores.set(source.channel, nextStats.score);
+        }
+        const rankedSourceRepresentatives = [...sourceRepresentatives].sort((left, right) => {
+          const leftScore = sourceScores.get(left.channel) ?? 0;
+          const rightScore = sourceScores.get(right.channel) ?? 0;
+          if (rightScore !== leftScore) return rightScore - leftScore;
+          return left.datetimeMs - right.datetimeMs;
+        });
+        const bestSource = rankedSourceRepresentatives[0] ?? cluster.primary;
+        const averageSubscriberValue = Math.round(
+          rankedSourceRepresentatives.reduce((sum, source) => sum + (sourceScores.get(source.channel) ?? 0), 0) /
+            sourceCount,
+        );
+        const bestSourceScore = sourceScores.get(bestSource.channel) ?? bestSource.subscriberValueScore;
+        const freshnessBoost = freshnessTier === "breaking" ? 10 : freshnessTier === "fresh" ? 4 : 0;
+        const corroborationBoost = Math.min(14, Math.max(0, sourceCount - 1) * 4);
         const rankScore = Math.max(
           0,
-          Math.min(
-            100,
-            averageSubscriberValue +
-              Math.min(12, sourceCount * 3) +
-              (freshnessTier === "breaking" ? 10 : freshnessTier === "fresh" ? 4 : 0) +
-              (trustTier === "core" ? 6 : trustTier === "verified" ? 3 : 0),
-          ),
+          Math.min(100, Math.round(bestSourceScore * 0.72 + averageSubscriberValue * 0.28 + freshnessBoost + corroborationBoost)),
         );
+        const displaySourceLabels = rankedSourceRepresentatives
+          .map((source) => source.label)
+          .filter((value, index, values) => values.indexOf(value) === index)
+          .slice(0, 30);
+        const displaySourceChannels = rankedSourceRepresentatives
+          .map((source) => source.channel)
+          .filter((value, index, values) => values.indexOf(value) === index)
+          .slice(0, 30);
         return {
           event_id: cluster.eventId,
           event_key: cluster.key,
@@ -1117,16 +1268,19 @@ export class TelegramScraperDO extends DurableObject<Env> {
           domain_tags: [...cluster.domainTags].sort((left, right) => left.localeCompare(right)).slice(0, 24),
           trust_tier: trustTier,
           latency_tier: latencyTier,
-          source_type: cluster.primary.sourceType,
-          acquisition_method: cluster.primary.acquisitionMethod,
+          source_type: bestSource.sourceType,
+          acquisition_method: bestSource.acquisitionMethod,
           subscriber_value_score: averageSubscriberValue,
           freshness_tier: freshnessTier,
           verification_state: verificationState,
           rank_score: rankScore,
+          first_reporter_label: firstReporter.label,
+          first_reporter_channel: firstReporter.channel,
+          first_reported_at: firstReporter.datetime || new Date(firstReporter.datetimeMs || cluster.latestMs || Date.now()).toISOString(),
           source_count: sourceCount,
           duplicate_count: Math.max(0, cluster.aliases.size - 1),
-          source_labels: [...cluster.sourceLabels].sort((left, right) => left.localeCompare(right)).slice(0, 30),
-          source_channels: [...cluster.sourceChannels].sort((left, right) => left.localeCompare(right)).slice(0, 30),
+          source_labels: displaySourceLabels,
+          source_channels: displaySourceChannels,
           text_original: cluster.primary.textOriginal,
           text_en: cluster.primary.textEn,
           image_text_en: visualPrimary.imageTextEn,
@@ -1134,7 +1288,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
           media: mergedMedia,
           has_video: mergedMedia.some((item) => item.type === "video"),
           has_photo: mergedMedia.some((item) => item.type === "photo"),
-          sources: sortedSources.slice(0, 60).map((source) => ({
+          sources: rankedSourceRepresentatives.slice(0, 60).map((source) => ({
             signature: source.signature,
             channel: source.channel,
             label: source.label,
@@ -1144,7 +1298,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
             source_type: source.sourceType,
             acquisition_method: source.acquisitionMethod,
             domain_tags: source.domainTags,
-            subscriber_value_score: source.subscriberValueScore,
+            subscriber_value_score: sourceStatsByChannel.get(source.channel)?.score ?? source.subscriberValueScore,
             message_id: source.messageId,
             link: source.link,
             datetime: source.datetime,
@@ -1156,6 +1310,12 @@ export class TelegramScraperDO extends DurableObject<Env> {
     const rawMessages = sourceRecords.length;
     const canonicalMessages = events.length;
     const feedbackOverrides = Array.from(feedback.values()).filter((rule) => rule.split || Boolean(rule.forcedCluster)).length;
+
+    try {
+      this.persistSourcePerformanceStats(sourcePerformanceStats);
+    } catch (error) {
+      console.error("[TelegramScraper] Failed to persist source performance stats:", error);
+    }
 
     return {
       events,

@@ -59,6 +59,9 @@ export interface TelegramDedupeMeta {
   freshnessTier?: "breaking" | "fresh" | "watch";
   verificationState?: "verified" | "corroborated" | "single_source";
   rankScore?: number;
+  firstReporterLabel?: string;
+  firstReporterChannel?: string;
+  firstReportedAt?: string;
   sources?: TelegramCanonicalEventSource[];
 }
 
@@ -77,6 +80,9 @@ export interface TelegramCanonicalEvent {
   freshness_tier?: "breaking" | "fresh" | "watch";
   verification_state?: "verified" | "corroborated" | "single_source";
   rank_score?: number;
+  first_reporter_label?: string;
+  first_reporter_channel?: string;
+  first_reported_at?: string;
   source_count: number;
   duplicate_count: number;
   source_labels: string[];

@@ -9,6 +9,7 @@ import {
   getTelegramChannelName,
   getTelegramDomainTags,
   getTelegramEntryKey,
+  getTelegramFirstReporterLabel,
   getTelegramEntrySourceSignatures,
   getTelegramRankReasons,
   getTelegramSources,
@@ -80,6 +81,7 @@ export default function TelegramMessageCard(props: {
     hasUsefulImageText,
   });
   const sourceLabels = () => getTelegramSourceLabels(props.entry);
+  const firstReporterLabel = () => getTelegramFirstReporterLabel(props.entry);
   const isFocused = () => props.focusKey === getTelegramEntryKey(props.entry);
   const itemId = () => `msg-${toTelegramSafeDomId(getTelegramEntryKey(props.entry))}`;
   const channelName = () => getTelegramChannelName(props.entry);
@@ -158,6 +160,11 @@ export default function TelegramMessageCard(props: {
                 {entryMediaCount(props.entry)} media
               </span>
             </Show>
+            <Show when={firstReporterLabel()}>
+              <span class="inline-flex rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-sky-200">
+                First Reporter {firstReporterLabel()}
+              </span>
+            </Show>
             <For each={rankReasons()}>
               {(reason) => (
                 <span class="inline-flex rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 uppercase tracking-[0.14em] text-zinc-400">
@@ -234,6 +241,16 @@ export default function TelegramMessageCard(props: {
                 <Show when={props.entry.dedupe?.rankScore}>
                   <span class="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-0.5 text-blue-200">
                     Rank {props.entry.dedupe?.rankScore}
+                  </span>
+                </Show>
+                <Show when={props.entry.dedupe?.subscriberValueScore}>
+                  <span class="rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-sky-200">
+                    Signal {props.entry.dedupe?.subscriberValueScore}
+                  </span>
+                </Show>
+                <Show when={firstReporterLabel()}>
+                  <span class="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-2 py-0.5 text-cyan-200">
+                    First Reporter {firstReporterLabel()}
                   </span>
                 </Show>
                 <Show when={props.entry.dedupe?.verificationState}>

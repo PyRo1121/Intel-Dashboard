@@ -3,7 +3,7 @@ import { Title, Meta, Link } from "@solidjs/meta";
 import { TriangleAlert, Radio, Shield, ExternalLink, ArrowUpRight, Activity } from "lucide-solid";
 import StatCard from "~/components/ui/StatCard";
 import SeverityBadge from "~/components/ui/SeverityBadge";
-import { fetchIntelFeed } from "~/lib/intel-feed";
+import { fetchIntelFeed, getVisibleIntelItems } from "~/lib/intel-feed";
 import { readLatestArray } from "~/lib/resource-latest";
 import {
   freshnessBannerTone,
@@ -112,7 +112,7 @@ export default function OverviewPage(props: { canonicalHref: string }) {
             }
           >
             <div class="space-y-2">
-              <For each={intelItems().slice(0, 20)}>
+              <For each={getVisibleIntelItems(intelItems())}>
                 {(item, idx) => (
                   <a
                     href={item.url || "#"}

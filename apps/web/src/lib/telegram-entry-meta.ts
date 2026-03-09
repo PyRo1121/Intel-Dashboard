@@ -19,6 +19,9 @@ export type TelegramEntryLike = {
     sourceLabels?: string[];
     sourceSignatures?: string[];
     subscriberValueScore?: number;
+    signalScore?: number;
+    signalGrade?: "A" | "B" | "C" | "D";
+    signalReasons?: string[];
     freshnessTier?: "breaking" | "fresh" | "watch";
     firstReporterLabel?: string;
     firstReporterChannel?: string;
@@ -147,6 +150,9 @@ export function getTelegramRankReasons(args: {
   hasUsefulImageText: (value: string | undefined) => boolean;
 }): string[] {
   const { entry, hasUsefulImageText } = args;
+  if (Array.isArray(entry.dedupe?.signalReasons) && entry.dedupe.signalReasons.length > 0) {
+    return entry.dedupe.signalReasons.slice(0, 4);
+  }
   const reasons: string[] = [];
   if (entry.dedupe?.freshnessTier === "breaking") reasons.push("breaking");
   else if (entry.dedupe?.freshnessTier === "fresh") reasons.push("fresh");
@@ -164,6 +170,11 @@ export function getTelegramRankReasons(args: {
     reasons.push("strategic");
   }
   return reasons.slice(0, 4);
+}
+
+export function getTelegramSignalGrade(entry: TelegramEntryLike): string | null {
+  const grade = entry.dedupe?.signalGrade;
+  return typeof grade === "string" && grade.trim().length > 0 ? grade : null;
 }
 
 export function doesTelegramGroupMatchEntry<TEntry extends TelegramEntryLike>(

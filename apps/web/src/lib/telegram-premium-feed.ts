@@ -7,6 +7,9 @@ type TelegramPremiumEntryLike = {
   dedupe?: {
     rankScore?: number;
     subscriberValueScore?: number;
+    signalScore?: number;
+    signalGrade?: "A" | "B" | "C" | "D";
+    signalReasons?: string[];
     verificationState?: "verified" | "corroborated" | "single_source";
     freshnessTier?: "breaking" | "fresh" | "watch";
     sourceCount?: number;
@@ -30,6 +33,10 @@ function verificationWeight(value: TelegramVerificationTier): number {
 }
 
 export function compareTelegramPremiumEntries<TEntry extends TelegramPremiumEntryLike>(left: TEntry, right: TEntry): number {
+  const leftSignal = left.dedupe?.signalScore ?? 0;
+  const rightSignal = right.dedupe?.signalScore ?? 0;
+  if (rightSignal !== leftSignal) return rightSignal - leftSignal;
+
   const leftRank = left.dedupe?.rankScore ?? left.dedupe?.subscriberValueScore ?? 0;
   const rightRank = right.dedupe?.rankScore ?? right.dedupe?.subscriberValueScore ?? 0;
   if (rightRank !== leftRank) return rightRank - leftRank;
@@ -51,11 +58,13 @@ export function compareTelegramPremiumEntries<TEntry extends TelegramPremiumEntr
 
 export function shouldHideTelegramPremiumNoise<TEntry extends TelegramPremiumEntryLike>(entry: TEntry): boolean {
   const hasRankSignal =
-    typeof entry.dedupe?.rankScore === "number" || typeof entry.dedupe?.subscriberValueScore === "number";
+    typeof entry.dedupe?.rankScore === "number" ||
+    typeof entry.dedupe?.subscriberValueScore === "number" ||
+    typeof entry.dedupe?.signalScore === "number";
   if (!hasRankSignal) {
     return false;
   }
-  const rank = entry.dedupe?.rankScore ?? entry.dedupe?.subscriberValueScore ?? 0;
+  const rank = entry.dedupe?.signalScore ?? entry.dedupe?.rankScore ?? entry.dedupe?.subscriberValueScore ?? 0;
   const sourceCount = entry.dedupe?.sourceCount ?? 1;
   const duplicateCount = entry.dedupe?.duplicateCount ?? 0;
   const verificationState = entry.dedupe?.verificationState ?? "single_source";
@@ -68,6 +77,18 @@ export function shouldHideTelegramPremiumNoise<TEntry extends TelegramPremiumEnt
     verificationState === "single_source" &&
     freshnessTier !== "breaking"
   );
+}
+
+export function isHighSignalTelegramEntry<TEntry extends TelegramPremiumEntryLike>(entry: TEntry): boolean {
+  const score = entry.dedupe?.signalScore;
+  if (typeof score === "number") {
+    return score >= 70;
+  }
+  return entry.dedupe?.signalGrade === "A" || entry.dedupe?.signalGrade === "B";
+}
+
+export function isFirstReportTelegramEntry<TEntry extends TelegramPremiumEntryLike>(entry: TEntry): boolean {
+  return Array.isArray(entry.dedupe?.signalReasons) && entry.dedupe.signalReasons.includes("first");
 }
 
 export function applyTelegramPremiumFeed<TEntry extends TelegramPremiumEntryLike>(args: {

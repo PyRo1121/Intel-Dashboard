@@ -9,6 +9,7 @@ import {
   getTelegramMessageFallbackKey,
   getTelegramFirstReporterLabel,
   getTelegramEntrySourceSignatures,
+  getTelegramSignalGrade,
   getTelegramRankReasons,
   getTelegramSources,
   getTelegramSourceLabels,
@@ -34,6 +35,9 @@ const entry = {
     sourceSignatures: [" sig-1 ", "", "sig-2"],
     sourceLabels: ["Alpha", "Beta"],
     subscriberValueScore: 88,
+    signalScore: 91,
+    signalGrade: "A" as const,
+    signalReasons: ["first", "multi-source", "core source"],
     freshnessTier: "breaking" as const,
     firstReporterLabel: "Alpha",
     firstReporterChannel: "alpha_channel",
@@ -54,6 +58,7 @@ test("telegram entry meta helpers normalize keys, signatures, and safe ids", () 
   assert.equal(getTelegramFirstReporterLabel(entry), "Alpha");
   assert.deepEqual(getTelegramDomainTags(entry), ["strategic"]);
   assert.deepEqual(getTelegramSources(entry), [{ label: "Channel" }, { label: "Mirror" }]);
+  assert.equal(getTelegramSignalGrade(entry), "A");
   assert.equal(toTelegramSafeDomId("msg:focus/1?"), "msg_focus_1_");
 });
 
@@ -66,7 +71,7 @@ test("telegram entry meta helpers derive avatar color and rank reasons", () => {
       entry,
       hasUsefulImageText: () => false,
     }),
-    ["breaking", "2 sources", "strategic"],
+    ["first", "multi-source", "core source"],
   );
 });
 

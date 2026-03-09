@@ -413,6 +413,32 @@ export async function assertRouteMetadata(page, expectation, options = {}) {
   }
 }
 
+export async function openAndAssertRouteMetadata(page, expectation, options = {}) {
+  const {
+    waitUntil = "domcontentloaded",
+    timeout = 30_000,
+    titleWaitMs = 750,
+    expectedStatus,
+    maxStatusExclusive,
+  } = options;
+
+  const response = await openPage(page, expectation.path, {
+    waitUntil,
+    timeout,
+  });
+
+  assert.ok(response, `${expectation.path} should return a response`);
+  if (typeof expectedStatus === "number") {
+    assert.equal(response.status(), expectedStatus, `${expectation.path} should return ${expectedStatus}`);
+  }
+  if (typeof maxStatusExclusive === "number") {
+    assert.ok(response.status() < maxStatusExclusive, `${expectation.path} should not return an error >= ${maxStatusExclusive}`);
+  }
+
+  await assertRouteMetadata(page, expectation, { titleWaitMs });
+  return response;
+}
+
 export async function waitForCrmDashboard(page) {
   await page.getByTestId("crm-customer-360").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("crm-summary-grid").waitFor({ state: "visible", timeout: 30_000 });

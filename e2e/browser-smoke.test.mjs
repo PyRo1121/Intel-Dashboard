@@ -8,7 +8,7 @@ import {
   assertPublicLandingSurface,
   assertSidebarRouteNavigation,
   openAndAssertPublicAuthRoute,
-  assertRouteMetadata,
+  openAndAssertRouteMetadata,
   openAndAssertPublicAuthEntry,
   createAirSeaFixture,
   createBriefingsFixture,
@@ -1261,13 +1261,12 @@ test("browser route metadata stays aligned with production titles and canonical 
         : authRuntime;
       const page = await runtime.context.newPage();
       try {
-        const response = await openPage(page, expectation.path, {
+        await openAndAssertRouteMetadata(page, expectation, {
           waitUntil: "domcontentloaded",
           timeout: 30_000,
+          titleWaitMs: 750,
+          maxStatusExclusive: 500,
         });
-        assert.ok(response, `${expectation.path} should return a response`);
-        assert.ok(response.status() < 500, `${expectation.path} should not return a server error`);
-        await assertRouteMetadata(page, expectation, { titleWaitMs: 750 });
       } catch (error) {
         await captureBrowserArtifacts(page, `route-metadata-${expectation.path}`, error);
         throw error;

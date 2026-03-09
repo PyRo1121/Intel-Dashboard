@@ -4,7 +4,7 @@ import { BROWSER_METADATA_EXPECTATIONS } from "./coverage-manifest.mjs";
 import {
   assertNoBrowserDiagnostics,
   assertNotFoundPage,
-  assertRouteMetadata,
+  openAndAssertRouteMetadata,
   assertResponseStatus,
   openAndAssertPublicAuthEntry,
   captureBrowserArtifacts,
@@ -38,9 +38,10 @@ test("public auth entry pages render the current Intel Dashboard access contract
     for (const expectation of publicAuthMetadata) {
       const page = await context.newPage();
       try {
-        const response = await openPublicPage(page, expectation.path);
-        assertResponseStatus(response, 200);
-        await assertRouteMetadata(page, expectation, { titleWaitMs: 500 });
+        await openAndAssertRouteMetadata(page, expectation, {
+          expectedStatus: 200,
+          titleWaitMs: 500,
+        });
       } catch (error) {
         await captureBrowserArtifacts(page, `public-auth-meta-${expectation.path}`, error);
         throw error;

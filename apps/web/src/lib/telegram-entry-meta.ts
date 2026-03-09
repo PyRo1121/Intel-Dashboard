@@ -26,6 +26,7 @@ export type TelegramEntryLike = {
 export type TelegramFilterGroupLike<TEntry extends TelegramEntryLike = TelegramEntryLike> = {
   id: string;
   categories?: string[];
+  categorySet?: Set<string>;
   predicate?: (entry: TEntry) => boolean;
 };
 
@@ -110,8 +111,8 @@ export function doesTelegramGroupMatchEntry<TEntry extends TelegramEntryLike>(
 ): boolean {
   if (group.id === "all") return true;
   if (group.predicate?.(entry)) return true;
-  const categorySet = new Set(group.categories ?? []);
-  if (categorySet.size === 0) return false;
+  const categorySet = group.categorySet ?? (group.categories ? new Set(group.categories) : undefined);
+  if (!categorySet || categorySet.size === 0) return false;
   if (categorySet.has(entry.category)) return true;
   return entry.dedupe?.categorySet?.some((category) => categorySet.has(category)) ?? false;
 }

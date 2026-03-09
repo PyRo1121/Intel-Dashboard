@@ -1,11 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  getCrmArrActiveUsd,
+  getCrmCancellations7d,
+  getCrmCustomer360SummaryText,
+  getCrmDataQualityRows,
+  getCrmGeneratedAtMs,
   getCrmQualityBadgeTone,
+  getCrmRevenueCommandCenterRows,
   getCrmRevenueSourceLabel,
+  getCrmSummaryGridRows,
+  getCrmMrrActiveUsd,
+  getCrmSubscriberCount,
+  getCrmStripeSyncedAtMs,
   getCrmSummaryStatusLabel,
+  getCrmSummaryStatusTone,
   getCrmSummaryWarningMessage,
   getCrmSummaryWarningTone,
+  getCrmUniqueUsers24h,
 } from "./crm-summary.ts";
 
 test("CRM summary warning prefers partial state over stale state", () => {
@@ -51,6 +63,9 @@ test("CRM summary short status labels stay aligned with degraded state", () => {
   assert.equal(getCrmSummaryStatusLabel({ partial: true, stale: true }), "partial snapshot");
   assert.equal(getCrmSummaryStatusLabel({ partial: false, stale: true }), "stale cache");
   assert.equal(getCrmSummaryStatusLabel({ partial: false, stale: false }), null);
+  assert.equal(getCrmSummaryStatusTone({ partial: true, stale: true }), "text-rose-300");
+  assert.equal(getCrmSummaryStatusTone({ partial: false, stale: true }), "text-amber-300");
+  assert.equal(getCrmSummaryStatusTone({ partial: false, stale: false }), null);
 });
 
 test("CRM data quality badge tone reflects whether tracked issues are present", () => {
@@ -65,5 +80,143 @@ test("CRM data quality badge tone reflects whether tracked issues are present", 
   assert.equal(
     getCrmQualityBadgeTone(undefined),
     "text-emerald-300 border-emerald-500/40 bg-emerald-500/10",
+  );
+});
+
+test("CRM summary selectors prefer command-center or Stripe-backed values when available", () => {
+  const result = {
+    billing: {
+      mrrActiveUsd: 100,
+      arrActiveUsd: 1200,
+      statuses: { active: 4 },
+      stripe: { statuses: { active: 5 } },
+    },
+    telemetry: { uniqueUsers24h: 20, cancellations7d: 2 },
+    commandCenter: {
+      revenue: { mrrActiveUsd: 110, arrActiveUsd: 1320 },
+      risk: { cancellations7d: 3 },
+      activity: { uniqueUsers24h: 25 },
+    },
+  };
+
+  assert.equal(getCrmSubscriberCount(result), 5);
+  assert.equal(getCrmMrrActiveUsd(result), 110);
+  assert.equal(getCrmArrActiveUsd(result), 1320);
+  assert.equal(getCrmUniqueUsers24h(result), 25);
+  assert.equal(getCrmCancellations7d(result), 3);
+
+  assert.equal(getCrmSubscriberCount({ billing: { statuses: { active: 4 } } }), 4);
+  assert.equal(getCrmMrrActiveUsd({ billing: { mrrActiveUsd: 100 } }), 100);
+  assert.equal(getCrmArrActiveUsd({ billing: { arrActiveUsd: 1200 } }), 1200);
+  assert.equal(getCrmUniqueUsers24h({ telemetry: { uniqueUsers24h: 20 } }), 20);
+  assert.equal(getCrmCancellations7d({ telemetry: { cancellations7d: 2 } }), 2);
+  assert.equal(getCrmStripeSyncedAtMs({ billing: { stripe: { syncedAtMs: 123 } } }), 123);
+  assert.equal(getCrmStripeSyncedAtMs(undefined), undefined);
+  assert.equal(getCrmGeneratedAtMs({ generatedAtMs: 456 }), 456);
+  assert.equal(getCrmGeneratedAtMs(undefined), undefined);
+});
+
+test("CRM customer 360 summary text formats generated time and user counters", () => {
+  assert.equal(
+    getCrmCustomer360SummaryText({
+      generatedAtMs: Date.UTC(2026, 2, 9, 12, 0, 0),
+      directory: {
+        newUsers24h: 4,
+        newUsers7d: 12,
+        orphanTrackedUsers: 3,
+      },
+    }),
+    `Updated ${new Date(Date.UTC(2026, 2, 9, 12, 0, 0)).toLocaleString()} • New users 24h: 4 • New users 7d: 12 • Legacy billing-only identities: 3`,
+  );
+});
+
+test("CRM data quality rows expose stable labels and formatted values", () => {
+  assert.deepEqual(
+    getCrmDataQualityRows({
+      missingAvatarUsers: 2,
+      placeholderNameUsers: 3,
+      syntheticLoginUsers: 4,
+      providerCoveragePct: 88.4,
+      billingCoveragePct: 91.2,
+    }),
+    [
+      { label: "Missing avatars", value: "2" },
+      { label: "Placeholder names", value: "3" },
+      { label: "Synthetic logins", value: "4" },
+      { label: "Provider coverage", value: "88.4%" },
+      { label: "Billing identity coverage", value: "91.2%" },
+    ],
+  );
+});
+
+test("CRM revenue command-center rows expose stable labels and formatted values", () => {
+  assert.deepEqual(
+    getCrmRevenueCommandCenterRows({
+      billing: {
+        arrActiveUsd: 1200,
+      },
+      telemetry: {
+        cancellations7d: 2,
+      },
+      commandCenter: {
+        revenue: {
+          arrActiveUsd: 1320,
+          arpuActiveUsd: 55,
+        },
+        funnel: {
+          subscriberPenetrationPct: 42.5,
+          trialingSharePct: 11.2,
+        },
+        risk: {
+          netSubscriberDelta7d: 7,
+          cancellations7d: 3,
+        },
+      },
+    }),
+    [
+      { label: "ARR", value: "$1,320" },
+      { label: "ARPU Active", value: "$55" },
+      { label: "Subscriber Penetration", value: "42.5%" },
+      { label: "Trialing Share", value: "11.2%" },
+      { label: "Net Subscriber Delta 7d", value: "7" },
+      { label: "Cancellations 7d", value: "3" },
+    ],
+  );
+});
+
+test("CRM summary grid rows expose stable labels, values, and value tones", () => {
+  assert.deepEqual(
+    getCrmSummaryGridRows({
+      billing: {
+        mrrActiveUsd: 100,
+        statuses: { active: 4 },
+        stripe: { statuses: { active: 5 } },
+      },
+      telemetry: {
+        uniqueUsers24h: 20,
+      },
+      commandCenter: {
+        revenue: {
+          mrrActiveUsd: 110,
+        },
+        funnel: {
+          trialToPaidRate7dPct: 42.5,
+        },
+        risk: {
+          churnRate30dPct: 3.2,
+        },
+      },
+      directory: {
+        totalUsers: 99,
+      },
+    }),
+    [
+      { testId: "crm-summary-total-users", label: "Total Users", value: "99" },
+      { testId: "crm-summary-subscribers", label: "Subscribers", value: "5" },
+      { testId: "crm-summary-mrr", label: "MRR", value: "$110" },
+      { testId: "crm-summary-trial-paid-7d", label: "Trial→Paid 7d", value: "42.5%", valueTone: "text-emerald-300" },
+      { testId: "crm-summary-churn-30d", label: "Churn 30d", value: "3.2%", valueTone: "text-rose-300" },
+      { testId: "crm-summary-unique-users-24h", label: "Unique Users 24h", value: "20" },
+    ],
   );
 });

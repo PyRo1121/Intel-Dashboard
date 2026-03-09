@@ -1,10 +1,23 @@
 import { Meta, Title } from "@solidjs/meta";
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
-import { computeAiCacheHitRatePercent, getAiTelemetryMaxValue, getAiTelemetryTopEntryBy, readAiTelemetryItems } from "~/lib/ai-telemetry";
+import {
+  computeAiCacheHitRatePercent,
+  getAiTelemetryAvgDurationMs,
+  getAiTelemetryCalls,
+  getAiTelemetryCompletionTokens,
+  getAiTelemetryLabel,
+  getAiTelemetryMaxValue,
+  getAiTelemetryOutputInputPercent,
+  getAiTelemetryP95DurationMs,
+  getAiTelemetryPromptTokens,
+  getAiTelemetrySummaryRows,
+  getAiTelemetryTopEntryBy,
+  readAiTelemetryItems,
+} from "~/lib/ai-telemetry";
 import { useAuth } from "~/lib/auth";
 import { isAuthUserOwner } from "~/lib/auth-user";
 import { fetchCrmAiTelemetry, fetchCrmOverview, postCrmAction, readCrmItems } from "~/lib/crm-client";
-import { buildCrmAccountStatusMap, filterCrmDirectoryUsers, findCrmDirectoryUserById, formatCrmProviders } from "~/lib/crm-directory";
+import { buildCrmAccountStatusMap, filterCrmDirectoryUsers, findCrmDirectoryUserById, formatCrmAccountStatus, formatCrmProviders, getCrmUserDisplayName, getCrmUserSecondaryLabel } from "~/lib/crm-directory";
 import { buildCrmLatestEventMap, escapeCsvCell, getCrmLatestEventDisplay } from "~/lib/crm-export";
 import {
   getCrmCustomerAccountStatusLabel,
@@ -18,11 +31,23 @@ import {
 import { formatEventLabel } from "~/lib/event-label";
 import { formatSubscriptionStatus } from "@intel-dashboard/shared/entitlement.ts";
 import {
+  getCrmArrActiveUsd,
+  getCrmCancellations7d,
+  getCrmCustomer360SummaryText,
+  getCrmDataQualityRows,
+  getCrmGeneratedAtMs,
   getCrmQualityBadgeTone,
+  getCrmRevenueCommandCenterRows,
+  getCrmMrrActiveUsd,
   getCrmRevenueSourceLabel,
+  getCrmSubscriberCount,
+  getCrmStripeSyncedAtMs,
+  getCrmSummaryGridRows,
   getCrmSummaryStatusLabel,
+  getCrmSummaryStatusTone,
   getCrmSummaryWarningMessage,
   getCrmSummaryWarningTone,
+  getCrmUniqueUsers24h,
 } from "~/lib/crm-summary";
 import {
   formatDateTime as formatTime,
@@ -298,11 +323,24 @@ export default function CrmRoute() {
   const [refundAmountUsd, setRefundAmountUsd] = createSignal("");
   const [refundReason, setRefundReason] = createSignal<"requested_by_customer" | "duplicate" | "fraudulent">("requested_by_customer");
 
-  const accountStatusMap = createMemo(() => buildCrmAccountStatusMap(crm()?.result?.billing?.accounts));
+  const crmResult = createMemo(() => crm()?.result);
+  const aiResult = createMemo(() => aiTelemetry()?.result);
+  const crmDirectory = createMemo(() => crmResult()?.directory);
+  const crmBilling = createMemo(() => crmResult()?.billing);
+  const crmBillingStripe = createMemo(() => crmBilling()?.stripe);
+  const crmTelemetry = createMemo(() => crmResult()?.telemetry);
+  const crmCommandCenter = createMemo(() => crmResult()?.commandCenter);
+  const crmDataQuality = createMemo(() => crmResult()?.dataQuality);
+  const accountStatusMap = createMemo(() => buildCrmAccountStatusMap(crmResult()?.billing?.accounts));
+  const selectedCustomerResult = createMemo(() => selectedCustomerOps()?.result);
+  const selectedCustomerCache = createMemo(() => selectedCustomerResult()?.cache);
+  const selectedCustomerCharges = createMemo(() => readCrmCustomerCharges(selectedCustomerResult()));
 
   const selectedUser = createMemo(() => {
-    return findCrmDirectoryUserById(crm()?.result?.directory?.users, selectedUserId());
+    return findCrmDirectoryUserById(crmResult()?.directory?.users, selectedUserId());
   });
+  const selectedUserDisplayName = createMemo(() => getCrmUserDisplayName(selectedUser()));
+  const selectedUserSecondaryLabel = createMemo(() => getCrmUserSecondaryLabel(selectedUser()));
 
   const loadCustomerOps = async (targetUserId: string, refresh = false) => {
     if (!targetUserId) return;
@@ -380,10 +418,10 @@ export default function CrmRoute() {
     setOpsBusy(false);
   };
 
-  const latestEventMap = createMemo(() => buildCrmLatestEventMap(crm()?.result?.latestEvents));
+  const latestEventMap = createMemo(() => buildCrmLatestEventMap(crmResult()?.latestEvents));
 
   const filteredUsers = createMemo(() => {
-    return filterCrmDirectoryUsers(crm()?.result?.directory?.users, {
+    return filterCrmDirectoryUsers(crmDirectory()?.users, {
       query: searchTerm(),
       status: statusFilter(),
       accounts: accountStatusMap(),
@@ -418,7 +456,7 @@ export default function CrmRoute() {
         entry.login,
         entry.email,
         formatCrmProviders(entry.providers, "|", ""),
-        formatSubscriptionStatus(billing?.status),
+        formatCrmAccountStatus(billing?.status),
         String(billing?.monthlyPriceUsd ?? 0),
         latestEventDisplay.kindLabel,
         latestEventDisplay.atLabel,
@@ -437,15 +475,15 @@ export default function CrmRoute() {
     URL.revokeObjectURL(url);
   };
 
-  const qualityBadgeTone = () => getCrmQualityBadgeTone(crm()?.result?.dataQuality);
+  const qualityBadgeTone = () => getCrmQualityBadgeTone(crmDataQuality());
 
-  const aiLaneMaxTokens = createMemo(() => getAiTelemetryMaxValue(aiTelemetry()?.result?.lanes, (entry) => entry.totalTokens, 1));
-  const aiSeriesMaxCalls = createMemo(() => getAiTelemetryMaxValue(aiTelemetry()?.result?.series, (entry) => entry.calls, 1));
-  const aiCacheHitPct = createMemo(() => computeAiCacheHitRatePercent(aiTelemetry()?.result?.summary));
-  const aiWorstFailureLane = createMemo(() => getAiTelemetryTopEntryBy(aiTelemetry()?.result?.lanes, (entry) => entry.failures));
-  const aiSlowestLane = createMemo(() => getAiTelemetryTopEntryBy(aiTelemetry()?.result?.lanes, (entry) => entry.p95DurationMs));
-  const aiHungriestLane = createMemo(() => getAiTelemetryTopEntryBy(aiTelemetry()?.result?.lanes, (entry) => entry.outputInputRatio));
-  const crmDegraded = createMemo(() => crm()?.result?.degraded);
+  const aiLaneMaxTokens = createMemo(() => getAiTelemetryMaxValue(aiResult()?.lanes, (entry) => entry.totalTokens, 1));
+  const aiSeriesMaxCalls = createMemo(() => getAiTelemetryMaxValue(aiResult()?.series, (entry) => entry.calls, 1));
+  const aiCacheHitPct = createMemo(() => computeAiCacheHitRatePercent(aiResult()?.summary));
+  const aiWorstFailureLane = createMemo(() => getAiTelemetryTopEntryBy(aiResult()?.lanes, (entry) => entry.failures));
+  const aiSlowestLane = createMemo(() => getAiTelemetryTopEntryBy(aiResult()?.lanes, (entry) => entry.p95DurationMs));
+  const aiHungriestLane = createMemo(() => getAiTelemetryTopEntryBy(aiResult()?.lanes, (entry) => entry.outputInputRatio));
+  const crmDegraded = createMemo(() => crmResult()?.degraded);
   const crmDegradedTone = createMemo(() => getCrmSummaryWarningTone(crmDegraded()));
   const crmDegradedMessage = createMemo(() => getCrmSummaryWarningMessage(crmDegraded()));
 
@@ -502,47 +540,32 @@ export default function CrmRoute() {
                 )}
               </Show>
               <section class="grid gap-3 md:grid-cols-2 xl:grid-cols-6" data-testid="crm-summary-grid">
-                <article class="intel-panel px-4 py-3" data-testid="crm-summary-total-users">
-                  <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Total Users</p>
-                  <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(crm()?.result?.directory?.totalUsers)}</p>
-                </article>
-                <article class="intel-panel px-4 py-3" data-testid="crm-summary-subscribers">
-                  <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Subscribers</p>
-                  <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(crm()?.result?.billing?.stripe?.statuses?.active ?? crm()?.result?.billing?.statuses?.active)}</p>
-                </article>
-                <article class="intel-panel px-4 py-3" data-testid="crm-summary-mrr">
-                  <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">MRR</p>
-                  <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatUsd(crm()?.result?.commandCenter?.revenue?.mrrActiveUsd ?? crm()?.result?.billing?.mrrActiveUsd)}</p>
-                </article>
-                <article class="intel-panel px-4 py-3" data-testid="crm-summary-trial-paid-7d">
-                  <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Trial→Paid 7d</p>
-                  <p class="mt-1 text-2xl font-semibold text-emerald-300">{formatPercent(crm()?.result?.commandCenter?.funnel?.trialToPaidRate7dPct)}</p>
-                </article>
-                <article class="intel-panel px-4 py-3" data-testid="crm-summary-churn-30d">
-                  <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Churn 30d</p>
-                  <p class="mt-1 text-2xl font-semibold text-rose-300">{formatPercent(crm()?.result?.commandCenter?.risk?.churnRate30dPct)}</p>
-                </article>
-                <article class="intel-panel px-4 py-3" data-testid="crm-summary-unique-users-24h">
-                  <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Unique Users 24h</p>
-                  <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(crm()?.result?.commandCenter?.activity?.uniqueUsers24h ?? crm()?.result?.telemetry?.uniqueUsers24h)}</p>
-                </article>
+                <For each={getCrmSummaryGridRows(crmResult())}>
+                  {(item) => (
+                    <article class="intel-panel px-4 py-3" data-testid={item.testId}>
+                      <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">{item.label}</p>
+                      <p class={`mt-1 text-2xl font-semibold ${item.valueTone ?? "text-zinc-100"}`}>{item.value}</p>
+                    </article>
+                  )}
+                </For>
               </section>
 
               <section class="mt-2 flex flex-wrap items-center gap-3 text-xs text-zinc-400">
                 <span>
-                  Revenue source: <span class="font-semibold text-zinc-200">{getCrmRevenueSourceLabel(crm()?.result?.commandCenter?.revenue?.source)}</span>
+                  Revenue source: <span class="font-semibold text-zinc-200">{getCrmRevenueSourceLabel(crmCommandCenter()?.revenue?.source)}</span>
                 </span>
-                <Show when={crmDegraded()?.partial}>
-                  <span class="text-rose-300">Summary status: {getCrmSummaryStatusLabel(crmDegraded())}</span>
+                <Show when={getCrmSummaryStatusLabel(crmDegraded())}>
+                  {(label) => (
+                    <span class={getCrmSummaryStatusTone(crmDegraded()) ?? undefined}>
+                      Summary status: {label()}
+                    </span>
+                  )}
                 </Show>
-                <Show when={!crmDegraded()?.partial && crmDegraded()?.stale}>
-                  <span class="text-amber-300">Summary status: {getCrmSummaryStatusLabel(crmDegraded())}</span>
+                <Show when={getCrmStripeSyncedAtMs(crmResult())}>
+                  <span>Stripe synced: <span class="font-semibold text-zinc-200">{formatTime(getCrmStripeSyncedAtMs(crmResult()))}</span></span>
                 </Show>
-                <Show when={crm()?.result?.billing?.stripe?.syncedAtMs}>
-                  <span>Stripe synced: <span class="font-semibold text-zinc-200">{formatTime(crm()?.result?.billing?.stripe?.syncedAtMs)}</span></span>
-                </Show>
-                <Show when={crm()?.result?.billing?.stripe?.live === false && crm()?.result?.billing?.stripe?.error}>
-                  <span class="text-amber-300">Stripe sync warning: {crm()?.result?.billing?.stripe?.error}</span>
+                <Show when={crmBillingStripe()?.live === false && crmBillingStripe()?.error}>
+                  <span class="text-amber-300">Stripe sync warning: {crmBillingStripe()?.error}</span>
                 </Show>
               </section>
 
@@ -550,56 +573,28 @@ export default function CrmRoute() {
                 <article class="intel-panel p-4">
                   <h2 class="text-base font-semibold text-zinc-100">Revenue Command Center</h2>
                   <div class="mt-3 grid gap-3 md:grid-cols-2">
-                    <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-                      <p class="text-[11px] text-zinc-500">ARR</p>
-                      <p class="text-lg font-semibold text-zinc-100">{formatUsd(crm()?.result?.commandCenter?.revenue?.arrActiveUsd ?? crm()?.result?.billing?.arrActiveUsd)}</p>
-                    </div>
-                    <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-                      <p class="text-[11px] text-zinc-500">ARPU Active</p>
-                      <p class="text-lg font-semibold text-zinc-100">{formatUsd(crm()?.result?.commandCenter?.revenue?.arpuActiveUsd)}</p>
-                    </div>
-                    <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-                      <p class="text-[11px] text-zinc-500">Subscriber Penetration</p>
-                      <p class="text-lg font-semibold text-zinc-100">{formatPercent(crm()?.result?.commandCenter?.funnel?.subscriberPenetrationPct)}</p>
-                    </div>
-                    <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-                      <p class="text-[11px] text-zinc-500">Trialing Share</p>
-                      <p class="text-lg font-semibold text-zinc-100">{formatPercent(crm()?.result?.commandCenter?.funnel?.trialingSharePct)}</p>
-                    </div>
-                    <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-                      <p class="text-[11px] text-zinc-500">Net Subscriber Delta 7d</p>
-                      <p class="text-lg font-semibold text-zinc-100">{formatNumber(crm()?.result?.commandCenter?.risk?.netSubscriberDelta7d)}</p>
-                    </div>
-                    <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-                      <p class="text-[11px] text-zinc-500">Cancellations 7d</p>
-                      <p class="text-lg font-semibold text-zinc-100">{formatNumber(crm()?.result?.commandCenter?.risk?.cancellations7d ?? crm()?.result?.telemetry?.cancellations7d)}</p>
-                    </div>
+                    <For each={getCrmRevenueCommandCenterRows(crmResult())}>
+                      {(item) => (
+                        <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
+                          <p class="text-[11px] text-zinc-500">{item.label}</p>
+                          <p class="text-lg font-semibold text-zinc-100">{item.value}</p>
+                        </div>
+                      )}
+                    </For>
                   </div>
                 </article>
 
                 <article class="intel-panel p-4">
                   <h2 class="text-base font-semibold text-zinc-100">Data Quality Console</h2>
                   <div class="mt-3 space-y-2 text-sm">
-                    <div class="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
-                      <span class="text-zinc-400">Missing avatars</span>
-                      <span class="font-semibold text-zinc-100">{formatNumber(crm()?.result?.dataQuality?.missingAvatarUsers)}</span>
-                    </div>
-                    <div class="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
-                      <span class="text-zinc-400">Placeholder names</span>
-                      <span class="font-semibold text-zinc-100">{formatNumber(crm()?.result?.dataQuality?.placeholderNameUsers)}</span>
-                    </div>
-                    <div class="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
-                      <span class="text-zinc-400">Synthetic logins</span>
-                      <span class="font-semibold text-zinc-100">{formatNumber(crm()?.result?.dataQuality?.syntheticLoginUsers)}</span>
-                    </div>
-                    <div class="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
-                      <span class="text-zinc-400">Provider coverage</span>
-                      <span class="font-semibold text-zinc-100">{formatPercent(crm()?.result?.dataQuality?.providerCoveragePct)}</span>
-                    </div>
-                    <div class="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
-                      <span class="text-zinc-400">Billing identity coverage</span>
-                      <span class="font-semibold text-zinc-100">{formatPercent(crm()?.result?.dataQuality?.billingCoveragePct)}</span>
-                    </div>
+                    <For each={getCrmDataQualityRows(crmDataQuality())}>
+                      {(item) => (
+                        <div class="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+                          <span class="text-zinc-400">{item.label}</span>
+                          <span class="font-semibold text-zinc-100">{item.value}</span>
+                        </div>
+                      )}
+                    </For>
                   </div>
                 </article>
               </section>
@@ -651,54 +646,34 @@ export default function CrmRoute() {
                     </div>
                   }>
                     <section class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6" data-testid="crm-ai-surface-configured">
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
-                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Calls</p>
-                        <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiTelemetry()?.result?.summary?.calls)}</p>
-                      </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
-                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Prompt Tokens</p>
-                        <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiTelemetry()?.result?.summary?.promptTokens)}</p>
-                      </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
-                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Completion Tokens</p>
-                        <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiTelemetry()?.result?.summary?.completionTokens)}</p>
-                      </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
-                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Output/Input</p>
-                        <p class="mt-1 text-2xl font-semibold text-cyan-300">{formatPercent((aiTelemetry()?.result?.summary?.outputInputRatio ?? 0) * 100)}</p>
-                      </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
-                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Avg Latency</p>
-                        <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiTelemetry()?.result?.summary?.avgDurationMs)}ms</p>
-                      </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
-                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">P95 Latency</p>
-                        <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiTelemetry()?.result?.summary?.p95DurationMs)}ms</p>
-                      </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
-                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Cache Hit Rate</p>
-                        <p class="mt-1 text-2xl font-semibold text-emerald-300">{formatPercent(aiCacheHitPct())}</p>
-                      </article>
+                      <For each={getAiTelemetrySummaryRows(aiResult()?.summary, aiCacheHitPct())}>
+                        {(item) => (
+                          <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                            <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">{item.label}</p>
+                            <p class={`mt-1 text-2xl font-semibold ${item.valueTone ?? "text-zinc-100"}`}>{item.value}</p>
+                          </article>
+                        )}
+                      </For>
                     </section>
 
                     <section class="mt-4 grid gap-3 xl:grid-cols-3">
                       <article class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Failure Hotspot</p>
-                        <p class="mt-1 text-sm font-semibold text-zinc-100">{formatEventLabel(aiWorstFailureLane()?.label)}</p>
+                        <p class="mt-1 text-sm font-semibold text-zinc-100">{getAiTelemetryLabel(aiWorstFailureLane()?.label)}</p>
                         <p class="mt-2 text-xs text-zinc-400">
                           {formatNumber(aiWorstFailureLane()?.failures)} failures across {formatNumber(aiWorstFailureLane()?.calls)} calls
                         </p>
                       </article>
                       <article class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Slowest Lane (P95)</p>
-                        <p class="mt-1 text-sm font-semibold text-zinc-100">{formatEventLabel(aiSlowestLane()?.label)}</p>
+                        <p class="mt-1 text-sm font-semibold text-zinc-100">{getAiTelemetryLabel(aiSlowestLane()?.label)}</p>
                         <p class="mt-2 text-xs text-zinc-400">
                           {formatNumber(aiSlowestLane()?.p95DurationMs)}ms p95 latency
                         </p>
                       </article>
                       <article class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Most Output-Heavy Lane</p>
-                        <p class="mt-1 text-sm font-semibold text-zinc-100">{formatEventLabel(aiHungriestLane()?.label)}</p>
+                        <p class="mt-1 text-sm font-semibold text-zinc-100">{getAiTelemetryLabel(aiHungriestLane()?.label)}</p>
                         <p class="mt-2 text-xs text-zinc-400">
                           {formatPercent((aiHungriestLane()?.outputInputRatio ?? 0) * 100)} output/input ratio
                         </p>
@@ -712,13 +687,13 @@ export default function CrmRoute() {
                           <span class="text-[11px] text-zinc-500">top lanes by total tokens</span>
                         </div>
                         <div class="mt-3 space-y-2">
-                          <For each={readAiTelemetryItems(aiTelemetry()?.result?.lanes)}>
+                          <For each={readAiTelemetryItems(aiResult()?.lanes)}>
                             {(item) => {
                               const width = `${Math.max(8, ((item.totalTokens ?? 0) / aiLaneMaxTokens()) * 100)}%`;
                               return (
                                 <div class="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                                   <div class="flex items-center justify-between gap-3">
-                                    <span class="text-sm font-medium text-zinc-100">{formatEventLabel(item.label)}</span>
+                                    <span class="text-sm font-medium text-zinc-100">{getAiTelemetryLabel(item.label)}</span>
                                     <span class="text-xs text-zinc-400">{formatNumber(item.totalTokens)} tokens</span>
                                   </div>
                                   <div class="mt-2 h-2 overflow-hidden rounded-full bg-white/5">
@@ -743,10 +718,10 @@ export default function CrmRoute() {
                         <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                           <h3 class="text-sm font-semibold text-zinc-100">Model Spend</h3>
                           <div class="mt-3 space-y-2">
-                            <For each={readAiTelemetryItems(aiTelemetry()?.result?.models)}>
+                            <For each={readAiTelemetryItems(aiResult()?.models)}>
                               {(item) => (
                                 <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
-                                  <span class="text-zinc-300">{formatEventLabel(item.label)}</span>
+                                  <span class="text-zinc-300">{getAiTelemetryLabel(item.label)}</span>
                                   <span class="font-medium text-zinc-100">{formatNumber(item.totalTokens)} tokens</span>
                                 </div>
                               )}
@@ -757,18 +732,18 @@ export default function CrmRoute() {
                         <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                           <h3 class="text-sm font-semibold text-zinc-100">Cache + Outcomes</h3>
                           <div class="mt-3 grid gap-2">
-                            <For each={readAiTelemetryItems(aiTelemetry()?.result?.cacheStatuses)}>
+                            <For each={readAiTelemetryItems(aiResult()?.cacheStatuses)}>
                               {(item) => (
                                 <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
-                                  <span class="text-zinc-300">{formatEventLabel(item.label)}</span>
+                                  <span class="text-zinc-300">{getAiTelemetryLabel(item.label)}</span>
                                   <span class="font-medium text-zinc-100">{formatNumber(item.calls)}</span>
                                 </div>
                               )}
                             </For>
-                            <For each={readAiTelemetryItems(aiTelemetry()?.result?.outcomes)}>
+                            <For each={readAiTelemetryItems(aiResult()?.outcomes)}>
                               {(item) => (
                                 <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
-                                  <span class="text-zinc-300">{formatEventLabel(item.label)}</span>
+                                  <span class="text-zinc-300">{getAiTelemetryLabel(item.label)}</span>
                                   <span class="font-medium text-zinc-100">{formatNumber(item.calls)}</span>
                                 </div>
                               )}
@@ -781,10 +756,10 @@ export default function CrmRoute() {
                     <section class="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
                       <div class="flex items-center justify-between">
                         <h3 class="text-sm font-semibold text-zinc-100">Recent Series</h3>
-                        <span class="text-[11px] text-zinc-500">generated {formatTime(aiTelemetry()?.result?.generatedAtMs)}</span>
+                        <span class="text-[11px] text-zinc-500">generated {formatTime(getCrmGeneratedAtMs(aiResult()))}</span>
                       </div>
                       <div class="mt-3 grid gap-2">
-                        <For each={readAiTelemetryItems(aiTelemetry()?.result?.series)}>
+                        <For each={readAiTelemetryItems(aiResult()?.series)}>
                           {(point) => {
                             const width = `${Math.max(4, ((point.calls ?? 0) / aiSeriesMaxCalls()) * 100)}%`;
                             return (
@@ -809,7 +784,7 @@ export default function CrmRoute() {
               <section class="intel-panel mt-4 overflow-x-auto p-4" data-testid="crm-customer-360">
                 <h2 class="text-base font-semibold text-white">Customer 360</h2>
                 <p class="mt-1 text-xs text-zinc-500">
-                  Updated {formatTime(crm()?.result?.generatedAtMs)} • New users 24h: {formatNumber(crm()?.result?.directory?.newUsers24h)} • New users 7d: {formatNumber(crm()?.result?.directory?.newUsers7d)} • Legacy billing-only identities: {formatNumber(crm()?.result?.directory?.orphanTrackedUsers)}
+                  {getCrmCustomer360SummaryText(crmResult())}
                 </p>
                 <div class="mt-3 grid gap-2 md:grid-cols-[1fr_220px_auto]">
                   <input
@@ -864,15 +839,17 @@ export default function CrmRoute() {
                         const billing = accountStatusMap().get(entry.id);
                         const latestEvent = latestEventMap().get(entry.id);
                         const latestEventDisplay = getCrmLatestEventDisplay(latestEvent);
+                        const displayName = getCrmUserDisplayName(entry);
+                        const secondaryLabel = getCrmUserSecondaryLabel(entry);
                         return (
                           <tr class="border-b border-white/[0.04] text-zinc-300">
                             <td class="px-2 py-2">
-                              <p class="font-medium text-zinc-100">{entry.name}</p>
-                              <p class="text-xs text-zinc-500">{entry.login}</p>
+                              <p class="font-medium text-zinc-100">{displayName}</p>
+                              <p class="text-xs text-zinc-500">{secondaryLabel}</p>
                             </td>
                             <td class="px-2 py-2 text-xs text-zinc-400">{entry.email}</td>
                             <td class="px-2 py-2 text-xs text-zinc-400">{formatCrmProviders(entry.providers)}</td>
-                            <td class="px-2 py-2 text-xs text-zinc-200">{formatSubscriptionStatus(billing?.status)}</td>
+                            <td class="px-2 py-2 text-xs text-zinc-200">{formatCrmAccountStatus(billing?.status)}</td>
                             <td class="px-2 py-2 text-xs text-zinc-200">{formatUsd(billing?.monthlyPriceUsd)}</td>
                             <td class="px-2 py-2 text-xs text-zinc-400">
                               <p>{latestEventDisplay.kindLabel}</p>
@@ -910,7 +887,7 @@ export default function CrmRoute() {
                   <Show when={selectedUser()}>
                     <button
                       type="button"
-                      aria-label={`Refresh customer ${selectedUser()?.name || "selection"}`}
+                      aria-label={`Refresh customer ${selectedUserDisplayName() || "selection"}`}
                       data-testid="crm-refresh-customer"
                       onClick={() => void loadCustomerOps(selectedUserId(), true)}
                       disabled={opsBusy()}
@@ -929,27 +906,29 @@ export default function CrmRoute() {
                   <div class="mt-3 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
                     <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3" data-testid="crm-selected-user-panel">
                       <p class="text-xs uppercase tracking-[0.11em] text-zinc-500">Selected User</p>
-                      <p class="mt-1 text-sm font-semibold text-zinc-100">{selectedUser()?.name} <span class="text-zinc-400">({selectedUser()?.login})</span></p>
+                      <p class="mt-1 text-sm font-semibold text-zinc-100">
+                        {selectedUserDisplayName()} <span class="text-zinc-400">({selectedUserSecondaryLabel()})</span>
+                      </p>
                       <p class="text-xs text-zinc-400">{selectedUser()?.email}</p>
                       <div class="mt-3 grid gap-2 sm:grid-cols-2">
                         <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Account Status</p>
-                          <p class="text-sm font-medium text-zinc-100">{getCrmCustomerAccountStatusLabel(selectedCustomerOps()?.result)}</p>
+                          <p class="text-sm font-medium text-zinc-100">{getCrmCustomerAccountStatusLabel(selectedCustomerResult())}</p>
                         </div>
                         <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Stripe Customer</p>
-                          <p class="truncate text-sm font-medium text-zinc-100">{getCrmCustomerStripeCustomerId(selectedCustomerOps()?.result)}</p>
+                          <p class="truncate text-sm font-medium text-zinc-100">{getCrmCustomerStripeCustomerId(selectedCustomerResult())}</p>
                         </div>
                         <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Stripe Subscription</p>
-                          <p class="truncate text-sm font-medium text-zinc-100">{getCrmCustomerStripeSubscriptionId(selectedCustomerOps()?.result)}</p>
+                          <p class="truncate text-sm font-medium text-zinc-100">{getCrmCustomerStripeSubscriptionId(selectedCustomerResult())}</p>
                         </div>
                         <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Current Period End</p>
-                          <p class="text-sm font-medium text-zinc-100">{formatTime(getCrmCustomerCurrentPeriodEndMs(selectedCustomerOps()?.result))}</p>
+                          <p class="text-sm font-medium text-zinc-100">{formatTime(getCrmCustomerCurrentPeriodEndMs(selectedCustomerResult()))}</p>
                         </div>
                       </div>
-                      <Show when={selectedCustomerOps()?.result?.cache}>
+                      <Show when={selectedCustomerCache()}>
                         {(cache) => (
                           <p class="mt-3 text-xs text-zinc-400" data-testid="crm-customer-cache-status">
                             Customer snapshot:{" "}
@@ -957,7 +936,7 @@ export default function CrmRoute() {
                               {getCrmCustomerCacheSourceLabel(cache().source)}
                             </span>
                             {" • "}
-                            fetched {formatTime(getCrmCustomerCacheFetchedAtMs(selectedCustomerOps()?.result))}
+                            fetched {formatTime(getCrmCustomerCacheFetchedAtMs(selectedCustomerResult()))}
                           </p>
                         )}
                       </Show>
@@ -1027,11 +1006,11 @@ export default function CrmRoute() {
                     </article>
                   </div>
 
-                  <Show when={readCrmCustomerCharges(selectedCustomerOps()?.result).length > 0}>
+                  <Show when={selectedCustomerCharges().length > 0}>
                     <div class="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
                       <p class="text-xs uppercase tracking-[0.11em] text-zinc-500">Recent Charges</p>
                       <div class="mt-2 space-y-2">
-                        <For each={readCrmCustomerCharges(selectedCustomerOps()?.result)}>
+                        <For each={selectedCustomerCharges()}>
                           {(charge) => (
                             <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
                               <div>
@@ -1058,7 +1037,7 @@ export default function CrmRoute() {
               <section class="intel-panel mt-4 p-4">
                 <h2 class="text-base font-semibold text-zinc-100">Telemetry Event Mix (7d)</h2>
                 <div class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                  <For each={readCrmItems(crm()?.result?.telemetry?.topKinds7d)}>
+                  <For each={readCrmItems(crmTelemetry()?.topKinds7d)}>
                     {(item) => (
                       <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
                         <p class="text-xs text-zinc-500">{formatEventLabel(item.kind)}</p>

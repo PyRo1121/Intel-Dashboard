@@ -1,4 +1,4 @@
-import { formatSubscriptionStatus } from "@intel-dashboard/shared/entitlement.ts";
+import { formatCrmAccountStatus } from "./crm-directory.ts";
 
 export function getCrmCustomerCacheSourceLabel(source: string | null | undefined): string {
   switch (source) {
@@ -23,7 +23,7 @@ export function getCrmCustomerAccountStatusLabel(
     | null
     | undefined,
 ): string {
-  return formatSubscriptionStatus(result?.account?.status ?? undefined);
+  return formatCrmAccountStatus(result?.account?.status);
 }
 
 export function getCrmCustomerStripeCustomerId(

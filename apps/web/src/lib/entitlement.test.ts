@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   entitlementTierTone,
+  formatEntitlementLimit,
   formatEntitlementTier,
   formatSubscriptionStatus,
   isEntitledRole,
@@ -41,6 +42,11 @@ test("shared entitlement helpers normalize tier labels and entitlement roles", (
       planTone: "text-amber-300",
     },
   );
+
+  assert.equal(formatEntitlementLimit(undefined), "Unlimited");
+  assert.equal(formatEntitlementLimit(null), "Unlimited");
+  assert.equal(formatEntitlementLimit(42.8), "42");
+  assert.equal(formatEntitlementLimit(-1), "0");
 
   assert.equal(isEntitledRole("owner"), true);
   assert.equal(isEntitledRole("subscriber"), true);

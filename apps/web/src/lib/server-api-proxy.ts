@@ -69,18 +69,15 @@ function buildProxyHeaders(event: APIEvent, targetUrl: URL): Headers {
 }
 
 function buildPrivateApiError(status: number, error: string, detail?: string): Response {
-  return new Response(
+  return applyPrivateApiDefaults(new Response(
     JSON.stringify(detail ? { error, detail } : { error }),
     {
       status,
       headers: {
         "Content-Type": "application/json",
-        "Cache-Control": "private, no-store, no-cache, must-revalidate",
-        "CDN-Cache-Control": "no-store",
-        Vary: "Origin, Cookie, Authorization",
       },
     },
-  );
+  ));
 }
 
 function applyPrivateApiDefaults(response: Response): Response {

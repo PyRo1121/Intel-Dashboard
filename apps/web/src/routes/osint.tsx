@@ -9,6 +9,7 @@ import {
   freshnessPillTone,
   freshnessTooltip,
   maxIsoTimestamp,
+  STANDARD_FEED_FRESHNESS_THRESHOLDS,
   useFeedFreshness,
 } from "~/lib/freshness";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
@@ -100,7 +101,7 @@ async function loadOsint(): Promise<IntelItem[]> {
 export default function OsintFeed() {
   const [filter, setFilter] = createSignal<Severity | "all">("all");
   const [osint, { refetch }] = createResource(loadOsint, { initialValue: [] as IntelItem[] });
-  const feedThresholds = { liveMaxMinutes: 20, delayedMaxMinutes: 90 } as const;
+  const feedThresholds = STANDARD_FEED_FRESHNESS_THRESHOLDS;
   const nowMs = useWallClock(1000);
 
   useLiveRefresh(() => {

@@ -2720,6 +2720,8 @@ async function enqueueBriefingRefresh(args: {
   }
 
   const ttlSeconds = normalizeBriefingCacheTtlSeconds(args.env.BRIEFING_CACHE_TTL_SECONDS);
+  const refreshIntervalSeconds = normalizeBriefingRefreshIntervalSeconds(args.env.BRIEFING_REFRESH_INTERVAL_SECONDS);
+  const pendingTtlSeconds = Math.min(ttlSeconds, refreshIntervalSeconds + 60);
   await kv.put(
     buildBriefingPendingKey(args.env, args.windowStartMs),
     JSON.stringify({
@@ -2728,7 +2730,7 @@ async function enqueueBriefingRefresh(args: {
       sourceHash: args.sourceHash,
       updatedAtMs: nowMs,
     }),
-    { expirationTtl: ttlSeconds },
+    { expirationTtl: pendingTtlSeconds },
   );
 
   if (args.env.AI_JOB_QUEUE && typeof args.env.AI_JOB_QUEUE.send === "function") {

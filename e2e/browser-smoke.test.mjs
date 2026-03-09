@@ -5,6 +5,7 @@ import test from "node:test";
 import { chromium } from "@playwright/test";
 import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 import {
+  openOwnerCrmPanelByKeyboard,
   openCrmSelectedUserPanel,
   assertOwnerBillingBypassNotices,
   CRM_AI_WINDOWS,
@@ -1175,21 +1176,7 @@ test("browser-authenticated CRM and sidebar support keyboard-only navigation", a
       });
 
       const crmSearch = await waitForCrmDashboard(page);
-      await crmSearch.focus();
-      await page.keyboard.type("PyRo1121");
-
-      const ownerRow = page.locator("tbody tr").filter({ hasText: /olen@latham\.cloud/i }).first();
-      await ownerRow.waitFor({ state: "visible", timeout: 30_000 });
-
-      const manageOwner = ownerRow.getByRole("button", { name: "Manage PyRo1121" });
-      await manageOwner.focus();
-      await manageOwner.press("Enter");
-      await page.getByTestId("crm-selected-user-panel").waitFor({ state: "visible", timeout: 30_000 });
-
-      const refreshCustomer = page.getByTestId("crm-refresh-customer");
-      await refreshCustomer.focus();
-      await refreshCustomer.press("Enter");
-      await waitForMissingBillingState(page);
+      await openOwnerCrmPanelByKeyboard(page, crmSearch);
 
       await page.goto(`${EDGE_BASE_URL}/osint`, {
         waitUntil: "networkidle",

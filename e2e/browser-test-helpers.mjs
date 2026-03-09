@@ -263,6 +263,28 @@ export async function openCrmSelectedUserPanel(trigger, page) {
   return selectedPanel;
 }
 
+export async function openOwnerCrmPanelByKeyboard(page, crmSearch) {
+  await crmSearch.focus();
+  await page.keyboard.type("PyRo1121");
+
+  const ownerRow = page.locator("tbody tr").filter({ hasText: /olen@latham\.cloud/i }).first();
+  await ownerRow.waitFor({ state: "visible", timeout: 30_000 });
+
+  const manageOwner = ownerRow.getByRole("button", { name: "Manage PyRo1121" });
+  await manageOwner.focus();
+  await manageOwner.press("Enter");
+
+  const selectedPanel = page.getByTestId("crm-selected-user-panel");
+  await selectedPanel.waitFor({ state: "visible", timeout: 30_000 });
+
+  const refreshCustomer = page.getByTestId("crm-refresh-customer");
+  await refreshCustomer.focus();
+  await refreshCustomer.press("Enter");
+  await waitForMissingBillingState(page);
+
+  return selectedPanel;
+}
+
 export function collectBrowserDiagnostics(page, baseUrl) {
   const pageErrors = [];
   const consoleErrors = [];

@@ -2282,11 +2282,11 @@ async function loadSubscriberFeedPreferences(env: Env, userId: string) {
   ]);
 
   return normalizeSubscriberFeedPreferences({
-    favoriteChannels: (channels.results ?? []).map((row) => normalizeString(row.channel)).filter(Boolean),
-    favoriteSources: (sources.results ?? []).map((row) => normalizeString(row.source)).filter(Boolean),
-    watchRegions: (regions.results ?? []).map((row) => normalizeString(row.region)).filter(Boolean),
-    watchTags: (tags.results ?? []).map((row) => normalizeString(row.tag)).filter(Boolean),
-    watchCategories: (categories.results ?? []).map((row) => normalizeString(row.category)).filter(Boolean),
+    favoriteChannels: (channels.results ?? []).map((row) => normalizeString(row.channel)).filter((value): value is string => Boolean(value)),
+    favoriteSources: (sources.results ?? []).map((row) => normalizeString(row.source)).filter((value): value is string => Boolean(value)),
+    watchRegions: (regions.results ?? []).map((row) => normalizeString(row.region)).filter((value): value is string => Boolean(value)),
+    watchTags: (tags.results ?? []).map((row) => normalizeString(row.tag)).filter((value): value is string => Boolean(value)),
+    watchCategories: (categories.results ?? []).map((row) => normalizeString(row.category)).filter((value): value is string => Boolean(value)),
     updatedAt: normalizeString(baseRow?.updated_at) ?? undefined,
   });
 }
@@ -2366,7 +2366,7 @@ async function loadSubscriberOsintItems(env: Env): Promise<SubscriberOsintItem[]
   try {
     const payload = (await response.json()) as unknown;
     return Array.isArray(payload)
-      ? payload.filter((item): item is IntelItem => isRecord(item))
+      ? payload.filter((item): item is SubscriberOsintItem => isRecord(item))
       : [];
   } catch {
     return [];
@@ -5586,7 +5586,7 @@ export default {
         });
       }
 
-      return privateApiMethodNotAllowed(origin, ["GET", "POST"]);
+      return privateApiMethodNotAllowed(origin, "GET, POST");
     }
 
     if (path === "/api/subscriber/my-feed") {
@@ -5605,7 +5605,7 @@ export default {
       ]);
 
       const mergedItems = [
-        ...telegramEvents.map((event) => normalizeTelegramSubscriberFeedItem(event, preferences)),
+        ...telegramEvents.map((event) => normalizeTelegramSubscriberFeedItem(event as never, preferences)),
         ...intelItems.map((item) => normalizeOsintSubscriberFeedItem(item, preferences)),
       ];
       const scope = normalizeSubscriberFeedScope(url.searchParams.get("scope"));

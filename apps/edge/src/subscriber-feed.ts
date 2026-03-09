@@ -1,4 +1,5 @@
 import type { SubscriberFeedItem, SubscriberFeedPreferences, SubscriberFeedScope } from "@intel-dashboard/shared/subscriber-feed.ts";
+export type { SubscriberFeedPreferences };
 
 type TelegramCanonicalEventLike = {
   event_id: string;

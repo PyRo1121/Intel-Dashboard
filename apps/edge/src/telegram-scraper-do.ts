@@ -24,6 +24,13 @@ import {
   updateTelegramSourcePerformanceStats,
   type TelegramSourcePerformanceStats,
 } from "./telegram-source-performance";
+import {
+  computeTelegramSignalGrade,
+  createDefaultTelegramSignalProfile,
+  isHighSignalTelegramScore,
+  type TelegramSignalGrade,
+  type TelegramSignalProfile,
+} from "./telegram-signal-grade";
 
 // ============================================================================
 // Types
@@ -127,6 +134,10 @@ interface TelegramCanonicalEvent {
   source_type?: ChannelConfig["sourceType"];
   acquisition_method?: ChannelConfig["acquisitionMethod"];
   subscriber_value_score?: number;
+  signal_profile_id?: string;
+  signal_score?: number;
+  signal_grade?: TelegramSignalGrade;
+  signal_reasons?: string[];
   freshness_tier?: "breaking" | "fresh" | "watch";
   verification_state?: "verified" | "corroborated" | "single_source";
   rank_score?: number;
@@ -197,6 +208,19 @@ interface TelegramSourcePerformanceRow {
   updated_at: number | null;
 }
 
+interface TelegramSignalProfileRow {
+  profile_id: string;
+  category: string;
+  active: number;
+  weights_json: string;
+  thresholds_json: string;
+  updated_at: string;
+}
+
+function isFiniteRecordNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 type PersistMessageSource = "new" | "backfill" | "media_backfill";
 
 interface PersistMessageRecord {
@@ -251,6 +275,7 @@ const DEDUPE_MEDIA_WINDOW_MS = 6 * 60 * 60 * 1000;
 const TEXT_TRANSLATION_CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const IMAGE_TRANSLATION_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const CANONICAL_HISTORY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const SIGNAL_PROFILE_CACHE_TTL_MS = 5 * 60 * 1000;
 const IMAGE_TRANSLATION_CACHE_EMPTY_SENTINEL = "__NO_TEXT__";
 const USER_AGENT =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
@@ -362,6 +387,8 @@ export class TelegramScraperDO extends DurableObject<Env> {
   private lastCycleTargetChannels = CHANNELS.length;
   private lastCycleFetchedChannels = 0;
   private d1SchemaReady = false;
+  private signalProfileCacheLoadedAtMs = 0;
+  private signalProfilesByCategory = new Map<string, TelegramSignalProfile>();
 
   private broadcastStateInvalidation(payload: Record<string, unknown>): void {
     const message = JSON.stringify(payload);
@@ -541,11 +568,15 @@ export class TelegramScraperDO extends DurableObject<Env> {
         "CREATE TABLE IF NOT EXISTS telegram_cycle_messages (channel_username TEXT NOT NULL, message_id TEXT NOT NULL, source TEXT NOT NULL, label TEXT NOT NULL, category TEXT NOT NULL, message_link TEXT NOT NULL, datetime TEXT, text_original TEXT NOT NULL, text_en TEXT NOT NULL, image_text_en TEXT, views TEXT, language TEXT, has_video INTEGER NOT NULL, has_photo INTEGER NOT NULL, media_json TEXT, first_seen_cycle_id TEXT NOT NULL, updated_cycle_id TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (channel_username, message_id));",
         "CREATE INDEX IF NOT EXISTS idx_telegram_cycle_messages_datetime ON telegram_cycle_messages(datetime DESC);",
         "CREATE INDEX IF NOT EXISTS idx_telegram_cycle_messages_updated_cycle ON telegram_cycle_messages(updated_cycle_id);",
-        "CREATE TABLE IF NOT EXISTS telegram_canonical_events (event_id TEXT PRIMARY KEY, event_key TEXT NOT NULL, datetime TEXT NOT NULL, category TEXT NOT NULL, categories_json TEXT NOT NULL, source_count INTEGER NOT NULL, duplicate_count INTEGER NOT NULL, source_labels_json TEXT NOT NULL, source_channels_json TEXT NOT NULL, text_original TEXT NOT NULL, text_en TEXT NOT NULL, image_text_en TEXT, language TEXT, media_json TEXT NOT NULL, has_video INTEGER NOT NULL, has_photo INTEGER NOT NULL, cycle_id TEXT NOT NULL, updated_at TEXT NOT NULL);",
+        "CREATE TABLE IF NOT EXISTS telegram_canonical_events (event_id TEXT PRIMARY KEY, event_key TEXT NOT NULL, datetime TEXT NOT NULL, category TEXT NOT NULL, categories_json TEXT NOT NULL, source_count INTEGER NOT NULL, duplicate_count INTEGER NOT NULL, source_labels_json TEXT NOT NULL, source_channels_json TEXT NOT NULL, text_original TEXT NOT NULL, text_en TEXT NOT NULL, image_text_en TEXT, language TEXT, media_json TEXT NOT NULL, has_video INTEGER NOT NULL, has_photo INTEGER NOT NULL, signal_profile_id TEXT, signal_score REAL, signal_grade TEXT, signal_reasons_json TEXT, cycle_id TEXT NOT NULL, updated_at TEXT NOT NULL);",
         "CREATE INDEX IF NOT EXISTS idx_telegram_canonical_events_datetime ON telegram_canonical_events(datetime DESC);",
         "CREATE INDEX IF NOT EXISTS idx_telegram_canonical_events_cycle_id ON telegram_canonical_events(cycle_id);",
         "CREATE TABLE IF NOT EXISTS telegram_canonical_event_sources (event_id TEXT NOT NULL, signature TEXT NOT NULL, channel TEXT NOT NULL, label TEXT NOT NULL, category TEXT NOT NULL, message_id TEXT NOT NULL, message_link TEXT NOT NULL, datetime TEXT, views TEXT, cycle_id TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY (event_id, signature));",
         "CREATE INDEX IF NOT EXISTS idx_telegram_canonical_event_sources_event_id ON telegram_canonical_event_sources(event_id);",
+        "CREATE TABLE IF NOT EXISTS telegram_signal_profiles (profile_id TEXT PRIMARY KEY, category TEXT NOT NULL UNIQUE, active INTEGER NOT NULL DEFAULT 1, weights_json TEXT NOT NULL, thresholds_json TEXT NOT NULL, updated_at TEXT NOT NULL);",
+        "CREATE INDEX IF NOT EXISTS idx_telegram_signal_profiles_active ON telegram_signal_profiles(active, category);",
+        "CREATE TABLE IF NOT EXISTS telegram_source_history (channel TEXT PRIMARY KEY, score REAL NOT NULL, total_events REAL NOT NULL, lead_reports REAL NOT NULL, follow_on_reports REAL NOT NULL, corroborated_reports REAL NOT NULL, single_source_reports REAL NOT NULL, trust_tier TEXT NOT NULL, latency_tier TEXT NOT NULL, updated_at TEXT NOT NULL);",
+        "CREATE INDEX IF NOT EXISTS idx_telegram_source_history_score ON telegram_source_history(score DESC);",
       ];
       for (const statement of schemaStatements) {
         await this.env.INTEL_DB.prepare(statement).run();
@@ -562,6 +593,43 @@ export class TelegramScraperDO extends DurableObject<Env> {
           "ALTER TABLE telegram_cycle_messages ADD COLUMN image_text_en TEXT;",
         ).run();
       }
+      const canonicalInfoRaw = await this.env.INTEL_DB.prepare(
+        "PRAGMA table_info(telegram_canonical_events);",
+      ).all<{ name: string }>();
+      const canonicalInfo = Array.isArray(canonicalInfoRaw.results) ? canonicalInfoRaw.results : [];
+      if (!canonicalInfo.some((col) => col.name === "signal_profile_id")) {
+        await this.env.INTEL_DB.prepare(
+          "ALTER TABLE telegram_canonical_events ADD COLUMN signal_profile_id TEXT;",
+        ).run();
+      }
+      if (!canonicalInfo.some((col) => col.name === "signal_score")) {
+        await this.env.INTEL_DB.prepare(
+          "ALTER TABLE telegram_canonical_events ADD COLUMN signal_score REAL;",
+        ).run();
+      }
+      if (!canonicalInfo.some((col) => col.name === "signal_grade")) {
+        await this.env.INTEL_DB.prepare(
+          "ALTER TABLE telegram_canonical_events ADD COLUMN signal_grade TEXT;",
+        ).run();
+      }
+      if (!canonicalInfo.some((col) => col.name === "signal_reasons_json")) {
+        await this.env.INTEL_DB.prepare(
+          "ALTER TABLE telegram_canonical_events ADD COLUMN signal_reasons_json TEXT;",
+        ).run();
+      }
+      const defaultProfile = createDefaultTelegramSignalProfile();
+      await this.env.INTEL_DB.prepare(
+        `INSERT OR IGNORE INTO telegram_signal_profiles (profile_id, category, active, weights_json, thresholds_json, updated_at)
+         VALUES (?, ?, 1, ?, ?, ?)`,
+      )
+        .bind(
+          defaultProfile.profileId,
+          "default",
+          JSON.stringify(defaultProfile.weights),
+          JSON.stringify(defaultProfile.thresholds),
+          new Date().toISOString(),
+        )
+        .run();
       this.d1SchemaReady = true;
     } catch (err) {
       console.error(
@@ -830,7 +898,97 @@ export class TelegramScraperDO extends DurableObject<Env> {
     return map;
   }
 
-  private persistSourcePerformanceStats(statsByChannel: Map<string, TelegramSourcePerformanceStats>): void {
+  private async loadSignalProfiles(): Promise<Map<string, TelegramSignalProfile>> {
+    const nowMs = Date.now();
+    if (
+      this.signalProfilesByCategory.size > 0 &&
+      nowMs - this.signalProfileCacheLoadedAtMs <= SIGNAL_PROFILE_CACHE_TTL_MS
+    ) {
+      return this.signalProfilesByCategory;
+    }
+
+    const profiles = new Map<string, TelegramSignalProfile>();
+    profiles.set("default", createDefaultTelegramSignalProfile());
+
+    if (!this.env.INTEL_DB) {
+      this.signalProfilesByCategory = profiles;
+      this.signalProfileCacheLoadedAtMs = nowMs;
+      return profiles;
+    }
+
+    await this.ensureD1Schema();
+    try {
+      const result = await this.env.INTEL_DB.prepare(
+        `SELECT profile_id, category, active, weights_json, thresholds_json, updated_at
+         FROM telegram_signal_profiles
+         WHERE active = 1`,
+      ).all<TelegramSignalProfileRow>();
+      const rows = Array.isArray(result.results) ? result.results : [];
+      for (const row of rows) {
+        const category = (row.category || "").trim().toLowerCase() || "default";
+        try {
+          const parsedWeights = JSON.parse(row.weights_json) as Partial<TelegramSignalProfile["weights"]> | null;
+          const parsedThresholds = JSON.parse(row.thresholds_json) as Partial<TelegramSignalProfile["thresholds"]> | null;
+          if (
+            !parsedWeights ||
+            !parsedThresholds ||
+            !isFiniteRecordNumber(parsedWeights.sourceQuality) ||
+            !isFiniteRecordNumber(parsedWeights.lead) ||
+            !isFiniteRecordNumber(parsedWeights.corroboration) ||
+            !isFiniteRecordNumber(parsedWeights.evidence) ||
+            !isFiniteRecordNumber(parsedWeights.freshness) ||
+            !isFiniteRecordNumber(parsedWeights.penalty) ||
+            !isFiniteRecordNumber(parsedThresholds.a) ||
+            !isFiniteRecordNumber(parsedThresholds.b) ||
+            !isFiniteRecordNumber(parsedThresholds.c)
+          ) {
+            throw new Error("invalid_signal_profile_shape");
+          }
+          const weights: TelegramSignalProfile["weights"] = {
+            sourceQuality: parsedWeights.sourceQuality,
+            lead: parsedWeights.lead,
+            corroboration: parsedWeights.corroboration,
+            evidence: parsedWeights.evidence,
+            freshness: parsedWeights.freshness,
+            penalty: parsedWeights.penalty,
+          };
+          const thresholds: TelegramSignalProfile["thresholds"] = {
+            a: parsedThresholds.a,
+            b: parsedThresholds.b,
+            c: parsedThresholds.c,
+          };
+          profiles.set(category, {
+            profileId: row.profile_id,
+            category: category === "default" ? null : category,
+            weights,
+            thresholds,
+          });
+        } catch (error) {
+          console.warn("[TelegramScraper] Failed to parse signal profile row", {
+            profileId: row.profile_id,
+            category,
+            error: error instanceof Error ? error.message : "invalid_signal_profile_json",
+          });
+          continue;
+        }
+      }
+    } catch (error) {
+      console.error(
+        "[TelegramScraper] Failed to load signal profiles:",
+        error instanceof Error ? error.message : error,
+      );
+    }
+
+    this.signalProfilesByCategory = profiles;
+    this.signalProfileCacheLoadedAtMs = nowMs;
+    return profiles;
+  }
+
+  private resolveSignalProfile(profiles: Map<string, TelegramSignalProfile>, category: string): TelegramSignalProfile {
+    return profiles.get((category || "").trim().toLowerCase()) ?? profiles.get("default") ?? createDefaultTelegramSignalProfile();
+  }
+
+  private async persistSourcePerformanceStats(statsByChannel: Map<string, TelegramSourcePerformanceStats>, channelsByName: Map<string, ChannelConfig>): Promise<void> {
     for (const [channel, stats] of statsByChannel.entries()) {
       const normalizedChannel = channel.trim();
       if (!normalizedChannel) continue;
@@ -850,6 +1008,38 @@ export class TelegramScraperDO extends DurableObject<Env> {
         stats.lastSeenAtMs,
         stats.updatedAtMs,
       );
+    }
+
+    if (!this.env.INTEL_DB) {
+      return;
+    }
+
+    await this.ensureD1Schema();
+    const statements = Array.from(statsByChannel.entries()).map(([channel, stats]) => {
+      const config = channelsByName.get(channel);
+      return this.env.INTEL_DB!
+        .prepare(
+          `INSERT OR REPLACE INTO telegram_source_history (
+            channel, score, total_events, lead_reports, follow_on_reports, corroborated_reports,
+            single_source_reports, trust_tier, latency_tier, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          channel,
+          stats.score,
+          stats.totalEvents,
+          stats.leadReports,
+          stats.followOnReports,
+          stats.corroboratedReports,
+          stats.singleSourceReports,
+          config?.trustTier ?? "watch",
+          config?.latencyTier ?? "monitor",
+          new Date(stats.updatedAtMs ?? Date.now()).toISOString(),
+        );
+    });
+    for (let i = 0; i < statements.length; i += 100) {
+      const chunk = statements.slice(i, i + 100);
+      await this.env.INTEL_DB.batch(chunk);
     }
   }
 
@@ -998,6 +1188,8 @@ export class TelegramScraperDO extends DurableObject<Env> {
     const sourceRecords = this.buildCanonicalSourceRecords(channels);
     const feedback = await this.loadDedupeFeedbackRules();
     const sourcePerformanceStats = this.loadSourcePerformanceStats();
+    const signalProfiles = await this.loadSignalProfiles();
+    const channelsByName = new Map(CHANNELS.map((channel) => [channel.username, channel]));
     const clusters: CanonicalCluster[] = [];
     const clusterByKey = new Map<string, number>();
     const canonicalIndex = new Map<string, number[]>();
@@ -1268,6 +1460,22 @@ export class TelegramScraperDO extends DurableObject<Env> {
           0,
           Math.min(100, Math.round(bestSourceScore * 0.72 + averageSubscriberValue * 0.28 + freshnessBoost + corroborationBoost)),
         );
+        const signalProfile = this.resolveSignalProfile(signalProfiles, dominantCategory);
+        const signalGrade = computeTelegramSignalGrade({
+          profile: signalProfile,
+          input: {
+            averageSourceScore: averageSubscriberValue,
+            bestSourceScore,
+            sourceCount,
+            duplicateCount: Math.max(0, cluster.aliases.size - 1),
+            trustTier,
+            freshnessTier,
+            verificationState,
+            hasMedia: mergedMedia.length > 0,
+            hasUsefulImageText: (visualPrimary.imageTextEn || "").trim().length > 0,
+            isFirstReport: sourceCount > 1 && firstReporter.channel === bestSource.channel,
+          },
+        });
         const displaySourceLabels = rankedSourceRepresentatives
           .map((source) => source.label)
           .filter((value, index, values) => values.indexOf(value) === index)
@@ -1288,6 +1496,10 @@ export class TelegramScraperDO extends DurableObject<Env> {
           source_type: bestSource.sourceType,
           acquisition_method: bestSource.acquisitionMethod,
           subscriber_value_score: averageSubscriberValue,
+          signal_profile_id: signalProfile.profileId,
+          signal_score: signalGrade.score,
+          signal_grade: signalGrade.grade,
+          signal_reasons: signalGrade.reasons,
           freshness_tier: freshnessTier,
           verification_state: verificationState,
           rank_score: rankScore,
@@ -1329,7 +1541,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
     const feedbackOverrides = Array.from(feedback.values()).filter((rule) => rule.split || Boolean(rule.forcedCluster)).length;
 
     try {
-      this.persistSourcePerformanceStats(sourcePerformanceStats);
+      await this.persistSourcePerformanceStats(sourcePerformanceStats, channelsByName);
     } catch (error) {
       console.error("[TelegramScraper] Failed to persist source performance stats:", error);
     }
@@ -2810,8 +3022,8 @@ export class TelegramScraperDO extends DurableObject<Env> {
               event_id, event_key, datetime, category, categories_json,
               source_count, duplicate_count, source_labels_json, source_channels_json,
               text_original, text_en, image_text_en, language, media_json, has_video, has_photo,
-              cycle_id, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              signal_profile_id, signal_score, signal_grade, signal_reasons_json, cycle_id, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             event.event_id,
@@ -2830,6 +3042,10 @@ export class TelegramScraperDO extends DurableObject<Env> {
             JSON.stringify(event.media),
             event.has_video ? 1 : 0,
             event.has_photo ? 1 : 0,
+            event.signal_profile_id ?? null,
+            typeof event.signal_score === "number" ? event.signal_score : null,
+            event.signal_grade ?? null,
+            JSON.stringify(event.signal_reasons ?? []),
             input.cycleId,
             input.createdAt,
           ),

@@ -160,6 +160,14 @@ export default function TelegramMessageCard(props: {
                 {entryMediaCount(props.entry)} media
               </span>
             </Show>
+            <Show when={props.entry.dedupe?.signalGrade}>
+              <span class="inline-flex rounded-full border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-violet-200">
+                Grade {props.entry.dedupe?.signalGrade}
+                <Show when={typeof props.entry.dedupe?.signalScore === "number"}>
+                  <span class="ml-1 opacity-75">{props.entry.dedupe?.signalScore}</span>
+                </Show>
+              </span>
+            </Show>
             <Show when={firstReporterLabel()}>
               <span class="inline-flex rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-sky-200">
                 First Reporter {firstReporterLabel()}

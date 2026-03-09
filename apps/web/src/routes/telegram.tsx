@@ -24,7 +24,7 @@ import {
   isVerifiedEntry,
   messageText,
 } from "~/lib/telegram-entry";
-import { applyTelegramPremiumFeed } from "~/lib/telegram-premium-feed";
+import { applyTelegramPremiumFeed, isFirstReportTelegramEntry, isHighSignalTelegramEntry } from "~/lib/telegram-premium-feed";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import { getLatestTelegramMessageTimestamp, sortTelegramChannelsByMessageTime } from "~/lib/telegram-feed";
 import {
@@ -69,6 +69,8 @@ export default function TelegramPage() {
   const [streamConnected, setStreamConnected] = createSignal(false);
   const [signalFirst, setSignalFirst] = createSignal(false);
   const [hidePremiumNoise, setHidePremiumNoise] = createSignal(false);
+  const [highSignalOnly, setHighSignalOnly] = createSignal(false);
+  const [firstReportsOnly, setFirstReportsOnly] = createSignal(false);
   const feedThresholds = STANDARD_FEED_FRESHNESS_THRESHOLDS;
   let lastTimestamp = "";
   let signalFirstTouched = false;
@@ -313,6 +315,10 @@ export default function TelegramPage() {
             sourceType: event.source_type,
             acquisitionMethod: event.acquisition_method,
             subscriberValueScore: typeof event.subscriber_value_score === "number" ? event.subscriber_value_score : undefined,
+            signalProfileId: event.signal_profile_id,
+            signalScore: typeof event.signal_score === "number" ? event.signal_score : undefined,
+            signalGrade: event.signal_grade,
+            signalReasons: Array.isArray(event.signal_reasons) ? event.signal_reasons : [],
             freshnessTier: event.freshness_tier,
             verificationState: event.verification_state,
             rankScore: typeof event.rank_score === "number" ? event.rank_score : undefined,
@@ -375,6 +381,12 @@ export default function TelegramPage() {
         return false;
       }
       if (verifiedOnly() && !isVerifiedEntry(entry)) {
+        return false;
+      }
+      if (signalSubscriber() && mergeDuplicates() && highSignalOnly() && !isHighSignalTelegramEntry(entry)) {
+        return false;
+      }
+      if (signalSubscriber() && mergeDuplicates() && firstReportsOnly() && !isFirstReportTelegramEntry(entry)) {
         return false;
       }
       return true;
@@ -675,6 +687,26 @@ export default function TelegramPage() {
           <Show when={signalSubscriber() && mergeDuplicates()}>
             <button
               type="button"
+              onClick={() => setHighSignalOnly(!highSignalOnly())}
+              aria-pressed={highSignalOnly()}
+              class={`min-h-11 cursor-pointer rounded-xl border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
+                highSignalOnly() ? "border-violet-400/30 bg-violet-500/10 text-violet-200" : "border-white/[0.08] bg-black/20 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              High signal only
+            </button>
+            <button
+              type="button"
+              onClick={() => setFirstReportsOnly(!firstReportsOnly())}
+              aria-pressed={firstReportsOnly()}
+              class={`min-h-11 cursor-pointer rounded-xl border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
+                firstReportsOnly() ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-200" : "border-white/[0.08] bg-black/20 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              First reports only
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 signalFirstTouched = true;
                 setSignalFirst(!signalFirst());
@@ -708,6 +740,10 @@ export default function TelegramPage() {
               ? "Raw view shows single-source flow for operator triage."
               : feedMode() === "verified"
                 ? "Verified view biases toward multi-source and media-backed clusters."
+                : firstReportsOnly()
+                  ? "First reports only shows corroborated events where the lead reporter won the signal grade."
+                  : highSignalOnly()
+                    ? "High signal only shows A/B grade events ranked for premium subscribers."
                 : premiumSignalEnabled()
                   ? "Premium signal-first mode ranks higher-confidence events ahead of follow-on chatter."
                   : premiumNoiseEnabled()

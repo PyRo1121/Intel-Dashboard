@@ -25,6 +25,7 @@ export function buildOwnerCrmAiTelemetryFailureResponse(
 
   return new Response(
     JSON.stringify({
+      ok: false,
       error: result.error,
     }),
     {

@@ -24,7 +24,8 @@ describe("buildOwnerCrmAiTelemetryFailureResponse", () => {
     });
 
     assert.equal(response.status, 400);
-    const payload = await response.json() as { error?: string };
+    const payload = await response.json() as { ok?: boolean; error?: string };
+    assert.equal(payload.ok, false);
     assert.equal(payload.error, "Invalid AI telemetry window.");
   });
 });

@@ -99,7 +99,7 @@ export function buildTelegramDedupeClusterKey(
   mediaSignature: string,
 ): string {
   const seed = canonicalText || mediaSignature || getTelegramLegacyEntryKey(entry);
-  const bucketSeed = Number.isFinite(msgTs) ? msgTs : 0;
-  const bucket = Math.floor(bucketSeed / (30 * 60 * 1000));
+  const stableTs = Number.isFinite(msgTs) && msgTs > 0 ? msgTs : 0;
+  const bucket = Math.floor(stableTs / (30 * 60 * 1000));
   return `cluster_${bucket}_${fastHash(seed.slice(0, 400))}`;
 }

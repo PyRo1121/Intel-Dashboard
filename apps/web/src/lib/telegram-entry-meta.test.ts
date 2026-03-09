@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  getTelegramAvatarLetter,
   doesTelegramGroupMatchEntry,
   getTelegramAvatarBgColor,
+  getTelegramChannelName,
   getTelegramEntryKey,
   getTelegramEntrySourceSignatures,
   getTelegramRankReasons,
@@ -38,12 +40,33 @@ test("telegram entry meta helpers normalize keys, signatures, and safe ids", () 
 
 test("telegram entry meta helpers derive avatar color and rank reasons", () => {
   assert.equal(getTelegramAvatarBgColor("ru_milblog"), "#fca5a5");
+  assert.equal(getTelegramChannelName(entry), "Channel");
+  assert.equal(getTelegramAvatarLetter(entry), "C");
   assert.deepEqual(
     getTelegramRankReasons({
       entry,
       hasUsefulImageText: () => false,
     }),
     ["breaking", "2 sources", "strategic"],
+  );
+});
+
+test("telegram entry meta helpers fall back cleanly for missing labels", () => {
+  assert.equal(
+    getTelegramChannelName({
+      ...entry,
+      channelLabel: "",
+      channelUsername: "",
+    }),
+    "Telegram source",
+  );
+  assert.equal(
+    getTelegramAvatarLetter({
+      ...entry,
+      channelLabel: "",
+      channelUsername: "",
+    }),
+    "T",
   );
 });
 

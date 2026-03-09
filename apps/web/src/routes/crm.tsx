@@ -269,7 +269,6 @@ type AiTelemetryPayload = {
 
 export default function CrmRoute() {
   const auth = useAuth();
-  const role = () => resolveAuthUserRole(auth.user());
   const isOwner = () => isAuthUserOwner(auth.user());
   const [crm, { refetch }] = createResource(() => fetchCrmOverview<CrmPayload>());
   const [aiWindow, setAiWindow] = createSignal<"15m" | "1h" | "24h" | "7d" | "30d">("1h");

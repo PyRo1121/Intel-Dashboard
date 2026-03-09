@@ -1,5 +1,6 @@
 import { For, Show, createMemo, createSignal, createResource } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
+import { A } from "@solidjs/router";
 import { formatTitleLabel } from "~/lib/event-label";
 import { fetchOsintItems } from "~/lib/osint-client";
 import { readLatestArray } from "~/lib/resource-latest";
@@ -51,6 +52,14 @@ export default function OsintFeed() {
   const seoDesc = OSINT_DESCRIPTION;
 
   const severityCounts = () => countBySeverity(items());
+  const providerHref = (source: string) =>
+    `/osint/source/${encodeURIComponent(
+      source
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, ""),
+    )}`;
 
   return (
     <>
@@ -183,11 +192,8 @@ export default function OsintFeed() {
           <div class="space-y-2">
             <For each={filtered()}>
               {(item, idx) => (
-                <a
-                  href={item.url || "#"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="block surface-card surface-card-hover p-3.5 transition-all duration-200 group relative overflow-hidden no-underline cursor-pointer"
+                <article
+                  class="surface-card surface-card-hover p-3.5 transition-all duration-200 group relative overflow-hidden"
                   style={idx() < 20 ? `animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: ${idx() * 25}ms` : undefined}
                 >
                   {/* Severity accent line */}
@@ -201,7 +207,9 @@ export default function OsintFeed() {
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2 mb-2 flex-wrap">
                         <SeverityBadge severity={item.severity} />
-                        <span class="text-[11px] text-zinc-600 uppercase tracking-wider font-semibold">{item.source}</span>
+                        <A href={providerHref(item.source)} class="text-[11px] text-zinc-600 uppercase tracking-wider font-semibold no-underline hover:text-blue-300">
+                          {item.source}
+                        </A>
                         <Show when={item.region}>
                           <span class="text-[11px] text-zinc-700">&middot;</span>
                           <span class="text-[11px] text-zinc-600 capitalize">{(item.region || "").replace("_", " ")}</span>
@@ -213,9 +221,14 @@ export default function OsintFeed() {
                       </div>
                       <h3 class="text-sm font-medium text-white leading-snug group-hover:text-blue-50 transition-colors [overflow-wrap:anywhere]">{item.title}</h3>
                       <p class="text-[12px] text-zinc-500 mt-1.5 leading-relaxed line-clamp-2 break-words [overflow-wrap:anywhere]">{item.summary}</p>
-                      <div class="inline-flex items-center gap-1 mt-2 text-[11px] text-zinc-600 group-hover:text-blue-400 transition-colors">
+                      <a
+                        href={item.url || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center gap-1 mt-2 text-[11px] text-zinc-600 transition-colors hover:text-blue-400"
+                      >
                         View source <ExternalLink size={10} />
-                      </div>
+                      </a>
                     </div>
                     <Show when={item.timestamp}>
                       <div class="flex items-center gap-1 flex-shrink-0">
@@ -226,7 +239,7 @@ export default function OsintFeed() {
                       </div>
                     </Show>
                   </div>
-                </a>
+                </article>
               )}
             </For>
           </div>

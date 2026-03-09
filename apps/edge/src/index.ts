@@ -9,6 +9,7 @@ import {
 import { TelegramScraperDO } from "./telegram-scraper-do";
 import { queryTelegramSourceLeaderboard } from "./telegram-source-leaderboard";
 import { queryTelegramSourceHistory } from "./telegram-source-history";
+import { buildOsintSourceSlug, normalizeOsintSourceProfile } from "./osint-source-profile";
 import {
   createEmptySubscriberFeedPreferences,
   filterSubscriberFeedItems,
@@ -120,6 +121,19 @@ type SubscriberAlertRow = {
   rank_reasons_json: string;
   created_at: string;
   read_at: string | null;
+};
+
+type OsintCatalogSource = {
+  id?: string;
+  name?: string;
+  trustTier?: string;
+  latencyTier?: string;
+  sourceType?: string;
+  subscriberValueScore?: number;
+  acquisitionMethod?: string;
+  scrapeRisk?: string;
+  mediaCapability?: string[];
+  tags?: string[];
 };
 
 export interface Env extends Cloudflare.Env {
@@ -2433,6 +2447,44 @@ async function loadSubscriberOsintItems(env: Env): Promise<SubscriberOsintItem[]
     return Array.isArray(payload)
       ? payload.filter((item): item is SubscriberOsintItem => isRecord(item))
       : [];
+  } catch {
+    return [];
+  }
+}
+
+async function loadOsintCatalogSources(env: Env, query: string): Promise<OsintCatalogSource[]> {
+  const backendToken = resolveBackendApiToken(env);
+  if (!backendToken) {
+    return [];
+  }
+  const backendRequest = new Request(
+    resolveBackendEndpointUrl(env, "/api/intel-dashboard/sources"),
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${backendToken}`,
+      },
+      signal: AbortSignal.timeout(20_000),
+    },
+  );
+  const url = new URL(backendRequest.url);
+  url.searchParams.set("q", query);
+  url.searchParams.set("limit", "20");
+
+  let response: Response;
+  try {
+    response = await resolveBackendFetch(env)(new Request(url.toString(), backendRequest));
+  } catch {
+    return [];
+  }
+  if (!response.ok) {
+    return [];
+  }
+  try {
+    const payload = await response.json() as Record<string, unknown> | null;
+    const result = payload && typeof payload === "object" ? payload.result as Record<string, unknown> | undefined : undefined;
+    const items = result && Array.isArray(result.items) ? result.items : [];
+    return items.filter((item): item is OsintCatalogSource => Boolean(item && typeof item === "object"));
   } catch {
     return [];
   }
@@ -5809,6 +5861,41 @@ export default {
           detail: "internal_error",
         });
       }
+    }
+
+    if (path.startsWith("/api/osint/source-history/")) {
+      if (request.method !== "GET") {
+        return privateApiMethodNotAllowed(origin, "GET");
+      }
+      const entitlement = await resolveOptionalFeedEntitlement({ env, user });
+      if (!entitlement.entitled && entitlement.tier !== "subscriber" && entitlement.role !== "owner") {
+        return privateApiJson(origin, 403, { error: "Forbidden" });
+      }
+
+      const providerSlug = decodeURIComponent(path.slice("/api/osint/source-history/".length)).trim().toLowerCase();
+      if (!providerSlug) {
+        return privateApiJson(origin, 400, { error: "Invalid provider" });
+      }
+
+      const items = await loadSubscriberOsintItems(env);
+      const matchingItems = items.filter((item) => buildOsintSourceSlug(normalizeString(item.source) ?? "") === providerSlug);
+      if (matchingItems.length < 1) {
+        return privateApiJson(origin, 404, { error: "Provider not found" });
+      }
+
+      const sourceName = normalizeString(matchingItems[0]?.source) ?? "";
+      const catalogItems = sourceName ? await loadOsintCatalogSources(env, sourceName) : [];
+      const sourceMeta = catalogItems.find((item) => buildOsintSourceSlug(normalizeString(item.name) ?? "") === providerSlug) ?? null;
+      const payload = normalizeOsintSourceProfile({
+        providerSlug,
+        items,
+        sourceMeta,
+        owner: (entitlement.role ?? entitlement.tier ?? "").toLowerCase() === "owner",
+      });
+      if (!payload) {
+        return privateApiJson(origin, 404, { error: "Provider not found" });
+      }
+      return privateApiJson(origin, 200, payload);
     }
 
     if (path === "/api/subscriber/feed-preferences") {

@@ -31,6 +31,7 @@ import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 export const AUTHENTICATED_BROWSER_ROUTES = Object.freeze([
   { path: DASHBOARD_HOME_PATH, heading: "Intel Dashboard Overview" },
   { path: "/osint", heading: "OSINT Feed" },
+  { path: "/osint/source/gdelt-project", heading: "GDELT Project" },
   { path: "/my-feed", heading: "My Feed" },
   { path: "/telegram", heading: "Telegram Intel" },
   { path: "/map", heading: "Threat Map" },
@@ -43,6 +44,7 @@ export const AUTHENTICATED_BROWSER_ROUTES = Object.freeze([
 export const AUTHENTICATED_BROWSER_NOERROR_ROUTES = Object.freeze([
   DASHBOARD_HOME_PATH,
   "/osint",
+  "/osint/source/gdelt-project",
   "/my-feed",
   "/telegram",
   "/map",
@@ -93,6 +95,13 @@ export const BROWSER_METADATA_EXPECTATIONS = Object.freeze([
     title: OSINT_TITLE,
     description: OSINT_DESCRIPTION,
     canonicalHref: siteUrl("/osint"),
+    robotsPattern: /noindex,nofollow/i,
+  },
+  {
+    path: "/osint/source/gdelt-project",
+    title: "GDELT Project — OSINT Provider Profile | Intel Dashboard",
+    description: "Subscriber-only OSINT provider profile and current-window source history.",
+    canonicalHref: siteUrl("/osint/source/gdelt-project"),
     robotsPattern: /noindex,nofollow/i,
   },
   {
@@ -167,6 +176,7 @@ export const APP_ROUTE_FILE_CLASSIFICATION = Object.freeze({
   "login.tsx": "browser-public-auth",
   "map.tsx": "browser-authenticated",
   "my-feed.tsx": "browser-authenticated",
+  "[provider].tsx": "browser-authenticated",
   "overview.tsx": "browser-authenticated",
   "osint.tsx": "browser-authenticated",
   "signup.tsx": "browser-public-auth",
@@ -215,6 +225,7 @@ export const EDGE_API_ROUTE_CLASSIFICATION = Object.freeze({
   "/api/telegram/stream": "session-telegram-stream",
   "/api/subscriber/feed-preferences": "subscriber-preferences",
   "/api/subscriber/my-feed": "subscriber-feed",
+  "/api/osint/source-history/[provider]": "subscriber-osint-source-profile",
   "/api/status": "owner-ops-read",
   "/api/telegram": "session-feed",
   "/api/intel": "session-feed",

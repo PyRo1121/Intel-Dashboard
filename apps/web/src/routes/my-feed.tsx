@@ -1,4 +1,4 @@
-import { createResource, createSignal, For, Show } from "solid-js";
+import { createEffect, createResource, createSignal, For, Show } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
 import { BellRing, Clock, ExternalLink, MessageSquare, Radio } from "lucide-solid";
 import { useAuth } from "~/lib/auth";
@@ -27,10 +27,13 @@ export default function MyFeedPage() {
   const nowMs = useWallClock(1000);
 
   const [preferences, { refetch: refetchPreferences }] = createResource(
-    () => true,
+    () => (entitled() ? "enabled" : null),
     () => fetchSubscriberFeedPreferences(),
   );
-  const [feed, { refetch: refetchFeed }] = createResource(scope, (nextScope) => fetchSubscriberFeed(nextScope));
+  const [feed, { refetch: refetchFeed }] = createResource(
+    () => (entitled() ? scope() : null),
+    (nextScope) => fetchSubscriberFeed(nextScope),
+  );
 
   const items = () => feed()?.items ?? [];
   const loadingInitial = () => isInitialResourceLoading(feed.state, items().length);
@@ -44,13 +47,9 @@ export default function MyFeedPage() {
     setWatchCategoriesInput(prefs.watchCategories.join(", "));
   };
 
-  createResource(
-    preferences,
-    async (prefs) => {
-      applyPreferencesToForm(prefs);
-      return null;
-    },
-  );
+  createEffect(() => {
+    applyPreferencesToForm(preferences());
+  });
 
   const persistPreferences = async () => {
     setSaving(true);
@@ -62,17 +61,22 @@ export default function MyFeedPage() {
       watchTags: watchTagsInput().split(",").map((value) => value.trim()).filter(Boolean),
       watchCategories: watchCategoriesInput().split(",").map((value) => value.trim()).filter(Boolean),
     };
-    const savedPrefs = await saveSubscriberFeedPreferences(payload);
-    if (!savedPrefs) {
-      setSaved("Save failed");
+    try {
+      const savedPrefs = await saveSubscriberFeedPreferences(payload);
+      if (!savedPrefs) {
+        setSaved("Save failed");
+        return;
+      }
+      applyPreferencesToForm(savedPrefs);
+      setSaved("Preferences saved");
+      await refetchPreferences();
+      await refetchFeed();
+    } catch (error) {
+      console.error("Failed to save subscriber feed preferences", error);
+      setSaved("Failed to save preferences. Please try again.");
+    } finally {
       setSaving(false);
-      return;
     }
-    applyPreferencesToForm(savedPrefs);
-    setSaved("Preferences saved");
-    await refetchPreferences();
-    await refetchFeed();
-    setSaving(false);
   };
 
   return (

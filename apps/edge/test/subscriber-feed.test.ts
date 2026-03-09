@@ -27,6 +27,7 @@ test("normalizeSubscriberFeedPreferences trims and deduplicates string lists", (
 test("normalize feed items mark favorite/watch matches and sort by combined score", () => {
   const prefs = createEmptySubscriberFeedPreferences();
   prefs.favoriteChannels = ["alpha"];
+  prefs.favoriteSources = ["example desk"];
   prefs.watchRegions = ["ukraine"];
 
   const telegram = normalizeTelegramSubscriberFeedItem(
@@ -60,8 +61,34 @@ test("normalize feed items mark favorite/watch matches and sort by combined scor
 
   assert.equal(telegram.favoriteMatch, true);
   assert.equal(telegram.watchMatch, true);
-  assert.equal(osint.favoriteMatch, false);
+  assert.equal(osint.favoriteMatch, true);
+  assert.equal(osint.signalScore, 78);
+  assert.equal(osint.combinedScore, 96);
   assert.equal(sortSubscriberFeedItems([osint, telegram])[0]?.sourceSurface, "telegram");
+});
+
+test("normalize feed preferences ignores non-string watch values", () => {
+  const prefs = normalizeSubscriberFeedPreferences({
+    watchTags: ["alpha", 42, null, " beta "],
+  });
+
+  assert.deepEqual(prefs.watchTags, ["alpha", "beta"]);
+});
+
+test("telegram feed items fall back to original text when translations are blank", () => {
+  const item = normalizeTelegramSubscriberFeedItem(
+    {
+      event_id: "evt-blank",
+      datetime: "2026-03-09T12:00:00.000Z",
+      category: "ukraine",
+      text_en: "   ",
+      text_original: "Original Telegram copy",
+    },
+    createEmptySubscriberFeedPreferences(),
+  );
+
+  assert.equal(item.title, "Original Telegram copy");
+  assert.equal(item.summary, "Original Telegram copy");
 });
 
 test("scope filters reduce the mixed feed correctly", () => {

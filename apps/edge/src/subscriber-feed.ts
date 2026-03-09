@@ -103,7 +103,11 @@ function includesNormalized(list: string[], value: string | undefined): boolean 
 
 function intersectsNormalized(list: string[], values: string[] | undefined): boolean {
   if (list.length < 1 || !Array.isArray(values)) return false;
-  const normalized = new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean));
+  const normalized = new Set(
+    values
+      .map((value) => (typeof value === "string" ? value.trim().toLowerCase() : ""))
+      .filter(Boolean),
+  );
   for (const value of list) {
     if (normalized.has(value)) return true;
   }
@@ -117,6 +121,9 @@ export function normalizeTelegramSubscriberFeedItem(
   const channel = event.source_channels?.[0] ?? event.first_reporter_channel ?? "";
   const sourceLabel = event.source_labels?.[0] ?? event.first_reporter_label ?? "Telegram";
   const tags = Array.isArray(event.domain_tags) ? event.domain_tags : [];
+  const text = [event.text_en, event.text_original]
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .find((value): value is string => value.length > 0) ?? "";
   const favoriteMatch = includesNormalized(preferences.favoriteChannels, channel);
   const watchMatch =
     includesNormalized(preferences.watchRegions, event.category) ||
@@ -135,8 +142,8 @@ export function normalizeTelegramSubscriberFeedItem(
     id: `telegram:${event.event_id}`,
     sourceSurface: "telegram",
     timestamp: event.datetime,
-    title: (event.text_en || event.text_original || "").trim().slice(0, 180),
-    summary: (event.text_en || event.text_original || "").trim(),
+    title: text.slice(0, 180),
+    summary: text,
     link: event.sources?.[0]?.link ?? "",
     sourceLabel,
     channelOrProvider: channel,
@@ -182,7 +189,7 @@ export function normalizeOsintSubscriberFeedItem(
     severity: item.severity,
     region: item.region,
     tags,
-    signalScore: combinedScore,
+    signalScore: severityBase,
     rankReasons: [],
     favoriteMatch,
     watchMatch,

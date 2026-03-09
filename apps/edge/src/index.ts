@@ -2294,20 +2294,15 @@ async function loadSubscriberFeedPreferences(env: Env, userId: string) {
 async function saveSubscriberFeedPreferences(env: Env, userId: string, preferences: SubscriberFeedPreferences): Promise<void> {
   await ensureSubscriberFeedSchema(env);
   const updatedAt = new Date().toISOString();
-  await env.INTEL_DB.prepare(
-    `INSERT OR REPLACE INTO subscriber_feed_preferences (user_id, updated_at) VALUES (?, ?)`,
-  ).bind(userId, updatedAt).run();
-
-  const deleteStatements = [
+  const statements = [
+    env.INTEL_DB.prepare(
+      `INSERT OR REPLACE INTO subscriber_feed_preferences (user_id, updated_at) VALUES (?, ?)`,
+    ).bind(userId, updatedAt),
     env.INTEL_DB.prepare(`DELETE FROM subscriber_feed_favorite_channels WHERE user_id = ?`).bind(userId),
     env.INTEL_DB.prepare(`DELETE FROM subscriber_feed_favorite_sources WHERE user_id = ?`).bind(userId),
     env.INTEL_DB.prepare(`DELETE FROM subscriber_feed_watch_regions WHERE user_id = ?`).bind(userId),
     env.INTEL_DB.prepare(`DELETE FROM subscriber_feed_watch_tags WHERE user_id = ?`).bind(userId),
     env.INTEL_DB.prepare(`DELETE FROM subscriber_feed_watch_categories WHERE user_id = ?`).bind(userId),
-  ];
-  await env.INTEL_DB.batch(deleteStatements);
-
-  const insertStatements = [
     ...preferences.favoriteChannels.map((value) =>
       env.INTEL_DB.prepare(`INSERT INTO subscriber_feed_favorite_channels (user_id, channel) VALUES (?, ?)`).bind(userId, value),
     ),
@@ -2324,9 +2319,7 @@ async function saveSubscriberFeedPreferences(env: Env, userId: string, preferenc
       env.INTEL_DB.prepare(`INSERT INTO subscriber_feed_watch_categories (user_id, category) VALUES (?, ?)`).bind(userId, value),
     ),
   ];
-  if (insertStatements.length > 0) {
-    await env.INTEL_DB.batch(insertStatements);
-  }
+  await env.INTEL_DB.batch(statements);
 }
 
 async function loadTelegramCanonicalEvents(env: Env): Promise<Array<Record<string, unknown>>> {
@@ -2358,8 +2351,13 @@ async function loadTelegramCanonicalEvents(env: Env): Promise<Array<Record<strin
 }
 
 async function loadSubscriberOsintItems(env: Env): Promise<SubscriberOsintItem[]> {
-  const id = env.INTEL_CACHE.idFromName("main");
-  const response = await env.INTEL_CACHE.get(id).fetch(new Request("https://do/api/intel"));
+  let response: Response;
+  try {
+    const id = env.INTEL_CACHE.idFromName("main");
+    response = await env.INTEL_CACHE.get(id).fetch(new Request("https://do/api/intel"));
+  } catch {
+    return [];
+  }
   if (!response.ok) {
     return [];
   }
@@ -5590,6 +5588,9 @@ export default {
     }
 
     if (path === "/api/subscriber/my-feed") {
+      if (request.method !== "GET") {
+        return privateApiMethodNotAllowed(origin, "GET");
+      }
       if (!env.INTEL_DB) {
         return privateApiJson(origin, 503, { error: "Subscriber feed unavailable" });
       }

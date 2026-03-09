@@ -73,6 +73,25 @@ test("my feed client helpers normalize success and failure payloads", async () =
       watchCategories: [],
     });
     assert.ok(saved);
+
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: "forbidden" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      })) as typeof fetch;
+
+    assert.equal(await fetchSubscriberFeed("all"), null);
+    assert.equal(await fetchSubscriberFeedPreferences(), null);
+    assert.equal(
+      await saveSubscriberFeedPreferences({
+        favoriteChannels: [],
+        favoriteSources: [],
+        watchRegions: [],
+        watchTags: [],
+        watchCategories: [],
+      }),
+      null,
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

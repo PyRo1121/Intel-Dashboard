@@ -8,6 +8,7 @@ import {
   onCleanup,
   type JSX,
 } from "solid-js";
+import { resolveAuthUserRole } from "~/lib/auth-user";
 import {
   LayoutDashboard,
   Radio,
@@ -108,7 +109,7 @@ export default function Sidebar() {
     return location.pathname.startsWith(href);
   };
 
-  const role = () => resolveEntitlementRole(auth.user()?.entitlement?.role, auth.user()?.entitlement?.tier);
+  const role = () => resolveAuthUserRole(auth.user());
   const navItems = () => (role() === "owner" ? [...mainNavItems, ownerNavItem] : mainNavItems);
 
   const renderNavItem = (item: NavItem, index: number, opts?: { collapsed?: boolean }) => {

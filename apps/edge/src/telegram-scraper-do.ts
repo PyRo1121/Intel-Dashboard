@@ -17,6 +17,7 @@ import {
   type ImageTranslationJob,
 } from "./translator";
 import { resolveAiGatewayToken } from "./gateway-token";
+import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
 
 // ============================================================================
@@ -1180,7 +1181,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
         .exec("SELECT COUNT(*) as cnt FROM seen_messages")
         .one() as { cnt: number } | null;
 
-      return Response.json({
+      return jsonResponse({
         status: "ok",
         isRunning: this.isRunning,
         lastRun: this.lastRunMs
@@ -1201,23 +1202,20 @@ export class TelegramScraperDO extends DurableObject<Env> {
 
     if (url.pathname === "/trigger") {
       if (this.isRunning) {
-        return Response.json({ status: "already_running" });
+        return jsonResponse({ status: "already_running" });
       }
       this.ctx.waitUntil(this.runScrape());
-      return Response.json({ status: "triggered" });
+      return jsonResponse({ status: "triggered" });
     }
 
     if (url.pathname === "/state") {
       const state = await this.loadPreviousState();
       if (!state) {
-        return Response.json({ error: "state_unavailable" }, { status: 503 });
+        return jsonResponse({ error: "state_unavailable" }, { status: 503 });
       }
-      return new Response(JSON.stringify(state), {
+      return jsonResponse(state, {
         status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-        },
+        headers: { "Cache-Control": "no-store" },
       });
     }
 
@@ -1249,7 +1247,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
             "SELECT signature, forced_cluster, split, updated_at FROM dedupe_feedback ORDER BY updated_at DESC LIMIT 500",
           )
           .toArray() as Array<{ signature: string; forced_cluster: string | null; split: number; updated_at: number }>;
-        return Response.json({
+        return jsonResponse({
           ok: true,
           count: rows.length,
           rows: rows.map((row) => ({
@@ -1270,7 +1268,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
         try {
           payload = (await request.json()) as typeof payload;
         } catch {
-          return Response.json({ ok: false, error: "invalid_json" }, { status: 400 });
+          return jsonResponse({ ok: false, error: "invalid_json" }, { status: 400 });
         }
 
         const action = typeof payload.action === "string" ? payload.action.trim().toLowerCase() : "";
@@ -1285,7 +1283,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
           : "";
 
         if (signatures.length === 0) {
-          return Response.json({ ok: false, error: "missing_signatures" }, { status: 400 });
+          return jsonResponse({ ok: false, error: "missing_signatures" }, { status: 400 });
         }
 
         const now = Date.now();
@@ -1298,7 +1296,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
               now,
             );
           }
-          return Response.json({ ok: true, action, updated: signatures.length });
+          return jsonResponse({ ok: true, action, updated: signatures.length });
         }
 
         if (action === "merge") {
@@ -1311,7 +1309,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
               now,
             );
           }
-          return Response.json({ ok: true, action, updated: signatures.length, targetCluster: effectiveCluster });
+          return jsonResponse({ ok: true, action, updated: signatures.length, targetCluster: effectiveCluster });
         }
 
         if (action === "clear") {
@@ -1321,13 +1319,13 @@ export class TelegramScraperDO extends DurableObject<Env> {
               signature,
             );
           }
-          return Response.json({ ok: true, action, updated: signatures.length });
+          return jsonResponse({ ok: true, action, updated: signatures.length });
         }
 
-        return Response.json({ ok: false, error: "invalid_action" }, { status: 400 });
+        return jsonResponse({ ok: false, error: "invalid_action" }, { status: 400 });
       }
 
-      return Response.json({ ok: false, error: "method_not_allowed" }, { status: 405 });
+      return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405 });
     }
 
     return new Response("Not Found", { status: 404 });

@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createRoot, createSignal } from "solid-js";
 import { formatAgeCompactFromMs, formatRelativeTimeAt } from "./utils.ts";
-import { buildFreshnessStatusAt } from "./freshness.ts";
+import { buildFreshnessStatusAt, useFeedFreshness } from "./freshness.ts";
 import { nextWallClockDelay } from "./live-refresh.ts";
 
 test("formatRelativeTimeAt formats relative windows from injected now", () => {
@@ -44,6 +45,46 @@ test("formatAgeCompactFromMs formats second and minute precision labels", () => 
   assert.equal(formatAgeCompactFromMs(125_000), "2m 05s");
   assert.equal(formatAgeCompactFromMs(3 * 60 * 60_000 + 7 * 60_000), "3h 07m");
   assert.equal(formatAgeCompactFromMs(2 * 24 * 60 * 60_000 + 4 * 60 * 60_000), "2d 04h");
+});
+
+test("useFeedFreshness derives feed status and age labels from reactive timestamps", () => {
+  createRoot((dispose) => {
+    const base = Date.UTC(2026, 2, 7, 12, 0, 0);
+    const [nowMs] = createSignal(base);
+    const [latestTimestampMs] = createSignal(base - 5 * 60_000);
+    const freshness = useFeedFreshness({
+      nowMs,
+      latestTimestampMs,
+      thresholds: { liveMaxMinutes: 20, delayedMaxMinutes: 90 },
+      subject: "Feed",
+      labels: { noData: "Unknown" },
+    });
+
+    assert.equal(freshness.feedFreshness().state, "live");
+    assert.equal(freshness.latestFeedAgeLabel(), "5m 00s");
+
+    dispose();
+  });
+});
+
+test("useFeedFreshness handles no-data timestamps", () => {
+  createRoot((dispose) => {
+    const base = Date.UTC(2026, 2, 7, 12, 0, 0);
+    const [nowMs] = createSignal(base);
+    const [latestTimestampMs] = createSignal(0);
+    const freshness = useFeedFreshness({
+      nowMs,
+      latestTimestampMs,
+      thresholds: { liveMaxMinutes: 20, delayedMaxMinutes: 90 },
+      subject: "Feed",
+      labels: { noData: "Unknown" },
+    });
+
+    assert.equal(freshness.feedFreshness().label, "Unknown");
+    assert.equal(freshness.latestFeedAgeMs(), null);
+
+    dispose();
+  });
 });
 
 test("nextWallClockDelay aligns ticks to the next interval boundary", () => {

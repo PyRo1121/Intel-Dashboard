@@ -1,10 +1,11 @@
 import { Meta, Title } from "@solidjs/meta";
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
 import { useAuth } from "~/lib/auth";
+import { isAuthUserOwner, resolveAuthUserRole } from "~/lib/auth-user";
 import { fetchClientJson } from "~/lib/client-json";
 import { getCrmCustomerCacheSourceLabel } from "~/lib/crm-customer-cache";
 import { formatEventLabel } from "~/lib/event-label";
-import { formatSubscriptionStatus, isOwnerRole, resolveEntitlementRole } from "@intel-dashboard/shared/entitlement.ts";
+import { formatSubscriptionStatus } from "@intel-dashboard/shared/entitlement.ts";
 import {
   getCrmRevenueSourceLabel,
   getCrmSummaryStatusLabel,
@@ -315,8 +316,8 @@ function computeHitRatePercent(input: { cacheHits?: number; cacheMisses?: number
 
 export default function CrmRoute() {
   const auth = useAuth();
-  const role = () => resolveEntitlementRole(auth.user()?.entitlement?.role, auth.user()?.entitlement?.tier);
-  const isOwner = () => isOwnerRole(role());
+  const role = () => resolveAuthUserRole(auth.user());
+  const isOwner = () => isAuthUserOwner(auth.user());
   const [crm, { refetch }] = createResource(fetchCrmOverview);
   const [aiWindow, setAiWindow] = createSignal<"15m" | "1h" | "24h" | "7d" | "30d">("1h");
   const aiTelemetrySource = createMemo(() => (isOwner() ? aiWindow() : undefined));

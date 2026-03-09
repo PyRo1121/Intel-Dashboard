@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { resolveBackendEndpointUrl, usesBackendServiceBinding } from "./backend-origin";
+import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
 
 interface Env extends Cloudflare.Env {
@@ -156,10 +157,12 @@ export class IntelCacheDO extends DurableObject<Env> {
         };
       }
 
-      return new Response(
-        JSON.stringify({ status: "cache_busted", refreshed: cacheInfo, errors: errors.length ? errors : undefined, cacheKeys: [...this.cache.keys()] }),
-        { headers: { "Content-Type": "application/json" } },
-      );
+      return jsonResponse({
+        status: "cache_busted",
+        refreshed: cacheInfo,
+        errors: errors.length ? errors : undefined,
+        cacheKeys: [...this.cache.keys()],
+      });
     }
 
     // Health / status endpoint
@@ -180,17 +183,14 @@ export class IntelCacheDO extends DurableObject<Env> {
         };
       }
 
-      return new Response(
-        JSON.stringify({
-          status: "ok",
-          cached: cacheInfo,
-          nextAlarm: currentAlarm
-            ? new Date(currentAlarm).toISOString()
-            : null,
-          refreshing: this.refreshing,
-        }),
-        { headers: { "Content-Type": "application/json" } },
-      );
+      return jsonResponse({
+        status: "ok",
+        cached: cacheInfo,
+        nextAlarm: currentAlarm
+          ? new Date(currentAlarm).toISOString()
+          : null,
+        refreshing: this.refreshing,
+      });
     }
 
     if (path === "/api/whales") {
@@ -268,10 +268,7 @@ export class IntelCacheDO extends DurableObject<Env> {
 
   private async handleAdminGuard(request: Request): Promise<Response> {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ ok: false, reason: "method_not_allowed" }), {
-        status: 405,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ ok: false, reason: "method_not_allowed" }, { status: 405 });
     }
 
     let payload: {
@@ -283,10 +280,7 @@ export class IntelCacheDO extends DurableObject<Env> {
     try {
       payload = (await request.json()) as typeof payload;
     } catch {
-      return new Response(JSON.stringify({ ok: false, reason: "invalid_json" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ ok: false, reason: "invalid_json" }, { status: 400 });
     }
 
     const scope = typeof payload.scope === "string" ? payload.scope.trim() : "";
@@ -295,28 +289,19 @@ export class IntelCacheDO extends DurableObject<Env> {
     const clientIp = typeof payload.clientIp === "string" ? payload.clientIp.trim() : "unknown";
 
     if (!scope || !nonce || !Number.isFinite(timestampMs)) {
-      return new Response(JSON.stringify({ ok: false, reason: "invalid_payload" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ ok: false, reason: "invalid_payload" }, { status: 400 });
     }
 
     const now = Date.now();
     if (Math.abs(now - timestampMs) > 5 * 60 * 1000) {
-      return new Response(JSON.stringify({ ok: false, reason: "timestamp_out_of_window" }), {
-        status: 409,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ ok: false, reason: "timestamp_out_of_window" }, { status: 409 });
     }
 
     const nonceKey = `admin:nonce:${scope}:${nonce}`;
     const replaySeen = await this.ctx.storage.get<number>(nonceKey);
     if (typeof replaySeen === "number") {
       if (now - replaySeen <= ADMIN_NONCE_TTL_SECONDS * 1000) {
-        return new Response(JSON.stringify({ ok: false, reason: "replay_detected" }), {
-          status: 409,
-          headers: { "Content-Type": "application/json" },
-        });
+        return jsonResponse({ ok: false, reason: "replay_detected" }, { status: 409 });
       }
       await this.ctx.storage.delete(nonceKey);
     }
@@ -325,70 +310,49 @@ export class IntelCacheDO extends DurableObject<Env> {
     const rateKey = `admin:rl:${scope}:${clientIp}:${window}`;
     const hits = (await this.ctx.storage.get<number>(rateKey)) ?? 0;
     if (hits >= ADMIN_RATE_LIMIT_PER_WINDOW) {
-      return new Response(JSON.stringify({
+      return jsonResponse({
         ok: false,
         reason: "rate_limited",
         retryAfterMs: ADMIN_RATE_WINDOW_MS - (now % ADMIN_RATE_WINDOW_MS),
-      }), {
-        status: 429,
-        headers: { "Content-Type": "application/json" },
-      });
+      }, { status: 429 });
     }
 
     await this.ctx.storage.put(rateKey, hits + 1);
     await this.ctx.storage.put(nonceKey, now);
 
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonResponse({ ok: true }, { status: 200 });
   }
 
   private async handleWebhookDedupe(request: Request): Promise<Response> {
     if (request.method !== "POST") {
-      return new Response(JSON.stringify({ ok: false, reason: "method_not_allowed" }), {
-        status: 405,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ ok: false, reason: "method_not_allowed" }, { status: 405 });
     }
 
     let payload: { provider?: unknown; eventId?: unknown };
     try {
       payload = (await request.json()) as typeof payload;
     } catch {
-      return new Response(JSON.stringify({ ok: false, reason: "invalid_json" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ ok: false, reason: "invalid_json" }, { status: 400 });
     }
 
     const provider = typeof payload.provider === "string" ? payload.provider.trim().toLowerCase() : "";
     const eventId = typeof payload.eventId === "string" ? payload.eventId.trim() : "";
 
     if (!provider || !eventId) {
-      return new Response(JSON.stringify({ ok: false, reason: "invalid_payload" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return jsonResponse({ ok: false, reason: "invalid_payload" }, { status: 400 });
     }
 
     const key = `webhook:${provider}:${eventId}`;
     const seen = await this.ctx.storage.get<number>(key);
     if (typeof seen === "number") {
       if (Date.now() - seen <= WEBHOOK_EVENT_TTL_SECONDS * 1000) {
-        return new Response(JSON.stringify({ ok: false, duplicate: true }), {
-          status: 409,
-          headers: { "Content-Type": "application/json" },
-        });
+        return jsonResponse({ ok: false, duplicate: true }, { status: 409 });
       }
       await this.ctx.storage.delete(key);
     }
 
     await this.ctx.storage.put(key, Date.now());
-    return new Response(JSON.stringify({ ok: true, duplicate: false }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonResponse({ ok: true, duplicate: false }, { status: 200 });
   }
 
   async alarm(): Promise<void> {
@@ -484,10 +448,7 @@ export class IntelCacheDO extends DurableObject<Env> {
       });
     }
 
-    return new Response(JSON.stringify([]), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonResponse([], { status: 200 });
   }
 
   private clampPositiveInt(raw: string | null, fallback: number, max: number): number {

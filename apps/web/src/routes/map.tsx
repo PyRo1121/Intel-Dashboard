@@ -12,7 +12,7 @@ import {
 } from "~/lib/freshness";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import SeverityBadge from "~/components/ui/SeverityBadge";
-import { formatRelativeTimeAt, isInitialResourceLoading } from "~/lib/utils";
+import { countBySeverity, formatRelativeTimeAt, isInitialResourceLoading } from "~/lib/utils";
 import { Globe, X as XIcon, MapPin } from "lucide-solid";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { MAP_DESCRIPTION, MAP_TITLE } from "@intel-dashboard/shared/route-meta.ts";
@@ -92,13 +92,19 @@ function buildRegions(items: IntelItem[]): RegionSummary[] {
 
   return REGION_ORDER.map((region) => {
     const regionItems = grouped[region] ?? [];
-    const critical = regionItems.filter((i) => i.severity === "critical").length;
-    const high = regionItems.filter((i) => i.severity === "high").length;
-    const medium = regionItems.filter((i) => i.severity === "medium").length;
-    const low = regionItems.filter((i) => i.severity === "low").length;
+    const counts = countBySeverity(regionItems);
     const lastUpdate = regionItems[0]?.timestamp ?? new Date().toISOString();
     const topItems = regionItems.slice(0, 5);
-    return { region, eventCount: regionItems.length, critical, high, medium, low, topItems, lastUpdate };
+    return {
+      region,
+      eventCount: regionItems.length,
+      critical: counts.critical,
+      high: counts.high,
+      medium: counts.medium,
+      low: counts.low,
+      topItems,
+      lastUpdate,
+    };
   });
 }
 

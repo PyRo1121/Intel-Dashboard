@@ -4,6 +4,7 @@ import { TriangleAlert, Radio, Shield, ExternalLink, ArrowUpRight, Activity } fr
 import StatCard from "~/components/ui/StatCard";
 import SeverityBadge from "~/components/ui/SeverityBadge";
 import { fetchIntelFeed } from "~/lib/intel-feed";
+import { readLatestArray } from "~/lib/resource-latest";
 import {
   freshnessBannerTone,
   freshnessPillTone,
@@ -13,7 +14,7 @@ import {
 } from "~/lib/freshness";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import type { IntelItem } from "~/lib/types";
-import { formatRelativeTimeAt } from "~/lib/utils";
+import { countBySeverity, formatRelativeTimeAt, isInitialResourceLoading } from "~/lib/utils";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { FREE_FEED_DELAY_MINUTES, PREMIUM_PRICE_USD, TRIAL_DAYS } from "@intel-dashboard/shared/access-offers.ts";
 import { OVERVIEW_DESCRIPTION, OVERVIEW_OG_DESCRIPTION, OVERVIEW_TITLE, OVERVIEW_TWITTER_DESCRIPTION } from "@intel-dashboard/shared/route-meta.ts";
@@ -27,10 +28,9 @@ export default function OverviewPage(props: { canonicalHref: string }) {
     void refetch();
   }, 10_000, { runImmediately: true });
 
-  const intelItems = () => intel.latest ?? intel() ?? [];
-  const loadingInitial = () => intel.state === "refreshing" && intelItems().length === 0;
-  const criticalCount = () => intelItems().filter((i) => i.severity === "critical").length;
-  const highCount = () => intelItems().filter((i) => i.severity === "high").length;
+  const intelItems = () => readLatestArray(intel.latest, intel());
+  const loadingInitial = () => isInitialResourceLoading(intel.state, intelItems().length);
+  const severityCounts = () => countBySeverity(intelItems());
   const latestIntelTs = createMemo(() => maxIsoTimestamp(intelItems().map((item) => item.timestamp)));
   const freshness = useFeedFreshness({
     nowMs,
@@ -86,8 +86,8 @@ export default function OverviewPage(props: { canonicalHref: string }) {
 
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <StatCard icon={<TriangleAlert size={20} />} label="OSINT Events" value={intelItems().length || "-"} accentColor="blue" delay={0} />
-          <StatCard icon={<Shield size={20} />} label="Critical" value={criticalCount() || "-"} accentColor="red" delay={1} />
-          <StatCard icon={<Radio size={20} />} label="High Priority" value={highCount() || "-"} accentColor="amber" delay={2} />
+          <StatCard icon={<Shield size={20} />} label="Critical" value={severityCounts().critical || "-"} accentColor="red" delay={1} />
+          <StatCard icon={<Radio size={20} />} label="High Priority" value={severityCounts().high || "-"} accentColor="amber" delay={2} />
         </div>
 
         <div>

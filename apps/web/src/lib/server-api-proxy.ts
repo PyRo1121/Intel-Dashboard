@@ -135,3 +135,9 @@ export async function proxyAuthenticatedApi(event: APIEvent, path: string): Prom
 
   return applyPrivateApiDefaults(upstream);
 }
+
+export function createProxyGetHandler(path: string) {
+  return async function GET(event: APIEvent): Promise<Response> {
+    return proxyAuthenticatedApi(event, path);
+  };
+}

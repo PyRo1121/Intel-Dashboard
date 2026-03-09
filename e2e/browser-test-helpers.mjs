@@ -208,11 +208,15 @@ export async function waitForCrmDashboard(page) {
   return crmSearch;
 }
 
-export async function openCrmDashboard(page) {
-  await page.goto(`${EDGE_BASE_URL}/crm`, {
+export async function openDashboardPage(page, path) {
+  await page.goto(`${EDGE_BASE_URL}${path}`, {
     waitUntil: "networkidle",
     timeout: 45_000,
   });
+}
+
+export async function openCrmDashboard(page) {
+  await openDashboardPage(page, "/crm");
   return waitForCrmDashboard(page);
 }
 
@@ -227,10 +231,7 @@ export async function waitForBillingDashboard(page) {
 }
 
 export async function openBillingDashboard(page) {
-  await page.goto(`${EDGE_BASE_URL}/billing`, {
-    waitUntil: "networkidle",
-    timeout: 45_000,
-  });
+  await openDashboardPage(page, "/billing");
   return waitForBillingDashboard(page);
 }
 

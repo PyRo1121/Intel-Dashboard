@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  openDashboardPage,
   openBillingDashboard,
   openCrmDashboard,
   openOwnerCrmPanelByKeyboard,
@@ -108,10 +109,7 @@ test("owner-admin CRM keyboard navigation stays intact", async (t) => {
       const crmSearch = await openCrmDashboard(page);
       await openOwnerCrmPanelByKeyboard(page, crmSearch);
 
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const overviewLink = page.getByRole("link", { name: "Overview" }).first();
       await overviewLink.focus();

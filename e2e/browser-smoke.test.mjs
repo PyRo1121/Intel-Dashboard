@@ -5,6 +5,7 @@ import test from "node:test";
 import { chromium } from "@playwright/test";
 import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 import {
+  openDashboardPage,
   openBillingDashboard,
   openCrmDashboard,
   openOwnerCrmPanelByKeyboard,
@@ -1165,10 +1166,7 @@ test("browser-authenticated CRM and sidebar support keyboard-only navigation", a
       const crmSearch = await openCrmDashboard(page);
       await openOwnerCrmPanelByKeyboard(page, crmSearch);
 
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const overviewLink = page.getByRole("link", { name: "Overview" }).first();
       await overviewLink.focus();

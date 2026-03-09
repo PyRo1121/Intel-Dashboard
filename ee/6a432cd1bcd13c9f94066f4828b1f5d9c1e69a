@@ -1,0 +1,39 @@
+apps/edge/src/telegram-source-performance.ts
+  c181ae45e78ce708 1-207
+apps/web/src/routes/telegram.tsx
+  c181ae45e78ce708 27,47-48,54,70-71,74-75,240-242,244-252,319-321,370,383-390,675-705,711-715,804-808,815-819
+apps/web/src/lib/telegram-premium-feed.ts
+  c181ae45e78ce708 1-78
+docs/plans/2026-03-09-subscriber-telegram-signal-design.md
+  c181ae45e78ce708 1-68
+apps/web/src/lib/auth-user.ts
+  c181ae45e78ce708 29-33
+apps/edge/src/telegram-scraper-do.ts
+  c181ae45e78ce708 22-25,132-134,186-198,451-466,468-475,805-826,830-852,999,1161-1166,1180,1202-1249,1252,1254-1261,1271-1272,1277-1279,1282-1283,1291,1301,1314-1318
+apps/web/src/lib/telegram-premium-feed.test.ts
+  c181ae45e78ce708 1-69
+apps/web/src/lib/auth-user.test.ts
+  c181ae45e78ce708 5,26-30
+apps/edge/test/telegram-source-performance.test.ts
+  c181ae45e78ce708 1-116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.8",
+  "base_commit_sha": "ee6a432cd1bcd13c9f94066f4828b1f5d9c1e69a",
+  "prompts": {
+    "c181ae45e78ce708": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd208-151b-7d02-841e-19206e0730d0",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 809,
+      "total_deletions": 18,
+      "accepted_lines": 805,
+      "overriden_lines": 0
+    }
+  }
+}

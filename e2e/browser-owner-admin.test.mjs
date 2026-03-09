@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
+  openBillingDashboard,
+  openCrmDashboard,
   openOwnerCrmPanelByKeyboard,
   openCrmSelectedUserPanel,
   assertOwnerBillingBypassNotices,
@@ -23,12 +25,7 @@ test("owner-admin billing actions surface owner bypass notices", async (t) => {
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/billing`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
-
-      const notice = await waitForBillingDashboard(page);
+      const notice = await openBillingDashboard(page);
       await assertOwnerBillingBypassNotices(page, notice);
 
       await page.getByTestId("billing-activity-surface").waitFor({ state: "visible", timeout: 30_000 });
@@ -50,12 +47,7 @@ test("owner-admin CRM controls filter, export, and enforce refund guardrails", a
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/crm`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
-
-      const search = await waitForCrmDashboard(page);
+      const search = await openCrmDashboard(page);
       await search.fill("PyRo1121");
 
       const matchingRow = page.locator("tbody tr").filter({ hasText: /PyRo1121/i }).first();
@@ -113,12 +105,7 @@ test("owner-admin CRM keyboard navigation stays intact", async (t) => {
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/crm`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
-
-      const crmSearch = await waitForCrmDashboard(page);
+      const crmSearch = await openCrmDashboard(page);
       await openOwnerCrmPanelByKeyboard(page, crmSearch);
 
       await page.goto(`${EDGE_BASE_URL}/osint`, {

@@ -208,6 +208,14 @@ export async function waitForCrmDashboard(page) {
   return crmSearch;
 }
 
+export async function openCrmDashboard(page) {
+  await page.goto(`${EDGE_BASE_URL}/crm`, {
+    waitUntil: "networkidle",
+    timeout: 45_000,
+  });
+  return waitForCrmDashboard(page);
+}
+
 export async function waitForBillingDashboard(page) {
   await page.getByTestId("billing-status-surface").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("billing-summary-grid").waitFor({ state: "visible", timeout: 30_000 });
@@ -216,6 +224,14 @@ export async function waitForBillingDashboard(page) {
   const billingNotice = page.getByTestId("billing-notice");
   await billingNotice.waitFor({ state: "attached", timeout: 30_000 });
   return billingNotice;
+}
+
+export async function openBillingDashboard(page) {
+  await page.goto(`${EDGE_BASE_URL}/billing`, {
+    waitUntil: "networkidle",
+    timeout: 45_000,
+  });
+  return waitForBillingDashboard(page);
 }
 
 export async function assertOwnerBillingBypassNotices(page, billingNotice) {

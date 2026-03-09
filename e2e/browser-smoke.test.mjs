@@ -5,6 +5,8 @@ import test from "node:test";
 import { chromium } from "@playwright/test";
 import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
 import {
+  openBillingDashboard,
+  openCrmDashboard,
   openOwnerCrmPanelByKeyboard,
   openCrmSelectedUserPanel,
   assertOwnerBillingBypassNotices,
@@ -397,12 +399,7 @@ test("browser-authenticated billing actions surface owner bypass notices", async
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/billing`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
-
-      const notice = await waitForBillingDashboard(page);
+      const notice = await openBillingDashboard(page);
       await assertOwnerBillingBypassNotices(page, notice);
       const activitySurface = page.getByTestId("billing-activity-surface");
       await activitySurface.waitFor({ state: "visible", timeout: 30_000 });
@@ -424,12 +421,7 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/crm`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
-
-      const search = await waitForCrmDashboard(page);
+      const search = await openCrmDashboard(page);
       await search.fill("PyRo1121");
 
       const matchingRow = page.locator("tbody tr").filter({ hasText: /PyRo1121/i }).first();
@@ -1170,12 +1162,7 @@ test("browser-authenticated CRM and sidebar support keyboard-only navigation", a
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/crm`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
-
-      const crmSearch = await waitForCrmDashboard(page);
+      const crmSearch = await openCrmDashboard(page);
       await openOwnerCrmPanelByKeyboard(page, crmSearch);
 
       await page.goto(`${EDGE_BASE_URL}/osint`, {

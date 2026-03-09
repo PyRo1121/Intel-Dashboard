@@ -74,6 +74,6 @@ test("postOwnerBackendJson maps malformed success payloads to a 502", async () =
   assert.deepEqual(result, {
     ok: false,
     status: 502,
-    error: "Backend CRM summary failed with HTTP 200",
+    error: "Backend CRM summary returned malformed success payload",
   });
 });

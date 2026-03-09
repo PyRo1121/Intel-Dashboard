@@ -1,4 +1,8 @@
-import type { SubscriberAlertState, SubscriberAlertsResponse } from "@intel-dashboard/shared/subscriber-alerts.ts";
+import type {
+  SubscriberAlertPreferences,
+  SubscriberAlertState,
+  SubscriberAlertsResponse,
+} from "@intel-dashboard/shared/subscriber-alerts.ts";
 import { fetchClientJson } from "./client-json.ts";
 
 function withOptionalSignal(signal?: AbortSignal): { signal?: AbortSignal } {
@@ -12,6 +16,29 @@ export async function fetchSubscriberAlerts(
   const result = await fetchClientJson<SubscriberAlertsResponse>(
     `/api/subscriber/my-alerts?state=${encodeURIComponent(state)}`,
     withOptionalSignal(signal),
+  );
+  return result.ok ? result.data : null;
+}
+
+export async function fetchSubscriberAlertPreferences(signal?: AbortSignal): Promise<SubscriberAlertPreferences | null> {
+  const result = await fetchClientJson<SubscriberAlertPreferences>(
+    "/api/subscriber/alert-preferences",
+    withOptionalSignal(signal),
+  );
+  return result.ok ? result.data : null;
+}
+
+export async function saveSubscriberAlertPreferences(
+  preferences: SubscriberAlertPreferences,
+  signal?: AbortSignal,
+): Promise<SubscriberAlertPreferences | null> {
+  const result = await fetchClientJson<SubscriberAlertPreferences>(
+    "/api/subscriber/alert-preferences",
+    {
+      method: "POST",
+      body: JSON.stringify(preferences),
+      ...(signal ? { signal } : {}),
+    },
   );
   return result.ok ? result.data : null;
 }
@@ -32,4 +59,3 @@ export async function markAllSubscriberAlertsRead(signal?: AbortSignal): Promise
   });
   return result.ok;
 }
-

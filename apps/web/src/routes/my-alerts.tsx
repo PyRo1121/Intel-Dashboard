@@ -1,16 +1,27 @@
 import { createResource, createSignal, For, Show } from "solid-js";
 import { Link, Meta, Title } from "@solidjs/meta";
 import { Bell, Clock, ExternalLink, MessageSquare, Radio } from "lucide-solid";
-import type { SubscriberAlertState } from "@intel-dashboard/shared/subscriber-alerts.ts";
+import type {
+  SubscriberAlertPreferences,
+  SubscriberAlertState,
+  SubscriberTelegramHighSignalGrade,
+} from "@intel-dashboard/shared/subscriber-alerts.ts";
 import { MY_ALERTS_DESCRIPTION, MY_ALERTS_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 import { useAuth } from "~/lib/auth";
 import { resolveAuthUserEntitlementView } from "~/lib/auth-user";
 import { useWallClock } from "~/lib/live-refresh";
-import { fetchSubscriberAlerts, markAllSubscriberAlertsRead, markSubscriberAlertsRead } from "~/lib/my-alerts-client";
+import {
+  fetchSubscriberAlertPreferences,
+  fetchSubscriberAlerts,
+  markAllSubscriberAlertsRead,
+  markSubscriberAlertsRead,
+  saveSubscriberAlertPreferences,
+} from "~/lib/my-alerts-client";
 import { formatRelativeTimeAt, isInitialResourceLoading } from "~/lib/utils";
 
 const STATES: SubscriberAlertState[] = ["unread", "all"];
+const GRADE_OPTIONS: SubscriberTelegramHighSignalGrade[] = ["A", "B"];
 
 export default function MyAlertsPage() {
   const auth = useAuth();
@@ -19,8 +30,19 @@ export default function MyAlertsPage() {
   const [state, setState] = createSignal<SubscriberAlertState>("unread");
   const [busyId, setBusyId] = createSignal("");
   const [busyAll, setBusyAll] = createSignal(false);
+  const [savingControls, setSavingControls] = createSignal(false);
+  const [controlsSaved, setControlsSaved] = createSignal("");
+  const [firstReportRegionEnabled, setFirstReportRegionEnabled] = createSignal(true);
+  const [highSignalRegionEnabled, setHighSignalRegionEnabled] = createSignal(true);
+  const [firstReportChannelEnabled, setFirstReportChannelEnabled] = createSignal(true);
+  const [highSignalSourceEnabled, setHighSignalSourceEnabled] = createSignal(true);
+  const [minimumTelegramHighSignalGrade, setMinimumTelegramHighSignalGrade] = createSignal<SubscriberTelegramHighSignalGrade>("B");
   const nowMs = useWallClock(1000);
 
+  const [alertPreferences, { refetch: refetchAlertPreferences }] = createResource(
+    () => (entitled() ? "enabled" : null),
+    () => fetchSubscriberAlertPreferences(),
+  );
   const [alerts, { refetch }] = createResource(
     () => (entitled() ? state() : null),
     (nextState) => fetchSubscriberAlerts(nextState),
@@ -29,6 +51,23 @@ export default function MyAlertsPage() {
   const items = () => alerts()?.items ?? [];
   const unreadCount = () => alerts()?.unreadCount ?? 0;
   const loadingInitial = () => isInitialResourceLoading(alerts.state, items().length);
+
+  const applyControlsToForm = (preferences: SubscriberAlertPreferences | null | undefined) => {
+    if (!preferences) return;
+    setFirstReportRegionEnabled(preferences.firstReportRegionEnabled);
+    setHighSignalRegionEnabled(preferences.highSignalRegionEnabled);
+    setFirstReportChannelEnabled(preferences.firstReportChannelEnabled);
+    setHighSignalSourceEnabled(preferences.highSignalSourceEnabled);
+    setMinimumTelegramHighSignalGrade(preferences.minimumTelegramHighSignalGrade);
+  };
+
+  createResource(
+    alertPreferences,
+    async (preferences) => {
+      applyControlsToForm(preferences);
+      return null;
+    },
+  );
 
   const markRead = async (alertId: string) => {
     setBusyId(alertId);
@@ -49,6 +88,34 @@ export default function MyAlertsPage() {
       }
     } finally {
       setBusyAll(false);
+    }
+  };
+
+  const saveControls = async () => {
+    setSavingControls(true);
+    setControlsSaved("");
+    const payload: SubscriberAlertPreferences = {
+      firstReportRegionEnabled: firstReportRegionEnabled(),
+      highSignalRegionEnabled: highSignalRegionEnabled(),
+      firstReportChannelEnabled: firstReportChannelEnabled(),
+      highSignalSourceEnabled: highSignalSourceEnabled(),
+      minimumTelegramHighSignalGrade: minimumTelegramHighSignalGrade(),
+    };
+    try {
+      const saved = await saveSubscriberAlertPreferences(payload);
+      if (!saved) {
+        setControlsSaved("Save failed");
+        return;
+      }
+      applyControlsToForm(saved);
+      setControlsSaved("Controls saved");
+      await refetchAlertPreferences();
+      await refetch();
+    } catch (error) {
+      console.error("Failed to save subscriber alert controls", error);
+      setControlsSaved("Save failed");
+    } finally {
+      setSavingControls(false);
     }
   };
 
@@ -82,6 +149,56 @@ export default function MyAlertsPage() {
             </div>
           }
         >
+          <section class="surface-card mb-4 space-y-3 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h2 class="text-sm font-semibold text-white">Alert controls</h2>
+                <p class="text-xs text-zinc-400">Adjust what shows up in your in-app inbox.</p>
+              </div>
+              <button
+                type="button"
+                disabled={savingControls()}
+                onClick={() => void saveControls()}
+                class="rounded-xl border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-sm text-violet-200 disabled:opacity-50"
+              >
+                {savingControls() ? "Saving..." : "Save controls"}
+              </button>
+            </div>
+            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3 text-sm">
+              <label class="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-zinc-300">
+                <span>First report region</span>
+                <input type="checkbox" checked={firstReportRegionEnabled()} onInput={(event) => setFirstReportRegionEnabled(event.currentTarget.checked)} />
+              </label>
+              <label class="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-zinc-300">
+                <span>High signal region</span>
+                <input type="checkbox" checked={highSignalRegionEnabled()} onInput={(event) => setHighSignalRegionEnabled(event.currentTarget.checked)} />
+              </label>
+              <label class="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-zinc-300">
+                <span>First report channel</span>
+                <input type="checkbox" checked={firstReportChannelEnabled()} onInput={(event) => setFirstReportChannelEnabled(event.currentTarget.checked)} />
+              </label>
+              <label class="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-zinc-300">
+                <span>High signal source</span>
+                <input type="checkbox" checked={highSignalSourceEnabled()} onInput={(event) => setHighSignalSourceEnabled(event.currentTarget.checked)} />
+              </label>
+              <label class="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-zinc-300">
+                <span>Telegram high-signal threshold</span>
+                <select
+                  value={minimumTelegramHighSignalGrade()}
+                  onInput={(event) => setMinimumTelegramHighSignalGrade(event.currentTarget.value as SubscriberTelegramHighSignalGrade)}
+                  class="rounded-lg border border-white/[0.08] bg-black/40 px-2 py-1 text-zinc-100"
+                >
+                  <For each={GRADE_OPTIONS}>
+                    {(grade) => <option value={grade}>{grade}</option>}
+                  </For>
+                </select>
+              </label>
+            </div>
+            <Show when={controlsSaved()}>
+              <p class="text-xs text-zinc-400">{controlsSaved()}</p>
+            </Show>
+          </section>
+
           <section class="surface-card mb-4 flex flex-wrap items-center justify-between gap-3 p-4">
             <div class="flex items-center gap-3">
               <span class="rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-200">

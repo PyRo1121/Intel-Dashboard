@@ -5,6 +5,16 @@ export type SubscriberAlertType =
   | "high_signal_source";
 
 export type SubscriberAlertState = "all" | "unread";
+export type SubscriberTelegramHighSignalGrade = "A" | "B";
+
+export type SubscriberAlertPreferences = {
+  firstReportRegionEnabled: boolean;
+  highSignalRegionEnabled: boolean;
+  firstReportChannelEnabled: boolean;
+  highSignalSourceEnabled: boolean;
+  minimumTelegramHighSignalGrade: SubscriberTelegramHighSignalGrade;
+  updatedAt?: string;
+};
 
 export type SubscriberAlertItem = {
   id: string;

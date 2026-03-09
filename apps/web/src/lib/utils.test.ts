@@ -9,6 +9,7 @@ import {
   formatShortDateTime,
   formatUsd,
   formatWholeNumber,
+  isInitialResourceLoading,
 } from "./utils.ts";
 
 test("formatWholeNumber clamps and formats integer counts", () => {
@@ -47,4 +48,10 @@ test("parseTimestampMs returns NaN for invalid timestamps", () => {
 test("formatAgeAgoAt formats elapsed time and handles missing values safely", () => {
   assert.equal(formatAgeAgoAt(9_000, 10_000), "1s ago");
   assert.equal(formatAgeAgoAt(undefined, 10_000), "Unknown");
+});
+
+test("isInitialResourceLoading only flags empty refreshing resources", () => {
+  assert.equal(isInitialResourceLoading("refreshing", 0), true);
+  assert.equal(isInitialResourceLoading("ready", 0), false);
+  assert.equal(isInitialResourceLoading("refreshing", 3), false);
 });

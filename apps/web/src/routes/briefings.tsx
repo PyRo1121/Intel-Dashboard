@@ -9,8 +9,9 @@ import {
   useFeedFreshness,
 } from "~/lib/freshness";
 import { fetchPublicJson } from "~/lib/client-json";
+import { readLatestArray } from "~/lib/resource-latest";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
-import { formatLongDateTime, formatShortDateTime } from "~/lib/utils";
+import { formatLongDateTime, formatShortDateTime, isInitialResourceLoading } from "~/lib/utils";
 import { FileText, ChevronDown, Clock, Send } from "lucide-solid";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { BRIEFINGS_DESCRIPTION, BRIEFINGS_TITLE } from "@intel-dashboard/shared/route-meta.ts";
@@ -31,8 +32,8 @@ export default function Briefings() {
     void refetch();
   }, 120_000, { runImmediately: true });
 
-  const items = () => briefings.latest ?? briefings() ?? [];
-  const loadingInitial = () => briefings.state === "refreshing" && items().length === 0;
+  const items = () => readLatestArray(briefings.latest, briefings());
+  const loadingInitial = () => isInitialResourceLoading(briefings.state, items().length);
   const latestBriefingTs = createMemo(() => maxIsoTimestamp(items().map((briefing) => briefing.timestamp)));
   const freshness = useFeedFreshness({
     nowMs,

@@ -76,3 +76,11 @@ export function privateApiJson(
   applyDefaultSecurityHeaders(response.headers);
   return response;
 }
+
+export function privateApiMethodNotAllowed(
+  origin: string | null,
+  allow: string,
+  payload: Record<string, unknown> = { error: "Method Not Allowed" },
+): Response {
+  return privateApiJson(origin, 405, payload, null, { Allow: allow });
+}

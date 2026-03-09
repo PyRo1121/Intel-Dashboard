@@ -2,6 +2,7 @@ import { For, Show, createMemo, createSignal, createResource } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
 import { fetchIntelFeed } from "~/lib/intel-feed";
 import { formatTitleLabel } from "~/lib/event-label";
+import { readLatestArray } from "~/lib/resource-latest";
 import SeverityBadge from "~/components/ui/SeverityBadge";
 import {
   freshnessBannerTone,
@@ -12,7 +13,7 @@ import {
 } from "~/lib/freshness";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import type { IntelItem, Severity } from "~/lib/types";
-import { formatRelativeTimeAt } from "~/lib/utils";
+import { formatRelativeTimeAt, isInitialResourceLoading } from "~/lib/utils";
 import { Radio, ExternalLink, Clock } from "lucide-solid";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { OSINT_DESCRIPTION, OSINT_TITLE } from "@intel-dashboard/shared/route-meta.ts";
@@ -106,8 +107,8 @@ export default function OsintFeed() {
     void refetch();
   }, 10_000, { runImmediately: true });
 
-  const items = () => osint.latest ?? osint() ?? [];
-  const loadingInitial = () => osint.state === "refreshing" && items().length === 0;
+  const items = () => readLatestArray(osint.latest, osint());
+  const loadingInitial = () => isInitialResourceLoading(osint.state, items().length);
   const latestIntelTs = createMemo(() => maxIsoTimestamp(items().map((item) => item.timestamp)));
   const freshness = useFeedFreshness({
     nowMs,

@@ -1,4 +1,4 @@
-import { privateApiHeaders } from "./private-api-headers.ts";
+import { privateApiJson } from "./private-api-headers.ts";
 
 type OwnerCrmAiTelemetryFailure = {
   ok: false;
@@ -11,26 +11,14 @@ export function buildOwnerCrmAiTelemetryFailureResponse(
   result: OwnerCrmAiTelemetryFailure,
 ): Response {
   if (result.status === 502 || result.status === 503) {
-    return new Response(
-      JSON.stringify({
-        ok: false,
-        error: result.error,
-      }),
-      {
-        status: 200,
-        headers: privateApiHeaders(origin),
-      },
-    );
-  }
-
-  return new Response(
-    JSON.stringify({
+    return privateApiJson(origin, 200, {
       ok: false,
       error: result.error,
-    }),
-    {
-      status: result.status,
-      headers: privateApiHeaders(origin),
-    },
-  );
+    });
+  }
+
+  return privateApiJson(origin, result.status, {
+    ok: false,
+    error: result.error,
+  });
 }

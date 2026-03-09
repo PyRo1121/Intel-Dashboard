@@ -6,9 +6,45 @@ export function formatEntitlementTier(value: string | undefined): string {
   return "Free";
 }
 
+export function resolveEntitlementRole(role: string | undefined, tier: string | undefined): string {
+  return (role || tier || "free").trim().toLowerCase();
+}
+
+export type EntitlementViewInput = {
+  role?: string;
+  tier?: string;
+  entitled?: boolean;
+  delayMinutes?: number;
+};
+
+export function resolveEntitlementView(entitlement: EntitlementViewInput | null | undefined): {
+  role: string;
+  entitled: boolean;
+  delayMinutes: number;
+  planLabel: string;
+  planTone: string;
+} {
+  const role = resolveEntitlementRole(entitlement?.role, entitlement?.tier);
+  const entitled = entitlement?.entitled === true || isEntitledRole(role);
+  const rawDelay = entitlement?.delayMinutes;
+  const delayMinutes =
+    typeof rawDelay === "number" && Number.isFinite(rawDelay) ? Math.max(0, Math.floor(rawDelay)) : 0;
+  return {
+    role,
+    entitled,
+    delayMinutes,
+    planLabel: formatEntitlementTier(entitlement?.role || entitlement?.tier),
+    planTone: entitlementTierTone(entitlement?.role || entitlement?.tier),
+  };
+}
+
 export function isEntitledRole(value: string | undefined): boolean {
   const raw = (value || "").trim().toLowerCase();
   return raw === "owner" || raw === "subscriber";
+}
+
+export function isOwnerRole(value: string | undefined): boolean {
+  return (value || "").trim().toLowerCase() === "owner";
 }
 
 export function entitlementTierTone(value: string | undefined): string {

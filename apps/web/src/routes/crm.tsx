@@ -1,6 +1,22 @@
 import { Meta, Title } from "@solidjs/meta";
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
 import { useAuth } from "~/lib/auth";
+import { fetchClientJson } from "~/lib/client-json";
+import { getCrmCustomerCacheSourceLabel } from "~/lib/crm-customer-cache";
+import { formatEventLabel } from "~/lib/event-label";
+import { formatSubscriptionStatus, isOwnerRole, resolveEntitlementRole } from "@intel-dashboard/shared/entitlement.ts";
+import {
+  getCrmRevenueSourceLabel,
+  getCrmSummaryStatusLabel,
+  getCrmSummaryWarningMessage,
+  getCrmSummaryWarningTone,
+} from "~/lib/crm-summary";
+import {
+  formatDateTime as formatTime,
+  formatPercent,
+  formatUsd,
+  formatWholeNumber as formatNumber,
+} from "~/lib/utils";
 import { CRM_DESCRIPTION, CRM_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 
 type CrmUser = {
@@ -19,6 +35,13 @@ type CrmPayload = {
   error?: string;
   result?: {
     generatedAtMs?: number;
+    degraded?: {
+      partial?: boolean;
+      stale?: boolean;
+      accountsTruncated?: boolean;
+      activityTruncated?: boolean;
+      reasons?: string[];
+    };
     directory?: {
       totalUsers?: number;
       activeSessions?: number;
@@ -173,6 +196,11 @@ type CrmCustomerOpsPayload = {
         paymentIntentId?: string | null;
       }>;
     };
+    cache?: {
+      source?: string;
+      stale?: boolean;
+      fetchedAtMs?: number;
+    };
   };
 };
 
@@ -238,105 +266,43 @@ type AiTelemetryPayload = {
 };
 
 async function fetchCrmOverview(): Promise<CrmPayload> {
-  const res = await fetch("/api/admin/crm/overview", {
+  const result = await fetchClientJson<CrmPayload>("/api/admin/crm/overview", {
     method: "GET",
-    credentials: "include",
-    cache: "no-store",
-    signal: AbortSignal.timeout(30_000),
   });
-  const payload = await res.json().catch(() => ({ ok: false, error: "Invalid JSON response" }));
-  if (!res.ok) {
+  if (!result.ok) {
     return {
       ok: false,
-      error: typeof payload?.error === "string" ? payload.error : `HTTP ${res.status}`,
+      error: result.error,
     };
   }
-  return payload as CrmPayload;
+  return result.data;
 }
 
 async function postCrmAction(path: string, payload: Record<string, unknown>): Promise<CrmCustomerOpsPayload> {
-  const res = await fetch(path, {
+  const result = await fetchClientJson<CrmCustomerOpsPayload>(path, {
     method: "POST",
-    credentials: "include",
-    cache: "no-store",
-    headers: {
-      "Content-Type": "application/json",
-    },
     body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(30_000),
   });
-  const body = await res.json().catch(() => ({ ok: false, error: "Invalid JSON response" }));
-  if (!res.ok) {
+  if (!result.ok) {
     return {
       ok: false,
-      error: typeof body?.error === "string" ? body.error : `HTTP ${res.status}`,
+      error: result.error,
     };
   }
-  return body as CrmCustomerOpsPayload;
+  return result.data;
 }
 
 async function fetchAiTelemetry(window: string): Promise<AiTelemetryPayload> {
-  let res: Response;
-  try {
-    res = await fetch(`/api/admin/crm/ai-telemetry?window=${encodeURIComponent(window)}`, {
-      method: "GET",
-      credentials: "include",
-      cache: "no-store",
-      signal: AbortSignal.timeout(30_000),
-    });
-  } catch (error) {
+  const result = await fetchClientJson<AiTelemetryPayload>(`/api/admin/crm/ai-telemetry?window=${encodeURIComponent(window)}`, {
+    method: "GET",
+  });
+  if (!result.ok) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Unable to load AI telemetry.",
+      error: result.error,
     };
   }
-  const payload = await res.json().catch(() => ({ ok: false, error: "Invalid JSON response" }));
-  if (!res.ok) {
-    return {
-      ok: false,
-      error: typeof payload?.error === "string" ? payload.error : `HTTP ${res.status}`,
-    };
-  }
-  return payload as AiTelemetryPayload;
-}
-
-function formatNumber(value: number | undefined): string {
-  const safe = typeof value === "number" && Number.isFinite(value) ? value : 0;
-  return new Intl.NumberFormat("en-US").format(Math.max(0, Math.floor(safe)));
-}
-
-function formatUsd(value: number | undefined): string {
-  const safe = typeof value === "number" && Number.isFinite(value) ? value : 0;
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(Math.max(0, safe));
-}
-
-function formatPercent(value: number | undefined): string {
-  const safe = typeof value === "number" && Number.isFinite(value) ? value : 0;
-  return `${Math.max(0, safe).toFixed(1)}%`;
-}
-
-function formatTime(ms: number | undefined): string {
-  if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return "—";
-  return new Date(ms).toLocaleString();
-}
-
-function normalizeStatus(raw: string | undefined): string {
-  const value = (raw || "none").trim().toLowerCase();
-  if (value === "active") return "Active";
-  if (value === "trialing") return "Trialing";
-  if (value === "canceled") return "Canceled";
-  if (value === "expired") return "Expired";
-  return "None";
-}
-
-function normalizeEventLabel(raw: string | undefined): string {
-  const value = (raw || "").trim();
-  if (!value) return "—";
-  return value.replaceAll("_", " ");
+  return result.data;
 }
 
 function computeHitRatePercent(input: { cacheHits?: number; cacheMisses?: number } | null | undefined): number {
@@ -349,8 +315,8 @@ function computeHitRatePercent(input: { cacheHits?: number; cacheMisses?: number
 
 export default function CrmRoute() {
   const auth = useAuth();
-  const role = () => (auth.user()?.entitlement?.role || auth.user()?.entitlement?.tier || "free").toLowerCase();
-  const isOwner = () => role() === "owner";
+  const role = () => resolveEntitlementRole(auth.user()?.entitlement?.role, auth.user()?.entitlement?.tier);
+  const isOwner = () => isOwnerRole(role());
   const [crm, { refetch }] = createResource(fetchCrmOverview);
   const [aiWindow, setAiWindow] = createSignal<"15m" | "1h" | "24h" | "7d" | "30d">("1h");
   const aiTelemetrySource = createMemo(() => (isOwner() ? aiWindow() : undefined));
@@ -384,13 +350,13 @@ export default function CrmRoute() {
     return (crm()?.result?.directory?.users ?? []).find((entry) => entry.id === id) ?? null;
   });
 
-  const loadCustomerOps = async (targetUserId: string) => {
+  const loadCustomerOps = async (targetUserId: string, refresh = false) => {
     if (!targetUserId) return;
     setSelectedUserId(targetUserId);
     setOpsError("");
     setOpsNotice("");
     setOpsBusy(true);
-    const payload = await postCrmAction("/api/admin/crm/customer", { targetUserId });
+    const payload = await postCrmAction("/api/admin/crm/customer", { targetUserId, ...(refresh ? { refresh: true } : {}) });
     if (payload.ok === false) {
       setOpsError(payload.error || "Unable to load Stripe customer details.");
       setSelectedCustomerOps(null);
@@ -518,9 +484,9 @@ export default function CrmRoute() {
         entry.login,
         entry.email,
         (entry.providers ?? []).join("|"),
-        normalizeStatus(billing?.status),
+        formatSubscriptionStatus(billing?.status),
         String(billing?.monthlyPriceUsd ?? 0),
-        normalizeEventLabel(latestEvent?.kind),
+        formatEventLabel(latestEvent?.kind),
         formatTime(latestEvent?.atMs),
         formatTime(entry.createdAtMs),
         formatTime(entry.updatedAtMs),
@@ -563,6 +529,9 @@ export default function CrmRoute() {
   const aiHungriestLane = createMemo(() =>
     [...(aiTelemetry()?.result?.lanes ?? [])].sort((left, right) => (right.outputInputRatio ?? 0) - (left.outputInputRatio ?? 0))[0] ?? null,
   );
+  const crmDegraded = createMemo(() => crm()?.result?.degraded);
+  const crmDegradedTone = createMemo(() => getCrmSummaryWarningTone(crmDegraded()));
+  const crmDegradedMessage = createMemo(() => getCrmSummaryWarningMessage(crmDegraded()));
 
   return (
     <>
@@ -609,6 +578,13 @@ export default function CrmRoute() {
                 {crm()?.error || "Unable to load CRM data."}
               </div>
             }>
+              <Show when={crmDegradedMessage()}>
+                {(message) => (
+                  <div class={`mb-4 rounded-2xl border px-4 py-3 text-sm ${crmDegradedTone()}`} data-testid="crm-summary-warning">
+                    {message()}
+                  </div>
+                )}
+              </Show>
               <section class="grid gap-3 md:grid-cols-2 xl:grid-cols-6" data-testid="crm-summary-grid">
                 <article class="intel-panel px-4 py-3" data-testid="crm-summary-total-users">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Total Users</p>
@@ -638,8 +614,14 @@ export default function CrmRoute() {
 
               <section class="mt-2 flex flex-wrap items-center gap-3 text-xs text-zinc-400">
                 <span>
-                  Revenue source: <span class="font-semibold text-zinc-200">{crm()?.result?.commandCenter?.revenue?.source === "stripe_live" ? "Stripe Live" : "Internal Snapshot"}</span>
+                  Revenue source: <span class="font-semibold text-zinc-200">{getCrmRevenueSourceLabel(crm()?.result?.commandCenter?.revenue?.source)}</span>
                 </span>
+                <Show when={crmDegraded()?.partial}>
+                  <span class="text-rose-300">Summary status: {getCrmSummaryStatusLabel(crmDegraded())}</span>
+                </Show>
+                <Show when={!crmDegraded()?.partial && crmDegraded()?.stale}>
+                  <span class="text-amber-300">Summary status: {getCrmSummaryStatusLabel(crmDegraded())}</span>
+                </Show>
                 <Show when={crm()?.result?.billing?.stripe?.syncedAtMs}>
                   <span>Stripe synced: <span class="font-semibold text-zinc-200">{formatTime(crm()?.result?.billing?.stripe?.syncedAtMs)}</span></span>
                 </Show>
@@ -786,21 +768,21 @@ export default function CrmRoute() {
                     <section class="mt-4 grid gap-3 xl:grid-cols-3">
                       <article class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Failure Hotspot</p>
-                        <p class="mt-1 text-sm font-semibold text-zinc-100">{normalizeEventLabel(aiWorstFailureLane()?.label)}</p>
+                        <p class="mt-1 text-sm font-semibold text-zinc-100">{formatEventLabel(aiWorstFailureLane()?.label)}</p>
                         <p class="mt-2 text-xs text-zinc-400">
                           {formatNumber(aiWorstFailureLane()?.failures)} failures across {formatNumber(aiWorstFailureLane()?.calls)} calls
                         </p>
                       </article>
                       <article class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Slowest Lane (P95)</p>
-                        <p class="mt-1 text-sm font-semibold text-zinc-100">{normalizeEventLabel(aiSlowestLane()?.label)}</p>
+                        <p class="mt-1 text-sm font-semibold text-zinc-100">{formatEventLabel(aiSlowestLane()?.label)}</p>
                         <p class="mt-2 text-xs text-zinc-400">
                           {formatNumber(aiSlowestLane()?.p95DurationMs)}ms p95 latency
                         </p>
                       </article>
                       <article class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Most Output-Heavy Lane</p>
-                        <p class="mt-1 text-sm font-semibold text-zinc-100">{normalizeEventLabel(aiHungriestLane()?.label)}</p>
+                        <p class="mt-1 text-sm font-semibold text-zinc-100">{formatEventLabel(aiHungriestLane()?.label)}</p>
                         <p class="mt-2 text-xs text-zinc-400">
                           {formatPercent((aiHungriestLane()?.outputInputRatio ?? 0) * 100)} output/input ratio
                         </p>
@@ -820,7 +802,7 @@ export default function CrmRoute() {
                               return (
                                 <div class="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
                                   <div class="flex items-center justify-between gap-3">
-                                    <span class="text-sm font-medium text-zinc-100">{normalizeEventLabel(item.label)}</span>
+                                    <span class="text-sm font-medium text-zinc-100">{formatEventLabel(item.label)}</span>
                                     <span class="text-xs text-zinc-400">{formatNumber(item.totalTokens)} tokens</span>
                                   </div>
                                   <div class="mt-2 h-2 overflow-hidden rounded-full bg-white/5">
@@ -848,7 +830,7 @@ export default function CrmRoute() {
                             <For each={aiTelemetry()?.result?.models ?? []}>
                               {(item) => (
                                 <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
-                                  <span class="text-zinc-300">{normalizeEventLabel(item.label)}</span>
+                                  <span class="text-zinc-300">{formatEventLabel(item.label)}</span>
                                   <span class="font-medium text-zinc-100">{formatNumber(item.totalTokens)} tokens</span>
                                 </div>
                               )}
@@ -862,7 +844,7 @@ export default function CrmRoute() {
                             <For each={aiTelemetry()?.result?.cacheStatuses ?? []}>
                               {(item) => (
                                 <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
-                                  <span class="text-zinc-300">{normalizeEventLabel(item.label)}</span>
+                                  <span class="text-zinc-300">{formatEventLabel(item.label)}</span>
                                   <span class="font-medium text-zinc-100">{formatNumber(item.calls)}</span>
                                 </div>
                               )}
@@ -870,7 +852,7 @@ export default function CrmRoute() {
                             <For each={aiTelemetry()?.result?.outcomes ?? []}>
                               {(item) => (
                                 <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
-                                  <span class="text-zinc-300">{normalizeEventLabel(item.label)}</span>
+                                  <span class="text-zinc-300">{formatEventLabel(item.label)}</span>
                                   <span class="font-medium text-zinc-100">{formatNumber(item.calls)}</span>
                                 </div>
                               )}
@@ -973,10 +955,10 @@ export default function CrmRoute() {
                             </td>
                             <td class="px-2 py-2 text-xs text-zinc-400">{entry.email}</td>
                             <td class="px-2 py-2 text-xs text-zinc-400">{(entry.providers ?? []).join(", ") || "—"}</td>
-                            <td class="px-2 py-2 text-xs text-zinc-200">{normalizeStatus(billing?.status)}</td>
+                            <td class="px-2 py-2 text-xs text-zinc-200">{formatSubscriptionStatus(billing?.status)}</td>
                             <td class="px-2 py-2 text-xs text-zinc-200">{formatUsd(billing?.monthlyPriceUsd)}</td>
                             <td class="px-2 py-2 text-xs text-zinc-400">
-                              <p>{normalizeEventLabel(latestEvent?.kind)}</p>
+                              <p>{formatEventLabel(latestEvent?.kind)}</p>
                               <p>{formatTime(latestEvent?.atMs)}</p>
                             </td>
                             <td class="px-2 py-2 text-xs text-zinc-400">{formatTime(entry.createdAtMs)}</td>
@@ -1013,7 +995,7 @@ export default function CrmRoute() {
                       type="button"
                       aria-label={`Refresh customer ${selectedUser()?.name || "selection"}`}
                       data-testid="crm-refresh-customer"
-                      onClick={() => void loadCustomerOps(selectedUserId())}
+                      onClick={() => void loadCustomerOps(selectedUserId(), true)}
                       disabled={opsBusy()}
                       class="intel-btn intel-btn-secondary"
                     >
@@ -1035,7 +1017,7 @@ export default function CrmRoute() {
                       <div class="mt-3 grid gap-2 sm:grid-cols-2">
                         <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Account Status</p>
-                          <p class="text-sm font-medium text-zinc-100">{normalizeStatus(selectedCustomerOps()?.result?.account?.status)}</p>
+                          <p class="text-sm font-medium text-zinc-100">{formatSubscriptionStatus(selectedCustomerOps()?.result?.account?.status)}</p>
                         </div>
                         <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Stripe Customer</p>
@@ -1050,6 +1032,18 @@ export default function CrmRoute() {
                           <p class="text-sm font-medium text-zinc-100">{formatTime(selectedCustomerOps()?.result?.stripe?.subscription?.currentPeriodEndMs ?? undefined)}</p>
                         </div>
                       </div>
+                      <Show when={selectedCustomerOps()?.result?.cache}>
+                        {(cache) => (
+                          <p class="mt-3 text-xs text-zinc-400" data-testid="crm-customer-cache-status">
+                            Customer snapshot:{" "}
+                            <span class="font-semibold text-zinc-200">
+                              {getCrmCustomerCacheSourceLabel(cache().source)}
+                            </span>
+                            {" • "}
+                            fetched {formatTime(cache().fetchedAtMs)}
+                          </p>
+                        )}
+                      </Show>
                     </article>
 
                     <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
@@ -1150,7 +1144,7 @@ export default function CrmRoute() {
                   <For each={crm()?.result?.telemetry?.topKinds7d ?? []}>
                     {(item) => (
                       <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
-                        <p class="text-xs text-zinc-500">{normalizeEventLabel(item.kind)}</p>
+                        <p class="text-xs text-zinc-500">{formatEventLabel(item.kind)}</p>
                         <p class="text-lg font-semibold text-zinc-100">{formatNumber(item.count)}</p>
                       </div>
                     )}

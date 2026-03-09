@@ -1,17 +1,18 @@
 import { For, Show, createMemo, createSignal, createResource } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
+import { fetchIntelFeed } from "~/lib/intel-feed";
+import { formatTitleLabel } from "~/lib/event-label";
 import SeverityBadge from "~/components/ui/SeverityBadge";
 import {
-  buildFreshnessStatusAt,
   freshnessBannerTone,
   freshnessPillTone,
   freshnessTooltip,
   maxIsoTimestamp,
-  useFreshnessTransitionNotice,
+  useFeedFreshness,
 } from "~/lib/freshness";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import type { IntelItem, Severity } from "~/lib/types";
-import { formatAgeCompactFromMs, formatRelativeTimeAt } from "~/lib/utils";
+import { formatRelativeTimeAt } from "~/lib/utils";
 import { Radio, ExternalLink, Clock } from "lucide-solid";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { OSINT_DESCRIPTION, OSINT_TITLE } from "@intel-dashboard/shared/route-meta.ts";
@@ -87,21 +88,12 @@ function normalizeIntelItem(item: IntelItem): IntelItem {
 }
 
 async function loadOsint(): Promise<IntelItem[]> {
-  try {
-    const res = await fetch("/api/intel", {
-      signal: AbortSignal.timeout(30_000),
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data)
-      ? data
-        .filter((item): item is IntelItem => item && typeof item === "object")
-        .map((item) => normalizeIntelItem(item))
-      : [];
-  } catch {
-    return [];
-  }
+  const data = await fetchIntelFeed();
+  return Array.isArray(data)
+    ? data
+      .filter((item): item is IntelItem => item && typeof item === "object")
+      .map((item) => normalizeIntelItem(item))
+    : [];
 }
 
 export default function OsintFeed() {
@@ -117,14 +109,12 @@ export default function OsintFeed() {
   const items = () => osint.latest ?? osint() ?? [];
   const loadingInitial = () => osint.state === "refreshing" && items().length === 0;
   const latestIntelTs = createMemo(() => maxIsoTimestamp(items().map((item) => item.timestamp)));
-  const feedFreshness = createMemo(() => buildFreshnessStatusAt(nowMs(), latestIntelTs(), feedThresholds));
-  const latestFeedAgeMs = createMemo(() => {
-    const ts = latestIntelTs();
-    if (!ts) return null;
-    return Math.max(0, nowMs() - ts);
+  const freshness = useFeedFreshness({
+    nowMs,
+    latestTimestampMs: latestIntelTs,
+    thresholds: feedThresholds,
+    subject: "OSINT feed",
   });
-  const latestFeedAgeLabel = createMemo(() => formatAgeCompactFromMs(latestFeedAgeMs()));
-  const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "OSINT feed");
   const filtered = () => {
     const f = filter();
     if (f === "all") return items();
@@ -168,9 +158,9 @@ export default function OsintFeed() {
           </p>
         </div>
         <div class="flex w-full xl:w-auto items-center justify-start xl:justify-end gap-2 flex-wrap xl:flex-nowrap">
-          <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
-            Feed: {feedFreshness().label}
-            <Show when={latestFeedAgeMs() !== null}> ({latestFeedAgeLabel()})</Show>
+          <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+            Feed: {freshness.feedFreshness().label}
+            <Show when={freshness.latestFeedAgeMs() !== null}> ({freshness.latestFeedAgeLabel()})</Show>
           </span>
           <Show when={items().length > 0}>
             <div class="grid grid-cols-3 w-full min-w-0 sm:w-auto sm:min-w-[285px] overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03]">
@@ -191,7 +181,7 @@ export default function OsintFeed() {
         </div>
       </header>
 
-      <Show when={freshnessNotice()}>
+      <Show when={freshness.freshnessNotice()}>
         {(notice) => (
           <section
             class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
@@ -224,7 +214,7 @@ export default function OsintFeed() {
                     : ""
                 }`}
               >
-                {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
+                {f === "all" ? "All" : formatTitleLabel(f)}
                 <Show when={count() > 0}>
                   <span class="ml-1 opacity-50 text-[10px]">({count()})</span>
                 </Show>

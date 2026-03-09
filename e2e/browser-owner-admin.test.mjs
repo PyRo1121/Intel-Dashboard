@@ -13,9 +13,7 @@ import {
   CRM_AI_WINDOWS,
   createBrowserContext,
   EDGE_BASE_URL,
-  waitForBillingDashboard,
   waitForCrmAiSurface,
-  waitForCrmDashboard,
   waitForMissingBillingState,
 } from "./browser-test-helpers.mjs";
 

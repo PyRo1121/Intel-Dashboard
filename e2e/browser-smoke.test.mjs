@@ -21,9 +21,7 @@ import {
   collectBrowserDiagnostics,
   CRM_AI_WINDOWS,
   MISSING_BILLING_STATE_PATTERN,
-  waitForBillingDashboard,
   waitForCrmAiSurface,
-  waitForCrmDashboard,
   waitForMissingBillingState,
 } from "./browser-test-helpers.mjs";
 import {

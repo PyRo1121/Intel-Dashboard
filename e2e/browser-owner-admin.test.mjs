@@ -10,6 +10,7 @@ function trim(value) {
 }
 
 const EDGE_BASE_URL = (trim(process.env.E2E_EDGE_BASE_URL) || SITE_ORIGIN).replace(/\/+$/, "");
+const EDGE_HOSTNAME = new URL(EDGE_BASE_URL).hostname;
 const SESSION_COOKIE = trim(process.env.E2E_SESSION_COOKIE);
 const REQUIRE_AUTH = process.env.E2E_REQUIRE_AUTH === "1";
 const STRICT = process.env.E2E_STRICT === "1";
@@ -113,7 +114,7 @@ async function createBrowserContext(t, options = {}) {
     {
       name: parsedCookie.name,
       value: parsedCookie.value,
-      domain: "intel.pyro1121.com",
+      domain: EDGE_HOSTNAME,
       path: "/",
       secure: true,
       httpOnly: true,

@@ -108,6 +108,8 @@ When enabled, outbound dedupe uses AI Gateway to derive a normalized dedupe key 
 - `AI_GATEWAY_CACHE_TTL_CLASSIFY_SECONDS` (default `604800`): cache TTL override for classification jobs.
 - `AI_GATEWAY_CACHE_TTL_NEWS_ENRICH_SECONDS` (default `86400`): cache TTL override for news enrichment.
 - `AI_GATEWAY_CACHE_TTL_BRIEFING_SECONDS` (default `21600`): cache TTL override for briefing generation.
+- `BRIEFING_REFRESH_INTERVAL_SECONDS` (default `1800`): minimum age before a changed briefing window is regenerated in the background.
+- `BRIEFING_CACHE_TTL_SECONDS` (default `604800`): KV retention for cached generated briefing windows.
 - `AI_GATEWAY_MAX_ATTEMPTS` (default `1`): gateway retry attempts (`1` minimizes duplicate token usage).
 - `AI_GATEWAY_RETRY_DELAY_MS` (default `250`): retry delay when attempts > 1.
 - `AI_GATEWAY_BACKOFF` (default `exponential`): retry backoff strategy (`exponential` or `linear`).
@@ -125,6 +127,11 @@ AI jobs route supports concurrent batch execution for:
 - `classify` (single-label classification)
 
 If AI Gateway is unset or fails, the worker falls back to deterministic SHA-256 hashing of canonicalized payloads.
+
+Public briefings now use a stale-while-refresh model:
+- `/api/briefings` serves cached briefing windows immediately when available.
+- Missing or stale AI windows enqueue background regeneration instead of blocking the request on live AI output.
+- Deterministic fallback briefing text is returned while regeneration runs or when AI generation fails.
 
 ## Worker Pipeline Enabled
 

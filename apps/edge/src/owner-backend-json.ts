@@ -46,12 +46,15 @@ export async function postOwnerBackendJson<TPayload extends Record<string, unkno
   const parsed = await backendResponse.json().catch(() => null) as { result?: unknown; error?: unknown } | null;
   const result = parsed && isRecord(parsed.result) ? parsed.result as TPayload : null;
   if (!backendResponse.ok || !result) {
-    const error = parsed && typeof parsed.error === "string"
+    const malformedSuccess = backendResponse.ok && !result;
+    const error = malformedSuccess
+      ? `${args.errorPrefix} returned malformed success payload`
+      : parsed && typeof parsed.error === "string"
       ? parsed.error
       : `${args.errorPrefix} failed with HTTP ${backendResponse.status}`;
     return {
       ok: false,
-      status: backendResponse.status || 502,
+      status: malformedSuccess ? 502 : (backendResponse.status || 502),
       error,
     };
   }

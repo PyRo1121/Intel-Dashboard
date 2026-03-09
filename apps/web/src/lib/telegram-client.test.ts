@@ -4,6 +4,7 @@ import {
   EMPTY_TELEGRAM_DATA,
   fetchTelegramDedupeFeedbackStatus,
   fetchTelegramFeed,
+  fetchTelegramSourceLeaderboard,
   postTelegramDedupeFeedback,
   resolveTelegramFeedData,
 } from "./telegram-client.ts";
@@ -90,6 +91,31 @@ test("fetchTelegramDedupeFeedbackStatus normalizes owner capability and count", 
         headers: { "Content-Type": "application/json" },
       })) as typeof fetch;
     assert.equal(await fetchTelegramDedupeFeedbackStatus(), null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchTelegramSourceLeaderboard returns payload on success and null on failure", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ window: "24h", generatedAt: "2026-03-09T12:00:00.000Z", entries: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })) as typeof fetch;
+    assert.deepEqual(await fetchTelegramSourceLeaderboard("24h"), {
+      window: "24h",
+      generatedAt: "2026-03-09T12:00:00.000Z",
+      entries: [],
+    });
+
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      })) as typeof fetch;
+    assert.equal(await fetchTelegramSourceLeaderboard("7d"), null);
   } finally {
     globalThis.fetch = originalFetch;
   }

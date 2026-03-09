@@ -130,6 +130,27 @@ export interface TelegramData {
   channels: TelegramChannel[];
 }
 
+export type TelegramSourceLeaderboardWindow = "24h" | "7d" | "30d";
+
+export interface TelegramSourceLeaderboardEntry {
+  channel: string;
+  label: string;
+  leadCount: number;
+  avgSignalScore: number;
+  highSignalLeadCount: number;
+  corroboratedLeadCount: number;
+  sourceHistoryScore: number;
+  trustTier: "core" | "verified" | "watch";
+  latencyTier: "instant" | "fast" | "monitor";
+  leaderboardScore: number;
+}
+
+export interface TelegramSourceLeaderboardResponse {
+  window: TelegramSourceLeaderboardWindow;
+  generatedAt: string;
+  entries: TelegramSourceLeaderboardEntry[];
+}
+
 export type TelegramAgeWindow = "all" | "24h";
 export type TelegramFeedMode = "deduped" | "raw" | "verified";
 

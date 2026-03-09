@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
 import { Clock, Image, LoaderCircle, MessageSquare, Radio, Video } from "lucide-solid";
 import TelegramMessageCard from "~/components/telegram/TelegramMessageCard";
@@ -30,6 +30,7 @@ import { getLatestTelegramMessageTimestamp, sortTelegramChannelsByMessageTime } 
 import {
   fetchTelegramDedupeFeedbackStatus,
   fetchTelegramFeed,
+  fetchTelegramSourceLeaderboard,
   postTelegramDedupeFeedback,
   resolveTelegramFeedData,
 } from "~/lib/telegram-client";
@@ -41,6 +42,7 @@ import type {
   TelegramEntry,
   TelegramFeedMode as FeedMode,
   TelegramMessage,
+  TelegramSourceLeaderboardWindow,
 } from "~/lib/telegram-types";
 import { isTelegramMessageVisible } from "~/lib/telegram-visibility";
 import { parseTimestampMs as parseTs, truncateText } from "~/lib/utils";
@@ -71,6 +73,7 @@ export default function TelegramPage() {
   const [hidePremiumNoise, setHidePremiumNoise] = createSignal(false);
   const [highSignalOnly, setHighSignalOnly] = createSignal(false);
   const [firstReportsOnly, setFirstReportsOnly] = createSignal(false);
+  const [leaderboardWindow, setLeaderboardWindow] = createSignal<TelegramSourceLeaderboardWindow>("24h");
   const feedThresholds = STANDARD_FEED_FRESHNESS_THRESHOLDS;
   let lastTimestamp = "";
   let signalFirstTouched = false;
@@ -240,6 +243,11 @@ export default function TelegramPage() {
   const mergeDuplicates = createMemo(() => feedMode() !== "raw");
   const verifiedOnly = createMemo(() => feedMode() === "verified");
   const signalSubscriber = createMemo(() => isAuthUserSignalSubscriber(auth.user()));
+  const [sourceLeaderboard] = createResource(
+    () => (signalSubscriber() ? leaderboardWindow() : null),
+    (window: TelegramSourceLeaderboardWindow | null) =>
+      (window ? fetchTelegramSourceLeaderboard(window, AbortSignal.timeout(8_000)) : Promise.resolve(null)),
+  );
   const premiumSignalEnabled = createMemo(() => signalSubscriber() && mergeDuplicates() && signalFirst());
   const premiumNoiseEnabled = createMemo(() => signalSubscriber() && mergeDuplicates() && hidePremiumNoise());
 
@@ -626,6 +634,53 @@ export default function TelegramPage() {
             </span>
           </Show>
         </div>
+
+        <Show when={signalSubscriber() && (sourceLeaderboard()?.entries?.length ?? 0) > 0}>
+          <div class="rounded-xl border border-violet-400/15 bg-violet-500/5 p-3">
+            <div class="mb-2 flex flex-wrap items-center gap-2">
+              <p class="text-[12px] font-semibold text-violet-100">Best First Reporters</p>
+              <div class="inline-flex rounded-xl border border-white/[0.08] bg-black/20 p-1">
+                <For each={["24h", "7d", "30d"] as TelegramSourceLeaderboardWindow[]}>
+                  {(window) => (
+                    <button
+                      type="button"
+                      onClick={() => setLeaderboardWindow(window)}
+                      aria-pressed={leaderboardWindow() === window}
+                      class={`min-h-9 cursor-pointer rounded-lg px-2.5 py-1 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 ${leaderboardWindow() === window ? "bg-white/[0.1] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+                    >
+                      {window}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
+            <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              <For each={sourceLeaderboard()?.entries?.slice(0, 6) ?? []}>
+                {(entry, index) => (
+                  <div class="rounded-xl border border-white/[0.08] bg-black/20 p-3">
+                    <div class="flex items-center justify-between gap-2">
+                      <p class="truncate text-[12px] font-semibold text-white">{index() + 1}. {entry.label}</p>
+                      <span class="rounded-full border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-200">
+                        Score {entry.leaderboardScore}
+                      </span>
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-1.5 text-[10px] text-zinc-400">
+                      <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
+                        {entry.leadCount} first
+                      </span>
+                      <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
+                        avg {entry.avgSignalScore}
+                      </span>
+                      <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
+                        {entry.highSignalLeadCount} A/B
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </For>
+            </div>
+          </div>
+        </Show>
 
         <div class="flex flex-wrap items-center gap-2">
           <div class="inline-flex rounded-xl border border-white/[0.08] bg-black/20 p-1">

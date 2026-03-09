@@ -1,5 +1,5 @@
 import { fetchClientJson, fetchPublicJson } from "./client-json.ts";
-import type { TelegramData } from "./telegram-types.ts";
+import type { TelegramData, TelegramSourceLeaderboardResponse, TelegramSourceLeaderboardWindow } from "./telegram-types.ts";
 
 export type TelegramDedupeFeedbackStatus = {
   ownerEnabled: boolean;
@@ -23,6 +23,17 @@ function withOptionalSignal(signal?: AbortSignal): { signal?: AbortSignal } {
 
 export async function fetchTelegramFeed<T>(signal?: AbortSignal): Promise<T | null> {
   const result = await fetchPublicJson<T>("/api/telegram", withOptionalSignal(signal));
+  return result.ok ? result.data : null;
+}
+
+export async function fetchTelegramSourceLeaderboard(
+  window: TelegramSourceLeaderboardWindow,
+  signal?: AbortSignal,
+): Promise<TelegramSourceLeaderboardResponse | null> {
+  const result = await fetchClientJson<TelegramSourceLeaderboardResponse>(
+    `/api/telegram/source-leaderboard?window=${encodeURIComponent(window)}`,
+    withOptionalSignal(signal),
+  );
   return result.ok ? result.data : null;
 }
 

@@ -81,11 +81,14 @@ export function shouldHideTelegramPremiumNoise<TEntry extends TelegramPremiumEnt
 }
 
 export function isHighSignalTelegramEntry<TEntry extends TelegramPremiumEntryLike>(entry: TEntry): boolean {
+  if (entry.dedupe?.signalGrade) {
+    return entry.dedupe.signalGrade === "A" || entry.dedupe.signalGrade === "B";
+  }
   const score = entry.dedupe?.signalScore;
   if (typeof score === "number") {
     return score >= HIGH_SIGNAL_TELEGRAM_SCORE_THRESHOLD;
   }
-  return entry.dedupe?.signalGrade === "A" || entry.dedupe?.signalGrade === "B";
+  return false;
 }
 
 export function isFirstReportTelegramEntry<TEntry extends TelegramPremiumEntryLike>(entry: TEntry): boolean {

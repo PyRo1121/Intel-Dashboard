@@ -41,7 +41,7 @@ test("applyTelegramPremiumFeed promotes stronger corroborated entries ahead of r
 
   assert.equal(ranked[0]?.dedupe?.signalScore, 72);
   assert.equal(ranked[0]?.dedupe?.rankScore, 61);
-  assert.equal(ranked[0]?.dedupe?.signalScore, 72);
+  assert.equal(ranked[1]?.dedupe?.signalScore, 68);
 });
 
 test("shouldHideTelegramPremiumNoise removes low-signal stale duplicate chatter", () => {
@@ -87,7 +87,7 @@ test("high signal and first-report helpers use signal metadata", () => {
   assert.equal(
     isHighSignalTelegramEntry({
       message: { datetime: "2026-03-09T12:05:00.000Z" },
-      dedupe: { signalScore: 74 },
+      dedupe: { signalScore: 65, signalGrade: "B" },
     }),
     true,
   );

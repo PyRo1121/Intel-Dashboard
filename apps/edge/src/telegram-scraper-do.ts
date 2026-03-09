@@ -216,6 +216,10 @@ interface TelegramSignalProfileRow {
   updated_at: string;
 }
 
+function isFiniteRecordNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 type PersistMessageSource = "new" | "backfill" | "media_backfill";
 
 interface PersistMessageRecord {
@@ -917,19 +921,47 @@ export class TelegramScraperDO extends DurableObject<Env> {
       for (const row of rows) {
         const category = (row.category || "").trim().toLowerCase() || "default";
         try {
-          const weights = JSON.parse(row.weights_json) as TelegramSignalProfile["weights"];
-          const thresholds = JSON.parse(row.thresholds_json) as TelegramSignalProfile["thresholds"];
+          const parsedWeights = JSON.parse(row.weights_json) as Partial<TelegramSignalProfile["weights"]> | null;
+          const parsedThresholds = JSON.parse(row.thresholds_json) as Partial<TelegramSignalProfile["thresholds"]> | null;
+          if (
+            !parsedWeights ||
+            !parsedThresholds ||
+            !isFiniteRecordNumber(parsedWeights.sourceQuality) ||
+            !isFiniteRecordNumber(parsedWeights.lead) ||
+            !isFiniteRecordNumber(parsedWeights.corroboration) ||
+            !isFiniteRecordNumber(parsedWeights.evidence) ||
+            !isFiniteRecordNumber(parsedWeights.freshness) ||
+            !isFiniteRecordNumber(parsedWeights.penalty) ||
+            !isFiniteRecordNumber(parsedThresholds.a) ||
+            !isFiniteRecordNumber(parsedThresholds.b) ||
+            !isFiniteRecordNumber(parsedThresholds.c)
+          ) {
+            throw new Error("invalid_signal_profile_shape");
+          }
+          const weights: TelegramSignalProfile["weights"] = {
+            sourceQuality: parsedWeights.sourceQuality,
+            lead: parsedWeights.lead,
+            corroboration: parsedWeights.corroboration,
+            evidence: parsedWeights.evidence,
+            freshness: parsedWeights.freshness,
+            penalty: parsedWeights.penalty,
+          };
+          const thresholds: TelegramSignalProfile["thresholds"] = {
+            a: parsedThresholds.a,
+            b: parsedThresholds.b,
+            c: parsedThresholds.c,
+          };
           profiles.set(category, {
             profileId: row.profile_id,
             category: category === "default" ? null : category,
             weights,
             thresholds,
           });
-        } catch {
+        } catch (error) {
           console.warn("[TelegramScraper] Failed to parse signal profile row", {
             profileId: row.profile_id,
             category,
-            error: "invalid_signal_profile_json",
+            error: error instanceof Error ? error.message : "invalid_signal_profile_json",
           });
           continue;
         }

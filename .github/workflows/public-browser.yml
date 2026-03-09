@@ -42,7 +42,7 @@ jobs:
         run: bun run security:cf:allow-owner-e2e-ip
 
       - name: Let public allowlist propagate
-        run: sleep 8
+        run: sleep 20
 
       - name: Create artifact directory
         run: mkdir -p output/e2e-browser

@@ -4296,7 +4296,7 @@ function normalizeCrmCustomerStripeSnapshot(value: unknown): CrmCustomerStripeSn
         name: trimString(value.stripe.customer.name) ?? null,
         currency: trimString(value.stripe.customer.currency) ?? "usd",
         delinquent: value.stripe.customer.delinquent === true,
-        createdAtMs: Math.floor((parseFiniteNumber(value.stripe.customer.createdAtMs) ?? 0)) || null,
+        createdAtMs: normalizeOptionalTimestampMs(value.stripe.customer.createdAtMs),
         balanceUsd: Number((parseFiniteNumber(value.stripe.customer.balanceUsd) ?? 0).toFixed(2)),
       },
       subscription: isRecord(value.stripe.subscription)
@@ -4304,9 +4304,9 @@ function normalizeCrmCustomerStripeSnapshot(value: unknown): CrmCustomerStripeSn
             id: trimString(value.stripe.subscription.id) ?? null,
             status: trimString(value.stripe.subscription.status) ?? null,
             cancelAtPeriodEnd: value.stripe.subscription.cancelAtPeriodEnd === true,
-            cancelAtMs: Math.floor((parseFiniteNumber(value.stripe.subscription.cancelAtMs) ?? 0)) || null,
-            currentPeriodEndMs: Math.floor((parseFiniteNumber(value.stripe.subscription.currentPeriodEndMs) ?? 0)) || null,
-            canceledAtMs: Math.floor((parseFiniteNumber(value.stripe.subscription.canceledAtMs) ?? 0)) || null,
+            cancelAtMs: normalizeOptionalTimestampMs(value.stripe.subscription.cancelAtMs),
+            currentPeriodEndMs: normalizeOptionalTimestampMs(value.stripe.subscription.currentPeriodEndMs),
+            canceledAtMs: normalizeOptionalTimestampMs(value.stripe.subscription.canceledAtMs),
           }
         : null,
       invoices: invoicesRaw
@@ -5464,9 +5464,9 @@ async function handleAdminCrmCustomer(args: {
         id: trimString(subscriptionResult.data.id) ?? subscriptionId ?? null,
         status: trimString(subscriptionResult.data.status) ?? null,
         cancelAtPeriodEnd: subscriptionResult.data.cancel_at_period_end === true,
-        cancelAtMs: Math.floor((parseFiniteNumber(subscriptionResult.data.cancel_at) ?? 0) * 1000) || null,
-        currentPeriodEndMs: Math.floor((parseFiniteNumber(subscriptionResult.data.current_period_end) ?? 0) * 1000) || null,
-        canceledAtMs: Math.floor((parseFiniteNumber(subscriptionResult.data.canceled_at) ?? 0) * 1000) || null,
+        cancelAtMs: normalizeOptionalTimestampMs(subscriptionResult.data.cancel_at, 1000),
+        currentPeriodEndMs: normalizeOptionalTimestampMs(subscriptionResult.data.current_period_end, 1000),
+        canceledAtMs: normalizeOptionalTimestampMs(subscriptionResult.data.canceled_at, 1000),
       }
     : null;
 
@@ -5480,7 +5480,7 @@ async function handleAdminCrmCustomer(args: {
         name: trimString(customerResult.data.name) ?? null,
         currency: trimString(customerResult.data.currency) ?? "usd",
         delinquent: customerResult.data.delinquent === true,
-        createdAtMs: Math.floor((parseFiniteNumber(customerResult.data.created) ?? 0) * 1000) || null,
+        createdAtMs: normalizeOptionalTimestampMs(customerResult.data.created, 1000),
         balanceUsd: Number(((parseFiniteNumber(customerResult.data.balance) ?? 0) / 100).toFixed(2)),
       },
       subscription,
@@ -5578,8 +5578,8 @@ async function handleAdminCrmCancelSubscription(args: {
       atPeriodEnd,
       status: trimString(stripeResult.data.status) ?? next.status,
       canceled: stripeResult.data.canceled === true || !atPeriodEnd,
-      cancelAtMs: Math.floor((parseFiniteNumber(stripeResult.data.cancel_at) ?? 0) * 1000) || null,
-      currentPeriodEndMs: Math.floor((parseFiniteNumber(stripeResult.data.current_period_end) ?? 0) * 1000) || null,
+      cancelAtMs: normalizeOptionalTimestampMs(stripeResult.data.cancel_at, 1000),
+      currentPeriodEndMs: normalizeOptionalTimestampMs(stripeResult.data.current_period_end, 1000),
       updatedAtMs: nowMs,
     },
   });
@@ -6257,6 +6257,14 @@ function normalizeAiMediaCount(value: unknown): number {
   if (normalized.toLowerCase() === "false") return 0;
   const parsed = parseFiniteNumber(normalized);
   return parsed === undefined ? 0 : Math.max(0, Math.floor(parsed));
+}
+
+function normalizeOptionalTimestampMs(value: unknown, multiplier = 1): number | null {
+  const parsed = parseFiniteNumber(value);
+  if (parsed === undefined) {
+    return null;
+  }
+  return Math.max(0, Math.floor(parsed * multiplier));
 }
 
 function writeAiTelemetry(args: {

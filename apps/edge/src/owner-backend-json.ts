@@ -1,10 +1,10 @@
 import { isRecord } from "./type-guards.ts";
 
-type BackendJsonResult =
-  | { ok: true; payload: Record<string, unknown> }
+export type BackendJsonResult<TPayload extends Record<string, unknown> = Record<string, unknown>> =
+  | { ok: true; payload: TPayload }
   | { ok: false; status: number; error: string };
 
-export async function postOwnerBackendJson(args: {
+export async function postOwnerBackendJson<TPayload extends Record<string, unknown>>(args: {
   backendToken: string;
   url: string;
   userId: string;
@@ -12,7 +12,7 @@ export async function postOwnerBackendJson(args: {
   extraBody?: Record<string, unknown>;
   errorPrefix: string;
   fetchImpl: typeof fetch;
-}): Promise<BackendJsonResult> {
+}): Promise<BackendJsonResult<TPayload>> {
   if (!args.backendToken) {
     return { ok: false, status: 503, error: "Backend API token is not configured." };
   }
@@ -44,7 +44,7 @@ export async function postOwnerBackendJson(args: {
   }
 
   const parsed = await backendResponse.json().catch(() => null) as { result?: unknown; error?: unknown } | null;
-  const result = parsed && isRecord(parsed.result) ? parsed.result : null;
+  const result = parsed && isRecord(parsed.result) ? parsed.result as TPayload : null;
   if (!backendResponse.ok || !result) {
     const error = parsed && typeof parsed.error === "string"
       ? parsed.error

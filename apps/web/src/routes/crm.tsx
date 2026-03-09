@@ -2,7 +2,7 @@ import { Meta, Title } from "@solidjs/meta";
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
 import { computeAiCacheHitRatePercent } from "~/lib/ai-telemetry";
 import { useAuth } from "~/lib/auth";
-import { isAuthUserOwner, resolveAuthUserRole } from "~/lib/auth-user";
+import { isAuthUserOwner } from "~/lib/auth-user";
 import { fetchCrmAiTelemetry, fetchCrmOverview, postCrmAction } from "~/lib/crm-client";
 import { getCrmCustomerCacheSourceLabel } from "~/lib/crm-customer-cache";
 import { formatEventLabel } from "~/lib/event-label";

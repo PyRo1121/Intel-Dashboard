@@ -1,9 +1,10 @@
 import { Meta, Title } from "@solidjs/meta";
 import { Show, createResource, createSignal } from "solid-js";
 import { PREMIUM_PRICE_USD, formatDelayMinutesShortLabel } from "@intel-dashboard/shared/access-offers.ts";
-import { formatEntitlementTier, formatSubscriptionStatus, isOwnerRole } from "@intel-dashboard/shared/entitlement.ts";
+import { formatEntitlementTier, formatSubscriptionStatus } from "@intel-dashboard/shared/entitlement.ts";
 import {
   getBillingCheckoutBypassNotice,
+  getBillingPortalState,
   getBillingPortalBypassNotice,
   getBillingTrialNotice,
 } from "~/lib/billing-action-result";
@@ -11,9 +12,6 @@ import {
   callBillingAction,
   fetchBillingActivity,
   fetchBillingStatus,
-  type BillingActivityPayload,
-  type BillingActionPayload,
-  type BillingStatusPayload,
 } from "~/lib/billing-client";
 import { formatActivityKindLabel } from "~/lib/event-label";
 import { useWallClock } from "~/lib/live-refresh";
@@ -27,13 +25,21 @@ export default function BillingRoute() {
   const [notice, setNotice] = createSignal<string>("");
   const [error, setError] = createSignal<string>("");
   const nowMs = useWallClock(1000);
-  const portalAvailable = () => status()?.result?.subscription?.portalAvailable === true;
-  const ownerBypass = () => isOwnerRole(status()?.result?.role);
+  const portalState = () => getBillingPortalState(status()?.result);
 
-  const runStartTrial = async () => {
-    setBusyAction("trial");
+  const beginAction = (action: "trial" | "checkout" | "portal") => {
+    setBusyAction(action);
     setNotice("");
     setError("");
+  };
+
+  const refreshBillingState = async () => {
+    await refetch();
+    await refetchActivity();
+  };
+
+  const runStartTrial = async () => {
+    beginAction("trial");
     const result = await callBillingAction("/api/billing/start-trial");
     if (!result.ok) {
       setError(result.error || "Unable to start trial.");
@@ -41,15 +47,12 @@ export default function BillingRoute() {
       return;
     }
     setNotice(getBillingTrialNotice(result.result));
-    await refetch();
-    await refetchActivity();
+    await refreshBillingState();
     setBusyAction(null);
   };
 
   const runCheckout = async () => {
-    setBusyAction("checkout");
-    setNotice("");
-    setError("");
+    beginAction("checkout");
     const result = await callBillingAction("/api/billing/checkout");
     if (!result.ok) {
       setError(result.error || "Unable to start checkout.");
@@ -58,8 +61,7 @@ export default function BillingRoute() {
     }
     if (result.result?.bypassCheckout === true || result.result?.owner === true) {
       setNotice(getBillingCheckoutBypassNotice());
-      await refetch();
-      await refetchActivity();
+      await refreshBillingState();
       setBusyAction(null);
       return;
     }
@@ -73,10 +75,8 @@ export default function BillingRoute() {
   };
 
   const runPortal = async () => {
-    setBusyAction("portal");
-    setNotice("");
-    setError("");
-    if (!portalAvailable() && !ownerBypass()) {
+    beginAction("portal");
+    if (!portalState().portalReady) {
       setError("Billing portal is not ready yet for this account. Complete checkout once, then retry.");
       setBusyAction(null);
       return;
@@ -204,19 +204,18 @@ export default function BillingRoute() {
             <button
               type="button"
               onClick={() => void runPortal()}
-              disabled={busyAction() !== null || (!portalAvailable() && !ownerBypass())}
+              disabled={busyAction() !== null || !portalState().portalReady}
               data-testid="billing-manage-subscription"
               class="intel-btn intel-btn-primary disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Show when={busyAction() === "portal"} fallback={portalAvailable() || ownerBypass() ? "Manage Subscription" : "Portal Pending"}>
+              <Show when={busyAction() === "portal"} fallback={portalState().portalReady ? "Manage Subscription" : "Portal Pending"}>
                 Opening...
               </Show>
             </button>
             <button
               type="button"
               onClick={() => {
-                void refetch();
-                void refetchActivity();
+                void refreshBillingState();
               }}
               disabled={busyAction() !== null}
               data-testid="billing-refresh"
@@ -225,7 +224,7 @@ export default function BillingRoute() {
               Refresh
             </button>
           </div>
-          <Show when={!portalAvailable() && !ownerBypass()}>
+          <Show when={!portalState().portalReady}>
             <p class="text-xs text-zinc-500" data-testid="billing-portal-pending">
               Stripe portal unlocks automatically after first successful checkout webhook.
             </p>

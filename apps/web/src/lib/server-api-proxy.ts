@@ -68,16 +68,17 @@ function buildProxyHeaders(event: APIEvent, targetUrl: URL): Headers {
   return headers;
 }
 
+function setPrivateApiHeaders(headers: Headers): Headers {
+  headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
+  headers.set("CDN-Cache-Control", "no-store");
+  headers.set("Vary", "Origin, Cookie, Authorization");
+  return headers;
+}
+
 function buildPrivateApiError(status: number, error: string, detail?: string): Response {
-  return applyPrivateApiDefaults(new Response(
-    JSON.stringify(detail ? { error, detail } : { error }),
-    {
-      status,
-      headers: {
-        "Content-Type": "application/json",
-      },
-    },
-  ));
+  const response = Response.json(detail ? { error, detail } : { error }, { status });
+  setPrivateApiHeaders(response.headers);
+  return response;
 }
 
 function applyPrivateApiDefaults(response: Response): Response {
@@ -86,9 +87,7 @@ function applyPrivateApiDefaults(response: Response): Response {
     statusText: response.statusText,
     headers: response.headers,
   });
-  proxied.headers.set("Cache-Control", "private, no-store, no-cache, must-revalidate");
-  proxied.headers.set("CDN-Cache-Control", "no-store");
-  proxied.headers.set("Vary", "Origin, Cookie, Authorization");
+  setPrivateApiHeaders(proxied.headers);
   return proxied;
 }
 

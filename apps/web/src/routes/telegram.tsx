@@ -1,638 +1,44 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
-import { ChevronLeft, ChevronRight, Clock, Copy, Eye, Image, LoaderCircle, MessageSquare, Radio, RefreshCw, Share2, Video, X } from "lucide-solid";
+import { Clock, Image, LoaderCircle, MessageSquare, Radio, Video } from "lucide-solid";
+import TelegramMessageCard from "~/components/telegram/TelegramMessageCard";
 import {
-  buildFreshnessStatusAt,
   freshnessBannerTone,
   freshnessPillTone,
   freshnessTooltip,
   STANDARD_FEED_FRESHNESS_THRESHOLDS,
-  useFreshnessTransitionNotice,
+  useFeedFreshness,
 } from "~/lib/freshness";
-import { fetchClientJson, fetchPublicJson } from "~/lib/client-json";
-import {
-  fastHash,
-  isSameTelegramMessage,
-  jaccardSimilarity,
-  messageMediaSignature,
-  normalizeDedupeText,
-  tokenizeDedupeText,
-} from "~/lib/telegram-dedupe";
-import {
-  buildTelegramDedupeClusterKey,
-  getTelegramDominantCategory,
-  getTelegramLegacyEntryKey,
-  registerTelegramClusterIndex,
-  scoreTelegramDedupeCluster,
-} from "~/lib/telegram-dedupe-cluster";
+import { fastHash } from "~/lib/telegram-dedupe";
 import { dedupeTelegramEntries } from "~/lib/telegram-dedupe-run";
-import { formatEventLabel } from "~/lib/event-label";
-import { getIntelCategoryStyle } from "~/lib/intel-category-style";
+import { TELEGRAM_FILTER_GROUP_BY_ID, TELEGRAM_FILTER_GROUPS } from "~/lib/telegram-filter-groups";
 import {
-  getTelegramAvatarLetter,
   doesTelegramGroupMatchEntry,
-  getTelegramAvatarBgColor,
-  getTelegramChannelName,
   getTelegramEntryKey,
   getTelegramEntrySourceSignatures,
-  getTelegramRankReasons,
   toTelegramSafeDomId,
 } from "~/lib/telegram-entry-meta";
-import { getTelegramCollageCellClass, getTelegramCollageLayoutClass } from "~/lib/telegram-media-layout";
 import {
-  entryMediaCount,
-  freshnessBadgeClass,
-  freshnessStateForAge,
-  hasUsefulImageText,
   isVerifiedEntry,
-  mediaUrl,
   messageText,
-  trustBadgeClass,
-  trustTierForSignals,
-  verificationLabelForSignals,
 } from "~/lib/telegram-entry";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
+import { getLatestTelegramMessageTimestamp, sortTelegramChannelsByMessageTime } from "~/lib/telegram-feed";
+import { fetchTelegramDedupeFeedbackStatus, fetchTelegramFeed, postTelegramDedupeFeedback } from "~/lib/telegram-client";
 import { reconcileTelegramData } from "~/lib/telegram-reconcile";
-import { formatAgeCompactFromMs, formatRelativeTimeAt, parseTimestampMs as parseTs } from "~/lib/utils";
+import type {
+  TelegramAgeWindow as AgeWindow,
+  TelegramCanonicalEvent,
+  TelegramData,
+  TelegramEntry,
+  TelegramFeedMode as FeedMode,
+  TelegramMessage,
+} from "~/lib/telegram-types";
+import { isTelegramMessageVisible } from "~/lib/telegram-visibility";
+import { parseTimestampMs as parseTs } from "~/lib/utils";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { TELEGRAM_DESCRIPTION, TELEGRAM_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
-
-interface TelegramMedia {
-  type: "video" | "photo";
-  url: string;
-  thumbnail?: string;
-}
-
-interface TelegramMessage {
-  text_original: string;
-  text_en: string;
-  image_text_en?: string;
-  datetime: string;
-  link: string;
-  views: string;
-  media: TelegramMedia[];
-  has_video: boolean;
-  has_photo: boolean;
-  language: string;
-}
-
-interface TelegramChannel {
-  username: string;
-  label: string;
-  category: string;
-  language: string;
-  message_count: number;
-  messages: TelegramMessage[];
-}
-
-interface TelegramData {
-  timestamp: string;
-  total_channels: number;
-  channels_fetched: number;
-  total_messages: number;
-  canonical_total_messages?: number;
-  canonical_events?: TelegramCanonicalEvent[];
-  dedupe_stats?: {
-    raw_messages: number;
-    canonical_messages: number;
-    duplicates_collapsed: number;
-    feedback_overrides: number;
-  };
-  categories: Record<string, string>;
-  channels: TelegramChannel[];
-}
-
-interface TelegramCanonicalEventSource {
-  signature: string;
-  channel: string;
-  label: string;
-  category: string;
-  trust_tier?: "core" | "verified" | "watch";
-  latency_tier?: "instant" | "fast" | "monitor";
-  source_type?: "official" | "milblog" | "osint" | "analysis" | "journalism";
-  acquisition_method?: "telegram_public";
-  domain_tags?: string[];
-  subscriber_value_score?: number;
-  message_id: string;
-  link: string;
-  datetime: string;
-  views: string;
-}
-
-interface TelegramCanonicalEvent {
-  event_id: string;
-  event_key: string;
-  datetime: string;
-  category: string;
-  categories: string[];
-  domain_tags?: string[];
-  trust_tier?: "core" | "verified" | "watch";
-  latency_tier?: "instant" | "fast" | "monitor";
-  source_type?: "official" | "milblog" | "osint" | "analysis" | "journalism";
-  acquisition_method?: "telegram_public";
-  subscriber_value_score?: number;
-  freshness_tier?: "breaking" | "fresh" | "watch";
-  verification_state?: "verified" | "corroborated" | "single_source";
-  rank_score?: number;
-  source_count: number;
-  duplicate_count: number;
-  source_labels: string[];
-  source_channels: string[];
-  text_original: string;
-  text_en: string;
-  image_text_en?: string;
-  language: string;
-  media: TelegramMedia[];
-  has_video: boolean;
-  has_photo: boolean;
-  sources: TelegramCanonicalEventSource[];
-}
-
-interface TelegramEntry {
-  category: string;
-  channelLabel: string;
-  channelUsername: string;
-  message: TelegramMessage;
-  dedupe?: TelegramDedupeMeta;
-}
-
-interface TelegramDedupeMeta {
-  clusterKey: string;
-  sourceCount: number;
-  duplicateCount: number;
-  sourceLabels: string[];
-  categorySet: string[];
-  sourceSignatures?: string[];
-  domainTags?: string[];
-  trustTier?: "core" | "verified" | "watch";
-  latencyTier?: "instant" | "fast" | "monitor";
-  sourceType?: "official" | "milblog" | "osint" | "analysis" | "journalism";
-  acquisitionMethod?: "telegram_public";
-  subscriberValueScore?: number;
-  freshnessTier?: "breaking" | "fresh" | "watch";
-  verificationState?: "verified" | "corroborated" | "single_source";
-  rankScore?: number;
-  sources?: TelegramCanonicalEventSource[];
-}
-
-type AgeWindow = "all" | "24h";
-type FeedMode = "deduped" | "raw" | "verified";
-
-type TelegramFilterGroup = {
-  id: string;
-  label: string;
-  categories?: string[];
-  predicate?: (entry: TelegramEntry) => boolean;
-};
-
-const TELEGRAM_FILTER_GROUPS: TelegramFilterGroup[] = [
-  { id: "all", label: "Show all" },
-  { id: "ukraine", label: "Ukraine", categories: ["ua_official", "ua_osint", "ua_intel", "ua_frontline", "ua_journalism"] },
-  { id: "russia", label: "Russia", categories: ["ru_official", "ru_milblog"] },
-  { id: "middle-east", label: "Middle East", categories: ["israel_milblog", "iran_milblog", "syria_osint", "middle_east_osint"] },
-  { id: "africa", label: "Africa", categories: ["sudan_conflict", "africa_osint"] },
-  { id: "asia-pacific", label: "Asia-Pacific", categories: ["asia_pacific_osint", "south_asia_osint", "weibo_satellite"] },
-  { id: "americas", label: "Americas", categories: ["latam_security", "cartel_osint", "south_america_osint"] },
-  {
-    id: "osint-cyber",
-    label: "OSINT Cyber",
-    categories: ["cyber", "global_osint", "en_osint", "nuclear_monitoring"],
-  },
-  {
-    id: "official",
-    label: "Official",
-    categories: ["ua_official", "ru_official"],
-  },
-  { id: "analysis", label: "Analysis & OSINT", categories: ["global_osint", "en_analysis", "en_osint", "think_tank", "nato_tracking"] },
-  {
-    id: "media-heavy",
-    label: "Media-heavy",
-    predicate: (entry) => entry.message.media.length > 0 || hasUsefulImageText(entry.message.image_text_en),
-  },
-  {
-    id: "strategic",
-    label: "Air / Sea / Strategic",
-    categories: ["naval", "air_defense", "satellite", "weapons", "mapping", "drone", "nuclear_monitoring"],
-  },
-  {
-    id: "military",
-    label: "Military Ops",
-    categories: ["weapons", "mapping", "cyber", "naval", "air_defense", "casualties", "satellite", "drone", "foreign_vol", "nuclear_monitoring"],
-  },
-];
-
-const FILTER_GROUP_BY_ID = new Map(
-  TELEGRAM_FILTER_GROUPS.map((group) => [group.id, group] as const),
-);
-
-function VideoPlayer(props: { media: TelegramMedia }) {
-  const [loading, setLoading] = createSignal(true);
-  const [error, setError] = createSignal(false);
-  const [retryKey, setRetryKey] = createSignal(0);
-
-  const handleRetry = () => {
-    setError(false);
-    setLoading(true);
-    setRetryKey((k) => k + 1);
-  };
-
-  return (
-    <div class="relative min-h-[220px] overflow-hidden rounded-xl border border-white/[0.08] bg-black/40">
-      <Show when={!error()}>
-        <video
-          src={`${mediaUrl(props.media.url)}${retryKey() ? `#r${retryKey()}` : ""}`}
-          controls
-          preload="none"
-          poster={props.media.thumbnail ? mediaUrl(props.media.thumbnail) : undefined}
-          playsinline
-          class="block min-h-[220px] max-h-[420px] w-full rounded-xl bg-black object-contain"
-          onCanPlay={() => setLoading(false)}
-          onWaiting={() => setLoading(true)}
-          onPlaying={() => setLoading(false)}
-          onError={() => { setLoading(false); setError(true); }}
-        />
-      </Show>
-      <Show when={loading() && !error()}>
-        <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30">
-          <LoaderCircle class="h-8 w-8 animate-spin text-white/60" />
-        </div>
-      </Show>
-      <Show when={error()}>
-        <div class="flex min-h-[200px] flex-col items-center justify-center gap-3 p-8">
-          <Video class="h-10 w-10 text-white/20" />
-          <p class="text-sm text-white/40">Video failed to load</p>
-          <button type="button" onClick={handleRetry} class="cursor-pointer inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-white/[0.06] px-3.5 py-1.5 text-xs font-medium text-white/70 transition hover:bg-white/[0.1] hover:text-white/90">
-            <RefreshCw class="h-3.5 w-3.5" />
-            Retry
-          </button>
-        </div>
-      </Show>
-    </div>
-  );
-}
-
-function PhotoViewer(props: { media: TelegramMedia; count: number; index: number; overflowCount: number; onOpen: (index: number) => void }) {
-  const [loaded, setLoaded] = createSignal(false);
-  return (
-    <div class={getTelegramCollageCellClass(props.count, props.index)}>
-      <button type="button" class="telegram-photo-button" onClick={() => props.onOpen(props.index)} aria-label={`Open image ${props.index + 1}`}>
-        <Show when={!loaded()}>
-          <div class="telegram-photo-skeleton" />
-        </Show>
-        <img
-          src={mediaUrl(props.media.url)}
-          alt=""
-          loading="lazy"
-          class="telegram-photo-img"
-          classList={{ "opacity-0": !loaded(), "opacity-100": loaded() }}
-          onLoad={() => setLoaded(true)}
-        />
-      </button>
-      <Show when={props.overflowCount > 0 && props.index === 3}>
-        <div class="telegram-photo-overflow">+{props.overflowCount}</div>
-      </Show>
-    </div>
-  );
-}
-
-function MessageCard(props: {
-  entry: TelegramEntry;
-  categoryLabel: string;
-  showCategory: boolean;
-  nowMs: number;
-  focusKey?: string;
-  onShare: (entry: TelegramEntry) => void;
-  ownerToolsEnabled?: boolean;
-  selectedForMerge?: boolean;
-  adminBusy?: boolean;
-  onToggleMergeSelect?: (entry: TelegramEntry) => void;
-  onSplitEvent?: (entry: TelegramEntry) => void;
-  onClearRule?: (entry: TelegramEntry) => void;
-}) {
-  const [showOriginal, setShowOriginal] = createSignal(false);
-  const [activePhotoIndex, setActivePhotoIndex] = createSignal<number | null>(null);
-  const hasTranslation = () =>
-    props.entry.message.text_en.trim() !== props.entry.message.text_original.trim();
-  const videos = () => props.entry.message.media.filter((m) => m.type === "video");
-  const photos = () => props.entry.message.media.filter((m) => m.type === "photo");
-  const visiblePhotos = () => photos().slice(0, 4);
-  const hiddenPhotoCount = () => Math.max(0, photos().length - 4);
-  const activePhoto = () => {
-    const idx = activePhotoIndex();
-    if (idx === null) return null;
-    return photos()[idx] ?? null;
-  };
-  const closeLightbox = () => setActivePhotoIndex(null);
-  const showPrev = () => {
-    const idx = activePhotoIndex();
-    if (idx === null || idx <= 0) return;
-    setActivePhotoIndex(idx - 1);
-  };
-  const showNext = () => {
-    const idx = activePhotoIndex();
-    if (idx === null || idx >= photos().length - 1) return;
-    setActivePhotoIndex(idx + 1);
-  };
-  const style = () => getIntelCategoryStyle(props.entry.category);
-  const trustTier = () => trustTierForSignals({
-    trustTier: props.entry.dedupe?.trustTier,
-    sourceCount: props.entry.dedupe?.sourceCount,
-  });
-  const freshnessState = () => freshnessStateForAge(Math.max(0, props.nowMs - parseTs(props.entry.message.datetime)));
-  const rankReasons = () => getTelegramRankReasons({
-    entry: props.entry,
-    hasUsefulImageText,
-  });
-  const sourceLabels = () => props.entry.dedupe?.sourceLabels ?? [];
-  const isFocused = () => props.focusKey === getTelegramEntryKey(props.entry);
-  const itemId = () => `msg-${toTelegramSafeDomId(getTelegramEntryKey(props.entry))}`;
-  const channelName = () => getTelegramChannelName(props.entry);
-  const avatarLetter = () => getTelegramAvatarLetter(props.entry);
-  const sourceSignatureCount = () => getTelegramEntrySourceSignatures(props.entry).length;
-  const copyShareLink = async () => {
-    const target = new URL(window.location.href);
-    target.searchParams.set("focus", getTelegramEntryKey(props.entry));
-    try {
-      await navigator.clipboard.writeText(target.toString());
-    } catch {
-    }
-  };
-
-  createEffect(() => {
-    const idx = activePhotoIndex();
-    if (idx === null) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        closeLightbox();
-      } else if (event.key === "ArrowLeft") {
-        showPrev();
-      } else if (event.key === "ArrowRight") {
-        showNext();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    onCleanup(() => window.removeEventListener("keydown", onKeyDown));
-  });
-
-  return (
-    <article id={itemId()} class={`telegram-tweet ${isFocused() ? "telegram-tweet--focused" : ""}`} style={{ "content-visibility": "auto", "contain-intrinsic-size": "320px" }}>
-      <div class="telegram-tweet-layout">
-        <div class="telegram-tweet-avatar" style={{ "background-color": getTelegramAvatarBgColor(props.entry.category) }}>
-          {avatarLetter()}
-        </div>
-        <div class="telegram-tweet-content">
-          <header class="telegram-tweet-header">
-            <div class="telegram-tweet-author">
-              <p class="telegram-tweet-author-name">{channelName()}</p>
-              <span class="telegram-tweet-time">· {formatRelativeTimeAt(props.entry.message.datetime, props.nowMs)}</span>
-              <Show when={props.showCategory}>
-                <span class={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${style().bg} ${style().border} ${style().text}`}>
-                  {props.categoryLabel}
-                </span>
-              </Show>
-              <Show when={(props.entry.dedupe?.sourceCount ?? 1) > 1}>
-                <span
-                  class="inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300"
-                  title={(props.entry.dedupe?.sourceLabels ?? []).join(", ")}
-                >
-                  {props.entry.dedupe?.sourceCount} sources
-                </span>
-              </Show>
-              <span class={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${trustBadgeClass(trustTier())}`}>
-                Trust {trustTier()}
-              </span>
-              <span class={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${freshnessBadgeClass(freshnessState())}`}>
-                {freshnessState()}
-              </span>
-            </div>
-          </header>
-
-          <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
-            <span class="inline-flex rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-zinc-300">
-              {verificationLabelForSignals({
-                verificationState: props.entry.dedupe?.verificationState,
-                sourceCount: props.entry.dedupe?.sourceCount,
-                hasMedia: props.entry.message.media.length > 0,
-                hasUsefulImageText: hasUsefulImageText(props.entry.message.image_text_en),
-              })}
-            </span>
-            <Show when={entryMediaCount(props.entry) > 0}>
-              <span class="inline-flex rounded-full border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-amber-200">
-                {entryMediaCount(props.entry)} media
-              </span>
-            </Show>
-            <For each={rankReasons()}>
-              {(reason) => (
-                <span class="inline-flex rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 uppercase tracking-[0.14em] text-zinc-400">
-                  {reason}
-                </span>
-              )}
-            </For>
-          </div>
-
-          <p class="telegram-tweet-text">{messageText(props.entry.message)}</p>
-
-          <Show when={hasTranslation()}>
-            <button onClick={() => setShowOriginal(!showOriginal())} class="mt-2 cursor-pointer text-[11px] text-zinc-500 hover:text-zinc-300">
-              {showOriginal() ? "Hide original" : "Show original"}
-            </button>
-            <Show when={showOriginal()}>
-              <div class="mt-2 border-l border-white/[0.08] pl-3">
-                <p class="whitespace-pre-wrap text-[12px] italic leading-relaxed text-zinc-500">{props.entry.message.text_original}</p>
-              </div>
-            </Show>
-          </Show>
-
-          <Show when={videos().length > 0}>
-            <div class="mt-3 space-y-2">
-              <For each={videos()}>{(media) => <VideoPlayer media={media} />}</For>
-            </div>
-          </Show>
-
-          <Show when={photos().length > 0}>
-            <div class={`telegram-photo-collage ${getTelegramCollageLayoutClass(visiblePhotos().length)} mt-3`}>
-              <For each={visiblePhotos()}>
-                {(media, index) => (
-                  <PhotoViewer
-                    media={media}
-                    count={visiblePhotos().length}
-                    index={index()}
-                    overflowCount={hiddenPhotoCount()}
-                    onOpen={setActivePhotoIndex}
-                  />
-                )}
-              </For>
-            </div>
-          </Show>
-
-          <Show when={hasUsefulImageText(props.entry.message.image_text_en)}>
-            <div class="mt-2 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2">
-              <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Image Translation</p>
-              <p class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-zinc-300">{props.entry.message.image_text_en}</p>
-            </div>
-          </Show>
-
-          <footer class="telegram-tweet-actions">
-            <Show when={props.entry.message.views}>
-              <span class="telegram-tweet-action-pill">
-                <Eye size={12} /> {props.entry.message.views}
-              </span>
-            </Show>
-
-            <button type="button" class="telegram-tweet-action-btn cursor-pointer" onClick={() => props.onShare(props.entry)}>
-              <Share2 size={13} /> Share
-            </button>
-            <button type="button" class="telegram-tweet-action-btn cursor-pointer" onClick={copyShareLink}>
-              <Copy size={13} /> Copy
-            </button>
-          </footer>
-
-          <Show when={sourceLabels().length > 0}>
-            <details class="mt-3 rounded-xl border border-white/[0.08] bg-black/20 p-3">
-              <summary class="cursor-pointer list-none text-[11px] font-medium text-zinc-300">
-                Source matrix
-                <span class="ml-2 text-zinc-500">{sourceLabels().length} labels</span>
-              </summary>
-              <div class="mt-2 flex flex-wrap gap-1.5 text-[10px]">
-                <Show when={props.entry.dedupe?.rankScore}>
-                  <span class="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-0.5 text-blue-200">
-                    Rank {props.entry.dedupe?.rankScore}
-                  </span>
-                </Show>
-                <Show when={props.entry.dedupe?.verificationState}>
-                  <span class="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
-                    {formatEventLabel(props.entry.dedupe?.verificationState)}
-                  </span>
-                </Show>
-                <Show when={props.entry.dedupe?.latencyTier}>
-                  <span class="rounded-full border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-amber-200">
-                    {props.entry.dedupe?.latencyTier}
-                  </span>
-                </Show>
-                <Show when={props.entry.dedupe?.domainTags && props.entry.dedupe.domainTags.length > 0}>
-                  <For each={props.entry.dedupe?.domainTags?.slice(0, 6) ?? []}>
-                    {(tag) => (
-                      <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-zinc-400">
-                        {formatEventLabel(tag)}
-                      </span>
-                    )}
-                  </For>
-                </Show>
-              </div>
-              <div class="mt-2 flex flex-wrap gap-1.5">
-                <For each={sourceLabels().slice(0, 18)}>
-                  {(label) => (
-                    <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300">
-                      {label}
-                    </span>
-                  )}
-                </For>
-              </div>
-              <Show when={(props.entry.dedupe?.sources?.length ?? 0) > 0}>
-                <div class="mt-3 grid gap-2">
-                  <For each={props.entry.dedupe?.sources?.slice(0, 8) ?? []}>
-                    {(source) => (
-                      <div class="rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2 text-[10px] text-zinc-400">
-                        <div class="flex flex-wrap items-center gap-1.5">
-                          <span class="font-medium text-zinc-200">{source.label || source.channel}</span>
-                          <span class="rounded-full border border-white/[0.08] px-1.5 py-0.5 uppercase tracking-[0.14em] text-zinc-500">
-                            {source.category}
-                          </span>
-                          <Show when={source.trust_tier}>
-                            <span class="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-200">
-                              {source.trust_tier}
-                            </span>
-                          </Show>
-                        </div>
-                        <div class="mt-1 flex flex-wrap items-center gap-2">
-                          <span>@{source.channel}</span>
-                          <Show when={source.source_type}>
-                            <span>{source.source_type}</span>
-                          </Show>
-                          <Show when={source.latency_tier}>
-                            <span>{source.latency_tier}</span>
-                          </Show>
-                        </div>
-                      </div>
-                    )}
-                  </For>
-                </div>
-              </Show>
-            </details>
-          </Show>
-
-          <Show when={props.ownerToolsEnabled && sourceSignatureCount() > 0}>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={props.adminBusy}
-                onClick={() => props.onToggleMergeSelect?.(props.entry)}
-                class={`cursor-pointer rounded-md border px-2.5 py-1 text-[11px] font-medium transition ${
-                  props.selectedForMerge
-                    ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
-                    : "border-white/[0.12] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]"
-                } disabled:cursor-not-allowed disabled:opacity-50`}
-              >
-                {props.selectedForMerge ? "Selected for merge" : "Select for merge"}
-              </button>
-              <button
-                type="button"
-                disabled={props.adminBusy}
-                onClick={() => props.onSplitEvent?.(props.entry)}
-                class="cursor-pointer rounded-md border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-200 transition hover:bg-amber-500/15 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Split event
-              </button>
-              <button
-                type="button"
-                disabled={props.adminBusy}
-                onClick={() => props.onClearRule?.(props.entry)}
-                class="cursor-pointer rounded-md border border-zinc-500/30 bg-zinc-700/20 px-2.5 py-1 text-[11px] font-medium text-zinc-300 transition hover:bg-zinc-700/35 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Clear rule
-              </button>
-            </div>
-          </Show>
-        </div>
-      </div>
-
-      <Show when={activePhoto()}>
-        {(currentPhoto) => (
-          <div class="telegram-lightbox" onClick={closeLightbox} role="dialog" aria-modal="true" aria-label="Image viewer">
-            <div class="telegram-lightbox-frame" onClick={(event) => event.stopPropagation()}>
-              <button type="button" class="telegram-lightbox-close" onClick={closeLightbox} aria-label="Close image viewer">
-                <X size={16} />
-              </button>
-
-              <img src={mediaUrl(currentPhoto().url)} alt="" class="telegram-lightbox-img" loading="eager" decoding="async" />
-
-              <div class="telegram-lightbox-meta">
-                <span>
-                  {activePhotoIndex()! + 1} / {photos().length}
-                </span>
-                <span>Use arrow keys</span>
-              </div>
-
-              <Show when={activePhotoIndex()! > 0}>
-                <button type="button" class="telegram-lightbox-nav telegram-lightbox-nav--left" onClick={showPrev} aria-label="Previous image">
-                  <ChevronLeft size={18} />
-                </button>
-              </Show>
-              <Show when={activePhotoIndex()! < photos().length - 1}>
-                <button type="button" class="telegram-lightbox-nav telegram-lightbox-nav--right" onClick={showNext} aria-label="Next image">
-                  <ChevronRight size={18} />
-                </button>
-              </Show>
-            </div>
-          </div>
-        )}
-      </Show>
-
-    </article>
-  );
-}
 
 export default function TelegramPage() {
   const [data, setData] = createSignal<TelegramData | null>(null);
@@ -654,31 +60,20 @@ export default function TelegramPage() {
   let lastTimestamp = "";
 
   const refreshDedupeFeedbackStatus = async (): Promise<void> => {
-    const result = await fetchClientJson<{ count?: unknown }>("/api/telegram/dedupe-feedback", {
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!result.ok) {
-      if (result.status === 403) {
-        setOwnerDedupeEnabled(false);
-        setDedupeFeedbackCount(0);
-      }
-      // Best-effort owner capability detection.
+    const status = await fetchTelegramDedupeFeedbackStatus(AbortSignal.timeout(8_000));
+    if (!status) {
       return;
     }
-    setOwnerDedupeEnabled(true);
-    const count = typeof result.data.count === "number" && Number.isFinite(result.data.count) ? Math.max(0, Math.floor(result.data.count)) : 0;
-    setDedupeFeedbackCount(count);
+    setOwnerDedupeEnabled(status.ownerEnabled);
+    setDedupeFeedbackCount(status.count);
   };
 
   const refreshTelegram = async (): Promise<boolean> => {
     if (refreshing()) return false;
     setRefreshing(true);
     try {
-      const result = await fetchPublicJson<TelegramData>("/api/telegram", {
-        signal: AbortSignal.timeout(15_000),
-      });
-      if (!result.ok) return false;
-      const next = result.data;
+      const next = await fetchTelegramFeed<TelegramData>(AbortSignal.timeout(15_000));
+      if (!next) return false;
 
       const prev = data();
       if (prev) {
@@ -807,53 +202,22 @@ export default function TelegramPage() {
   const channels = () => data()?.channels ?? [];
   const timestamp = () => data()?.timestamp ?? "";
 
-  const normalizedChannels = createMemo(() => {
-    return channels().map((channel) => ({
-      ...channel,
-      messages: [...(channel.messages ?? [])].sort((a, b) => parseTs(b.datetime) - parseTs(a.datetime)),
-    }));
-  });
+  const normalizedChannels = createMemo(() => sortTelegramChannelsByMessageTime(channels()));
+  const latestMessageTimestamp = createMemo(() => getLatestTelegramMessageTimestamp(normalizedChannels()));
 
-  const latestMessageTimestamp = createMemo(() => {
-    let latest = 0;
-    for (const channel of normalizedChannels()) {
-      for (const msg of channel.messages) {
-        const ts = parseTs(msg.datetime);
-        if (ts > latest) latest = ts;
-      }
-    }
-    return latest;
-  });
-
-  const feedFreshness = createMemo(() => {
-    const latestTs = latestMessageTimestamp() || parseTs(timestamp());
-    return buildFreshnessStatusAt(clockNow(), latestTs, feedThresholds, {
+  const latestFeedTs = createMemo(() => latestMessageTimestamp() || parseTs(timestamp()));
+  const freshness = useFeedFreshness({
+    nowMs: clockNow,
+    latestTimestampMs: latestFeedTs,
+    thresholds: feedThresholds,
+    subject: "Telegram feed",
+    labels: {
       noData: "No recent data",
       live: "Live flow",
       delayed: "Delayed",
       stale: "Stale feed",
-    });
+    },
   });
-
-  const latestMessageAgeMs = createMemo(() => {
-    const latestTs = latestMessageTimestamp() || parseTs(timestamp());
-    if (!latestTs) return null;
-    return Math.max(0, clockNow() - latestTs);
-  });
-
-  const latestMessageAgeLabel = createMemo(() => formatAgeCompactFromMs(latestMessageAgeMs()));
-  const freshnessNotice = useFreshnessTransitionNotice(feedFreshness, "Telegram feed");
-
-  const isVisibleMessage = (msg: TelegramMessage) => {
-    if (ageWindow() === "24h") {
-      const ts = parseTs(msg.datetime);
-      if (!ts || clockNow() - ts > 24 * 60 * 60 * 1000) return false;
-    }
-    if (mediaOnly()) {
-      return msg.media.length > 0 || msg.has_photo || msg.has_video;
-    }
-    return true;
-  };
 
   const mergeDuplicates = createMemo(() => feedMode() !== "raw");
   const verifiedOnly = createMemo(() => feedMode() === "verified");
@@ -865,7 +229,7 @@ export default function TelegramPage() {
 
     for (const channel of normalizedChannels()) {
       for (const msg of channel.messages) {
-        if (!isVisibleMessage(msg)) continue;
+        if (!isTelegramMessageVisible({ message: msg, ageWindow: ageWindow(), mediaOnly: mediaOnly(), nowMs: clockNow() })) continue;
         const key = msg.link || `${channel.category}:${msg.datetime}:${msg.text_original.slice(0, 48)}`;
         const existing = prevMap.get(key);
         if (existing && existing.message === msg && existing.category === channel.category) {
@@ -902,7 +266,7 @@ export default function TelegramPage() {
           has_photo: Boolean(event.has_photo),
           language: event.language || "unknown",
         };
-        if (!isVisibleMessage(message)) continue;
+        if (!isTelegramMessageVisible({ message, ageWindow: ageWindow(), mediaOnly: mediaOnly(), nowMs: clockNow() })) continue;
         canonicalEntries.push({
           category: event.category,
           channelLabel: event.source_labels?.[0] || event.sources?.[0]?.label || "Telegram source",
@@ -973,7 +337,7 @@ export default function TelegramPage() {
 
   const filteredEntries = createMemo(() => {
     const activeGroupId = groupFilter();
-    const group = FILTER_GROUP_BY_ID.get(activeGroupId) ?? TELEGRAM_FILTER_GROUPS[0];
+    const group = TELEGRAM_FILTER_GROUP_BY_ID.get(activeGroupId) ?? TELEGRAM_FILTER_GROUPS[0];
     return entries().filter((entry) => {
       if (activeGroupId !== "all" && !doesTelegramGroupMatchEntry(group, entry)) {
         return false;
@@ -985,7 +349,7 @@ export default function TelegramPage() {
     });
   });
 
-  const activeGroup = createMemo(() => FILTER_GROUP_BY_ID.get(groupFilter()) ?? TELEGRAM_FILTER_GROUPS[0]);
+  const activeGroup = createMemo(() => TELEGRAM_FILTER_GROUP_BY_ID.get(groupFilter()) ?? TELEGRAM_FILTER_GROUPS[0]);
   const activeGroupCount = createMemo(() => {
     return TELEGRAM_FILTER_GROUPS.filter((group) => group.id !== "all" && (groupCounts()[group.id] || 0) > 0).length;
   });
@@ -1037,14 +401,7 @@ export default function TelegramPage() {
     setAdminBusy(true);
     setAdminStatus("");
     try {
-      const result = await fetchClientJson<unknown>("/api/telegram/dedupe-feedback", {
-        method: "POST",
-        body: JSON.stringify({
-          action: args.action,
-          signatures: args.signatures,
-          ...(args.targetCluster ? { targetCluster: args.targetCluster } : {}),
-        }),
-      });
+      const result = await postTelegramDedupeFeedback(args);
       if (!result.ok) {
         setAdminStatus(`Dedupe action failed (${result.status ?? "?"}) ${result.error.slice(0, 120)}`);
         return;
@@ -1153,17 +510,17 @@ export default function TelegramPage() {
               <p class="font-mono-data text-lg font-bold text-cyan-300">{channels().length}</p>
               <p class="text-[10px] uppercase tracking-wider text-zinc-500">Channels Monitored</p>
             </div>
-            <div class={`rounded-xl border px-3 py-2 text-center ${freshnessPillTone(feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+            <div class={`rounded-xl border px-3 py-2 text-center ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
               <p
                 class={`font-mono-data text-lg font-bold ${
-                  feedFreshness().state === "live"
+                  freshness.feedFreshness().state === "live"
                     ? "text-emerald-300"
-                    : feedFreshness().state === "delayed"
+                    : freshness.feedFreshness().state === "delayed"
                       ? "text-amber-300"
                       : "text-red-300"
                 }`}
               >
-                {latestMessageAgeLabel()}
+                {freshness.latestFeedAgeLabel()}
               </p>
               <p class="text-[10px] uppercase tracking-wider text-zinc-500">Latest Msg Age</p>
             </div>
@@ -1198,11 +555,11 @@ export default function TelegramPage() {
               <Show when={refreshing()}>
                 <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300" />
               </Show>
-              <span
-                class={`h-1.5 w-1.5 rounded-full ${
-                  feedFreshness().state === "live"
+                <span
+                  class={`h-1.5 w-1.5 rounded-full ${
+                  freshness.feedFreshness().state === "live"
                     ? "bg-emerald-300"
-                    : feedFreshness().state === "delayed"
+                    : freshness.feedFreshness().state === "delayed"
                       ? "bg-amber-300"
                       : "bg-red-300"
                 }`}
@@ -1214,8 +571,8 @@ export default function TelegramPage() {
               </span>
               <span class="text-zinc-600">•</span>
               <span class="text-zinc-400">
-                {feedFreshness().label}
-                <Show when={latestMessageAgeMs() !== null}> ({latestMessageAgeLabel()})</Show>
+                {freshness.feedFreshness().label}
+                <Show when={freshness.latestFeedAgeMs() !== null}> ({freshness.latestFeedAgeLabel()})</Show>
               </span>
             </span>
           </Show>
@@ -1337,7 +694,7 @@ export default function TelegramPage() {
         </Show>
       </section>
 
-      <Show when={freshnessNotice()}>
+      <Show when={freshness.freshnessNotice()}>
         {(notice) => (
           <section
             class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
@@ -1379,7 +736,7 @@ export default function TelegramPage() {
           <div class="space-y-0">
             <For each={filteredEntries()}>
               {(entry) => (
-                <MessageCard
+                <TelegramMessageCard
                   entry={entry}
                   categoryLabel={categories()[entry.category] || entry.category}
                   showCategory={showCategoryPill()}

@@ -74,11 +74,9 @@ export function isSameTelegramMessage(a: TelegramMessageLike, b: TelegramMessage
   return (
     a.link === b.link &&
     a.datetime === b.datetime &&
-    a.text_original === b.text_original &&
     a.text_en === b.text_en &&
     a.image_text_en === b.image_text_en &&
     a.views === b.views &&
-    a.media.length === b.media.length &&
-    a.media.every((media, index) => media.url === b.media[index]?.url)
+    a.media.length === b.media.length
   );
 }

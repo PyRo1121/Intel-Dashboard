@@ -10,8 +10,35 @@ import {
   useFreshnessTransitionNotice,
 } from "~/lib/freshness";
 import { fetchClientJson, fetchPublicJson } from "~/lib/client-json";
+import {
+  fastHash,
+  isSameTelegramMessage,
+  jaccardSimilarity,
+  messageMediaSignature,
+  normalizeDedupeText,
+  tokenizeDedupeText,
+} from "~/lib/telegram-dedupe";
+import {
+  buildTelegramDedupeClusterKey,
+  getTelegramDominantCategory,
+  getTelegramLegacyEntryKey,
+  registerTelegramClusterIndex,
+  scoreTelegramDedupeCluster,
+} from "~/lib/telegram-dedupe-cluster";
+import { dedupeTelegramEntries } from "~/lib/telegram-dedupe-run";
 import { formatEventLabel } from "~/lib/event-label";
 import { getIntelCategoryStyle } from "~/lib/intel-category-style";
+import {
+  getTelegramAvatarLetter,
+  doesTelegramGroupMatchEntry,
+  getTelegramAvatarBgColor,
+  getTelegramChannelName,
+  getTelegramEntryKey,
+  getTelegramEntrySourceSignatures,
+  getTelegramRankReasons,
+  toTelegramSafeDomId,
+} from "~/lib/telegram-entry-meta";
+import { getTelegramCollageCellClass, getTelegramCollageLayoutClass } from "~/lib/telegram-media-layout";
 import {
   entryMediaCount,
   freshnessBadgeClass,
@@ -25,6 +52,7 @@ import {
   verificationLabelForSignals,
 } from "~/lib/telegram-entry";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
+import { reconcileTelegramData } from "~/lib/telegram-reconcile";
 import { formatAgeCompactFromMs, formatRelativeTimeAt, parseTimestampMs as parseTs } from "~/lib/utils";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { TELEGRAM_DESCRIPTION, TELEGRAM_TITLE } from "@intel-dashboard/shared/route-meta.ts";
@@ -198,392 +226,6 @@ const FILTER_GROUP_BY_ID = new Map(
   TELEGRAM_FILTER_GROUPS.map((group) => [group.id, group] as const),
 );
 
-const FILTER_GROUP_CATEGORY_SET = new Map(
-  TELEGRAM_FILTER_GROUPS.map((group) => [group.id, new Set(group.categories ?? [])] as const),
-);
-
-function getCategoryStyle(category: string) {
-  return getIntelCategoryStyle(category);
-}
-
-function rankReasonsForEntry(entry: TelegramEntry, nowMs: number): string[] {
-  const reasons: string[] = [];
-  if (entry.dedupe?.freshnessTier === "breaking") reasons.push("breaking");
-  else if (entry.dedupe?.freshnessTier === "fresh") reasons.push("fresh");
-  const sourceCount = entry.dedupe?.sourceCount ?? 1;
-  if (sourceCount >= 2) reasons.push(`${sourceCount} sources`);
-  if (entry.message.media.length > 0) reasons.push("visual");
-  if (hasUsefulImageText(entry.message.image_text_en) && entry.message.media.length === 0) reasons.push("ocr");
-  if (entry.dedupe?.domainTags?.includes("osint_cyber")) reasons.push("cyber");
-  if (
-    entry.dedupe?.domainTags?.includes("strategic") ||
-    entry.dedupe?.domainTags?.includes("satellite") ||
-    entry.dedupe?.domainTags?.includes("air") ||
-    entry.dedupe?.domainTags?.includes("maritime")
-  ) {
-    reasons.push("strategic");
-  }
-  return reasons.slice(0, 4);
-}
-
-function groupMatchesEntry(group: TelegramFilterGroup, entry: TelegramEntry): boolean {
-  if (group.id === "all") return true;
-  if (group.predicate?.(entry)) return true;
-  const categorySet = FILTER_GROUP_CATEGORY_SET.get(group.id);
-  if (!categorySet || categorySet.size === 0) return false;
-  if (categorySet.has(entry.category)) return true;
-  return entry.dedupe?.categorySet?.some((category) => categorySet.has(category)) ?? false;
-}
-
-const AVATAR_BG_BY_TEXT_CLASS: Record<string, string> = {
-  "text-blue-300": "#93c5fd",
-  "text-cyan-300": "#67e8f9",
-  "text-sky-300": "#7dd3fc",
-  "text-yellow-300": "#fde047",
-  "text-teal-300": "#5eead4",
-  "text-rose-300": "#fda4af",
-  "text-red-300": "#fca5a5",
-  "text-emerald-300": "#6ee7b7",
-  "text-lime-300": "#bef264",
-  "text-orange-300": "#fdba74",
-  "text-violet-300": "#c4b5fd",
-  "text-green-300": "#86efac",
-  "text-indigo-300": "#a5b4fc",
-  "text-purple-300": "#d8b4fe",
-  "text-stone-300": "#d6d3d1",
-  "text-fuchsia-300": "#f0abfc",
-  "text-amber-300": "#fcd34d",
-  "text-pink-300": "#f9a8d4",
-  "text-slate-300": "#cbd5e1",
-  "text-blue-200": "#bfdbfe",
-  "text-emerald-200": "#a7f3d0",
-  "text-zinc-200": "#e4e4e7",
-  "text-amber-200": "#fde68a",
-  "text-yellow-200": "#fef08a",
-  "text-sky-200": "#bae6fd",
-  "text-lime-200": "#d9f99d",
-  "text-red-200": "#fecaca",
-  "text-rose-200": "#fecdd3",
-  "text-orange-200": "#fed7aa",
-  "text-teal-200": "#99f6e4",
-};
-
-function avatarBgColor(category: string): string {
-  const style = getCategoryStyle(category);
-  return AVATAR_BG_BY_TEXT_CLASS[style.text] ?? "#a1a1aa";
-}
-
-function entryKey(entry: TelegramEntry) {
-  if (entry.dedupe?.clusterKey) return entry.dedupe.clusterKey;
-  return entry.message.link || `${entry.category}:${entry.message.datetime}:${entry.message.text_original.slice(0, 48)}`;
-}
-
-function entrySourceSignatures(entry: TelegramEntry): string[] {
-  return entry.dedupe?.sourceSignatures?.filter((value) => typeof value === "string" && value.trim().length > 0) ?? [];
-}
-
-function safeDomId(value: string) {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 140);
-}
-
-function fastHash(value: string): string {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(36);
-}
-
-function normalizeDedupeText(value: string): string {
-  const normalized = value
-    .normalize("NFKD")
-    .toLowerCase()
-    .replace(/https?:\/\/\S+/g, " ")
-    .replace(/[@#][a-z0-9_]+/g, " ")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\b(?:follow|subscribe|join|source|via|breaking|update|reportedly)\b/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return normalized.slice(0, 1200);
-}
-
-const DEDUPE_STOPWORDS = new Set([
-  "the", "and", "for", "that", "with", "this", "from", "have", "has", "are", "was", "were", "will",
-  "about", "after", "into", "over", "under", "their", "there", "they", "them", "said", "says", "more",
-  "intel", "news", "update", "breaking", "report", "reports",
-]);
-
-function tokenizeDedupeText(value: string): string[] {
-  if (!value) return [];
-  const tokens = value
-    .split(" ")
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 3 && !DEDUPE_STOPWORDS.has(token));
-  return Array.from(new Set(tokens)).slice(0, 96);
-}
-
-function jaccardSimilarity(left: Set<string>, right: Set<string>): number {
-  if (left.size === 0 || right.size === 0) return 0;
-  let intersection = 0;
-  for (const token of left) {
-    if (right.has(token)) intersection += 1;
-  }
-  const union = left.size + right.size - intersection;
-  return union > 0 ? intersection / union : 0;
-}
-
-function messageMediaSignature(message: TelegramMessage): string {
-  if (!Array.isArray(message.media) || message.media.length === 0) return "";
-  const mediaKeys = message.media
-    .map((media) => {
-      const parts = media.url.split("/").filter(Boolean);
-      return parts.at(-1) ?? media.url;
-    })
-    .sort();
-  return mediaKeys.join("|").slice(0, 260);
-}
-
-function isSameMessage(a: TelegramMessage, b: TelegramMessage) {
-  return (
-    a.link === b.link &&
-    a.datetime === b.datetime &&
-    a.text_en === b.text_en &&
-    a.image_text_en === b.image_text_en &&
-    a.views === b.views &&
-    a.media.length === b.media.length
-  );
-}
-
-function reconcileData(prev: TelegramData, next: TelegramData): TelegramData {
-  const prevByKey = new Map<string, TelegramMessage>();
-  for (const channel of prev.channels) {
-    for (const msg of channel.messages) {
-      const key = msg.link || `${channel.category}:${msg.datetime}:${msg.text_original.slice(0, 48)}`;
-      prevByKey.set(key, msg);
-    }
-  }
-
-  return {
-    ...next,
-    channels: next.channels.map((channel) => ({
-      ...channel,
-      messages: channel.messages.map((msg) => {
-        const key = msg.link || `${channel.category}:${msg.datetime}:${msg.text_original.slice(0, 48)}`;
-        const existing = prevByKey.get(key);
-        return existing && isSameMessage(existing, msg) ? existing : msg;
-      }),
-    })),
-  };
-}
-
-const DEDUPE_TIME_WINDOW_MS = 2 * 60 * 60 * 1000;
-const DEDUPE_MEDIA_WINDOW_MS = 6 * 60 * 60 * 1000;
-
-type TelegramDedupeCluster = {
-  key: string;
-  primary: TelegramEntry;
-  canonicalText: string;
-  tokenSet: Set<string>;
-  mediaSignature: string;
-  latestTs: number;
-  sourceLabels: Set<string>;
-  sourceUsers: Set<string>;
-  categories: Map<string, number>;
-  aliases: Set<string>;
-};
-
-function legacyEntryKey(entry: TelegramEntry): string {
-  return entry.message.link || `${entry.category}:${entry.message.datetime}:${entry.message.text_original.slice(0, 48)}`;
-}
-
-function registerClusterIndex(map: Map<string, number[]>, key: string, index: number): void {
-  if (!key) return;
-  const existing = map.get(key);
-  if (existing) {
-    if (existing[existing.length - 1] !== index) existing.push(index);
-    return;
-  }
-  map.set(key, [index]);
-}
-
-function dominantCategory(categories: Map<string, number>, fallback: string): string {
-  let selected = fallback;
-  let best = -1;
-  for (const [category, count] of categories.entries()) {
-    if (count > best) {
-      selected = category;
-      best = count;
-    }
-  }
-  return selected;
-}
-
-function dedupeScoreForCluster(args: {
-  msgTs: number;
-  msgCanonical: string;
-  msgTokens: Set<string>;
-  msgMediaSignature: string;
-  cluster: TelegramDedupeCluster;
-}): number {
-  const tsDelta = Math.abs(args.msgTs - args.cluster.latestTs);
-
-  if (
-    args.msgMediaSignature &&
-    args.cluster.mediaSignature &&
-    args.msgMediaSignature === args.cluster.mediaSignature &&
-    tsDelta <= DEDUPE_MEDIA_WINDOW_MS
-  ) {
-    return 1;
-  }
-
-  if (!args.msgCanonical || !args.cluster.canonicalText || tsDelta > DEDUPE_TIME_WINDOW_MS) {
-    return 0;
-  }
-
-  if (args.msgCanonical === args.cluster.canonicalText) {
-    return 0.98;
-  }
-
-  const leftLength = args.msgCanonical.length;
-  const rightLength = args.cluster.canonicalText.length;
-  const shorter = Math.min(leftLength, rightLength);
-  const longer = Math.max(leftLength, rightLength);
-  const lengthRatio = longer > 0 ? shorter / longer : 0;
-  const contains =
-    args.msgCanonical.includes(args.cluster.canonicalText) ||
-    args.cluster.canonicalText.includes(args.msgCanonical);
-
-  if (shorter >= 90 && lengthRatio >= 0.72 && contains) {
-    return 0.93;
-  }
-
-  const similarity = jaccardSimilarity(args.msgTokens, args.cluster.tokenSet);
-  if (similarity >= 0.84) return similarity;
-  if (similarity >= 0.74 && shorter >= 180) return similarity - 0.01;
-  return 0;
-}
-
-function buildDedupeClusterKey(entry: TelegramEntry, canonicalText: string, msgTs: number, mediaSignature: string): string {
-  const seed = canonicalText || mediaSignature || legacyEntryKey(entry);
-  const bucket = Math.floor((msgTs || Date.now()) / (30 * 60 * 1000));
-  return `cluster_${bucket}_${fastHash(seed.slice(0, 400))}`;
-}
-
-function dedupeTelegramEntries(entries: TelegramEntry[]): TelegramEntry[] {
-  if (entries.length <= 1) return entries;
-  const sorted = [...entries].sort((left, right) => parseTs(right.message.datetime) - parseTs(left.message.datetime));
-  const clusters: TelegramDedupeCluster[] = [];
-  const canonicalIndex = new Map<string, number[]>();
-  const mediaIndex = new Map<string, number[]>();
-  const tokenIndex = new Map<string, number[]>();
-
-  for (const entry of sorted) {
-    const msgTs = parseTs(entry.message.datetime);
-    const canonical = normalizeDedupeText(messageText(entry.message));
-    const tokens = tokenizeDedupeText(canonical);
-    const tokenSet = new Set(tokens);
-    const mediaSignature = messageMediaSignature(entry.message);
-    const candidateIndexes = new Set<number>();
-
-    for (const index of canonicalIndex.get(canonical) ?? []) candidateIndexes.add(index);
-    if (mediaSignature) {
-      for (const index of mediaIndex.get(mediaSignature) ?? []) candidateIndexes.add(index);
-    }
-    for (const token of tokens.slice(0, 8)) {
-      if (token.length < 5) continue;
-      for (const index of tokenIndex.get(token) ?? []) candidateIndexes.add(index);
-    }
-
-    let bestIndex = -1;
-    let bestScore = 0;
-    for (const candidateIndex of candidateIndexes) {
-      const cluster = clusters[candidateIndex];
-      if (!cluster) continue;
-      const score = dedupeScoreForCluster({
-        msgTs,
-        msgCanonical: canonical,
-        msgTokens: tokenSet,
-        msgMediaSignature: mediaSignature,
-        cluster,
-      });
-      if (score > bestScore) {
-        bestScore = score;
-        bestIndex = candidateIndex;
-      }
-    }
-
-    if (bestIndex >= 0 && bestScore >= 0.82) {
-      const cluster = clusters[bestIndex]!;
-      cluster.sourceLabels.add(entry.channelLabel);
-      if (entry.channelUsername) cluster.sourceUsers.add(entry.channelUsername);
-      cluster.categories.set(entry.category, (cluster.categories.get(entry.category) ?? 0) + 1);
-      cluster.aliases.add(legacyEntryKey(entry));
-      if (msgTs >= cluster.latestTs) {
-        cluster.latestTs = msgTs;
-        cluster.primary = entry;
-      }
-      if (canonical.length > cluster.canonicalText.length) {
-        cluster.canonicalText = canonical;
-      }
-      if (!cluster.mediaSignature && mediaSignature) {
-        cluster.mediaSignature = mediaSignature;
-      }
-      for (const token of tokenSet) {
-        if (cluster.tokenSet.size >= 120) break;
-        cluster.tokenSet.add(token);
-      }
-      registerClusterIndex(canonicalIndex, canonical, bestIndex);
-      if (mediaSignature) registerClusterIndex(mediaIndex, mediaSignature, bestIndex);
-      for (const token of tokens.slice(0, 8)) {
-        if (token.length >= 5) registerClusterIndex(tokenIndex, token, bestIndex);
-      }
-      continue;
-    }
-
-    const clusterIndex = clusters.length;
-    const cluster: TelegramDedupeCluster = {
-      key: buildDedupeClusterKey(entry, canonical, msgTs, mediaSignature),
-      primary: entry,
-      canonicalText: canonical,
-      tokenSet,
-      mediaSignature,
-      latestTs: msgTs,
-      sourceLabels: new Set([entry.channelLabel]),
-      sourceUsers: new Set(entry.channelUsername ? [entry.channelUsername] : []),
-      categories: new Map([[entry.category, 1]]),
-      aliases: new Set([legacyEntryKey(entry)]),
-    };
-    clusters.push(cluster);
-    registerClusterIndex(canonicalIndex, canonical, clusterIndex);
-    if (mediaSignature) registerClusterIndex(mediaIndex, mediaSignature, clusterIndex);
-    for (const token of tokens.slice(0, 8)) {
-      if (token.length >= 5) registerClusterIndex(tokenIndex, token, clusterIndex);
-    }
-  }
-
-  return clusters
-    .sort((left, right) => right.latestTs - left.latestTs)
-    .map((cluster) => {
-      const sourceLabels = Array.from(cluster.sourceLabels).sort((left, right) => left.localeCompare(right));
-      const sourceUsers = cluster.sourceUsers.size > 0 ? cluster.sourceUsers : cluster.sourceLabels;
-      const sourceCount = sourceUsers.size;
-      const clusterCategories = Array.from(cluster.categories.keys());
-      const primary = cluster.primary;
-      return {
-        ...primary,
-        category: dominantCategory(cluster.categories, primary.category),
-        dedupe: {
-          clusterKey: cluster.key,
-          sourceCount,
-          duplicateCount: Math.max(0, cluster.aliases.size - 1),
-          sourceLabels: sourceLabels.slice(0, 24),
-          categorySet: clusterCategories,
-        },
-      };
-    });
-}
-
 function VideoPlayer(props: { media: TelegramMedia }) {
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal(false);
@@ -630,26 +272,10 @@ function VideoPlayer(props: { media: TelegramMedia }) {
   );
 }
 
-function collageLayoutClass(count: number) {
-  if (count <= 1) return "telegram-photo-collage--single";
-  if (count === 2) return "telegram-photo-collage--double";
-  if (count === 3) return "telegram-photo-collage--triple";
-  return "telegram-photo-collage--quad";
-}
-
-function collageCellClass(count: number, index: number) {
-  if (count === 3) {
-    if (index === 0) return "telegram-photo-cell telegram-photo-cell--hero";
-    if (index === 1) return "telegram-photo-cell telegram-photo-cell--side-top";
-    if (index === 2) return "telegram-photo-cell telegram-photo-cell--side-bottom";
-  }
-  return "telegram-photo-cell";
-}
-
 function PhotoViewer(props: { media: TelegramMedia; count: number; index: number; overflowCount: number; onOpen: (index: number) => void }) {
   const [loaded, setLoaded] = createSignal(false);
   return (
-    <div class={collageCellClass(props.count, props.index)}>
+    <div class={getTelegramCollageCellClass(props.count, props.index)}>
       <button type="button" class="telegram-photo-button" onClick={() => props.onOpen(props.index)} aria-label={`Open image ${props.index + 1}`}>
         <Show when={!loaded()}>
           <div class="telegram-photo-skeleton" />
@@ -708,22 +334,25 @@ function MessageCard(props: {
     if (idx === null || idx >= photos().length - 1) return;
     setActivePhotoIndex(idx + 1);
   };
-  const style = () => getCategoryStyle(props.entry.category);
+  const style = () => getIntelCategoryStyle(props.entry.category);
   const trustTier = () => trustTierForSignals({
     trustTier: props.entry.dedupe?.trustTier,
     sourceCount: props.entry.dedupe?.sourceCount,
   });
   const freshnessState = () => freshnessStateForAge(Math.max(0, props.nowMs - parseTs(props.entry.message.datetime)));
-  const rankReasons = () => rankReasonsForEntry(props.entry, props.nowMs);
+  const rankReasons = () => getTelegramRankReasons({
+    entry: props.entry,
+    hasUsefulImageText,
+  });
   const sourceLabels = () => props.entry.dedupe?.sourceLabels ?? [];
-  const isFocused = () => props.focusKey === entryKey(props.entry);
-  const itemId = () => `msg-${safeDomId(entryKey(props.entry))}`;
-  const channelName = () => props.entry.channelLabel || props.entry.channelUsername || "Telegram source";
-  const avatarLetter = () => channelName().charAt(0).toUpperCase() || "T";
-  const sourceSignatureCount = () => entrySourceSignatures(props.entry).length;
+  const isFocused = () => props.focusKey === getTelegramEntryKey(props.entry);
+  const itemId = () => `msg-${toTelegramSafeDomId(getTelegramEntryKey(props.entry))}`;
+  const channelName = () => getTelegramChannelName(props.entry);
+  const avatarLetter = () => getTelegramAvatarLetter(props.entry);
+  const sourceSignatureCount = () => getTelegramEntrySourceSignatures(props.entry).length;
   const copyShareLink = async () => {
     const target = new URL(window.location.href);
-    target.searchParams.set("focus", entryKey(props.entry));
+    target.searchParams.set("focus", getTelegramEntryKey(props.entry));
     try {
       await navigator.clipboard.writeText(target.toString());
     } catch {
@@ -750,7 +379,7 @@ function MessageCard(props: {
   return (
     <article id={itemId()} class={`telegram-tweet ${isFocused() ? "telegram-tweet--focused" : ""}`} style={{ "content-visibility": "auto", "contain-intrinsic-size": "320px" }}>
       <div class="telegram-tweet-layout">
-        <div class="telegram-tweet-avatar" style={{ "background-color": avatarBgColor(props.entry.category) }}>
+        <div class="telegram-tweet-avatar" style={{ "background-color": getTelegramAvatarBgColor(props.entry.category) }}>
           {avatarLetter()}
         </div>
         <div class="telegram-tweet-content">
@@ -823,7 +452,7 @@ function MessageCard(props: {
           </Show>
 
           <Show when={photos().length > 0}>
-            <div class={`telegram-photo-collage ${collageLayoutClass(visiblePhotos().length)} mt-3`}>
+            <div class={`telegram-photo-collage ${getTelegramCollageLayoutClass(visiblePhotos().length)} mt-3`}>
               <For each={visiblePhotos()}>
                 {(media, index) => (
                   <PhotoViewer
@@ -1062,7 +691,7 @@ export default function TelegramPage() {
           return false;
         }
       }
-      const merged = prev ? reconcileData(prev, next) : next;
+      const merged = prev ? reconcileTelegramData(prev, next) : next;
       const changed = !prev || next.timestamp !== lastTimestamp || next.total_messages !== prev.total_messages;
       if (changed) {
         setData(merged);
@@ -1231,7 +860,7 @@ export default function TelegramPage() {
 
   const rawEntries = createMemo<TelegramEntry[]>((prev) => {
     const previous = prev ?? [];
-    const prevMap = new Map(previous.map((entry) => [entryKey(entry), entry]));
+    const prevMap = new Map(previous.map((entry) => [getTelegramEntryKey(entry), entry]));
     const out: TelegramEntry[] = [];
 
     for (const channel of normalizedChannels()) {
@@ -1333,7 +962,7 @@ export default function TelegramPage() {
         counts[group.id] = entries().length;
         continue;
       }
-      counts[group.id] = entries().filter((entry) => groupMatchesEntry(group, entry)).length;
+      counts[group.id] = entries().filter((entry) => doesTelegramGroupMatchEntry(group, entry)).length;
     }
     return counts;
   });
@@ -1346,7 +975,7 @@ export default function TelegramPage() {
     const activeGroupId = groupFilter();
     const group = FILTER_GROUP_BY_ID.get(activeGroupId) ?? TELEGRAM_FILTER_GROUPS[0];
     return entries().filter((entry) => {
-      if (activeGroupId !== "all" && !groupMatchesEntry(group, entry)) {
+      if (activeGroupId !== "all" && !doesTelegramGroupMatchEntry(group, entry)) {
         return false;
       }
       if (verifiedOnly() && !isVerifiedEntry(entry)) {
@@ -1368,7 +997,7 @@ export default function TelegramPage() {
     for (const key of selectedClusterKeys()) {
       const entry = map.get(key);
       if (!entry) continue;
-      for (const signature of entrySourceSignatures(entry)) {
+      for (const signature of getTelegramEntrySourceSignatures(entry)) {
         signatureSet.add(signature);
       }
     }
@@ -1394,7 +1023,7 @@ export default function TelegramPage() {
 
   const toggleClusterSelection = (entry: TelegramEntry) => {
     const clusterKey = entry.dedupe?.clusterKey ?? "";
-    if (!clusterKey || entrySourceSignatures(entry).length === 0) return;
+    if (!clusterKey || getTelegramEntrySourceSignatures(entry).length === 0) return;
     setSelectedClusterKeys((prev) => {
       if (prev.includes(clusterKey)) {
         return prev.filter((value) => value !== clusterKey);
@@ -1443,19 +1072,19 @@ export default function TelegramPage() {
   };
 
   const splitCluster = async (entry: TelegramEntry) => {
-    const signatures = entrySourceSignatures(entry);
+    const signatures = getTelegramEntrySourceSignatures(entry);
     await applyDedupeFeedback({ action: "split", signatures });
   };
 
   const clearClusterRule = async (entry: TelegramEntry) => {
-    const signatures = entrySourceSignatures(entry);
+    const signatures = getTelegramEntrySourceSignatures(entry);
     await applyDedupeFeedback({ action: "clear", signatures });
   };
 
   createEffect(() => {
     const key = focusKey();
     if (!key || filteredEntries().length === 0) return;
-    const node = document.getElementById(`msg-${safeDomId(key)}`);
+    const node = document.getElementById(`msg-${toTelegramSafeDomId(key)}`);
     if (!node) return;
     window.requestAnimationFrame(() => {
       node.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1464,7 +1093,7 @@ export default function TelegramPage() {
 
   const shareFromSite = async (entry: TelegramEntry) => {
     const target = new URL(window.location.href);
-    target.searchParams.set("focus", entryKey(entry));
+    target.searchParams.set("focus", getTelegramEntryKey(entry));
     const shareUrl = target.toString();
     const shareTitle = `${entry.channelLabel} intel update`;
     const shareText = messageText(entry.message).slice(0, 160);

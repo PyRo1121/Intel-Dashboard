@@ -4257,8 +4257,7 @@ async function loadBillingActivityEvents(env: WorkerEnv, userId: string): Promis
     }
     return decoded
       .map((entry) => normalizeBillingActivityEvent(entry, userId))
-      .filter((entry): entry is BillingActivityEvent => entry !== null)
-      .sort((left, right) => right.atMs - left.atMs);
+      .filter((entry): entry is BillingActivityEvent => entry !== null);
   } catch {
     return [];
   }
@@ -5504,6 +5503,7 @@ async function appendBillingActivityEvent(args: {
       .sort((left, right) => right.atMs - left.atMs)
       .slice(0, maxEvents);
     await kv.put(activityKey, JSON.stringify(next));
+    await deleteCachedCrmSummary(args.env);
   } catch {
     // billing activity writes are best-effort and should not block entitlements
   }

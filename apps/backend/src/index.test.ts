@@ -2706,6 +2706,133 @@ describe("intel-dashboard backend worker", () => {
     expect(updated?.status).toBe("canceled");
   });
 
+  it("reuses cached CRM customer snapshot for owner cancel and refund flows", async () => {
+    const now = Date.now();
+    const kv = createKvMapBinding({
+      "intel-dashboard:billing:account:user-a": {
+        userId: "user-a",
+        status: "active",
+        monthlyPriceUsd: 29,
+        stripeCustomerId: "cus_123",
+        stripeSubscriptionId: "sub_123",
+        updatedAtMs: now,
+      },
+      "intel-dashboard:billing:crm:customer:user-a": {
+        fetchedAtMs: now,
+        accountUpdatedAtMs: now,
+        stripe: {
+          customer: {
+            id: "cus_123",
+            email: "customer@example.com",
+            name: "Customer A",
+            currency: "usd",
+            delinquent: false,
+            createdAtMs: now,
+            balanceUsd: 0,
+          },
+          subscription: {
+            id: "sub_123",
+            status: "active",
+            cancelAtPeriodEnd: false,
+            cancelAtMs: null,
+            currentPeriodEndMs: now + 10 * 24 * 60 * 60 * 1000,
+            canceledAtMs: null,
+          },
+          invoices: [],
+          charges: [
+            {
+              id: "ch_123",
+              status: "succeeded",
+              amountUsd: 29,
+              refundedUsd: 0,
+              paid: true,
+              refunded: false,
+              createdAtMs: now,
+              receiptUrl: "https://stripe.test/ch_123",
+              paymentIntentId: "pi_123",
+            },
+          ],
+        },
+      },
+    });
+
+    const stripeFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/v1/subscriptions/sub_123") && init?.method === "DELETE") {
+        return new Response(
+          JSON.stringify({
+            id: "sub_123",
+            status: "canceled",
+            canceled: true,
+            canceled_at: Math.floor(now / 1000),
+            current_period_end: Math.floor((now + 24 * 60 * 60 * 1000) / 1000),
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      if (url.includes("/v1/refunds") && init?.method === "POST") {
+        const body = String(init.body ?? "");
+        expect(body).toContain("charge=ch_123");
+        return new Response(
+          JSON.stringify({
+            id: "re_123",
+            status: "succeeded",
+            amount: 1450,
+            charge: "ch_123",
+            payment_intent: "pi_123",
+            reason: "requested_by_customer",
+            created: Math.floor(now / 1000),
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", stripeFetch);
+
+    const cancelResponse = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/admin/crm/cancel-subscription", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "owner-id", targetUserId: "user-a", atPeriodEnd: false }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+        BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+        STRIPE_SECRET_KEY: "sk_test_123",
+        USAGE_KV: kv.binding,
+      },
+    );
+    expect(cancelResponse.status).toBe(200);
+
+    const refundResponse = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/admin/crm/refund", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "owner-id", targetUserId: "user-a", amountUsd: 14.5 }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+        BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+        STRIPE_SECRET_KEY: "sk_test_123",
+        USAGE_KV: kv.binding,
+      },
+    );
+    expect(refundResponse.status).toBe(200);
+
+    const urls = stripeFetch.mock.calls.map(([input]) => String(input));
+    expect(urls.some((url) => url.includes("/v1/subscriptions?customer="))).toBe(false);
+    expect(urls.some((url) => url.includes("/v1/charges?customer="))).toBe(false);
+  });
+
   it("creates owner refund against a target charge", async () => {
     const now = Date.now();
     const kv = createKvMapBinding({

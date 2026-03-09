@@ -299,6 +299,51 @@ type CrmTelemetrySummary = {
   topKinds7d: Array<{ kind: string; count: number }>;
 };
 
+type CrmCustomerStripeSnapshot = {
+  fetchedAtMs: number;
+  accountUpdatedAtMs: number;
+  stripe: {
+    customer: {
+      id: string;
+      email: string | null;
+      name: string | null;
+      currency: string;
+      delinquent: boolean;
+      createdAtMs: number | null;
+      balanceUsd: number;
+    };
+    subscription: {
+      id: string | null;
+      status: string | null;
+      cancelAtPeriodEnd: boolean;
+      cancelAtMs: number | null;
+      currentPeriodEndMs: number | null;
+      canceledAtMs: number | null;
+    } | null;
+    invoices: Array<{
+      id: string;
+      status: string;
+      amountDueUsd: number;
+      amountPaidUsd: number;
+      paid: boolean;
+      createdAtMs: number;
+      hostedInvoiceUrl: string | null;
+      invoicePdf: string | null;
+    }>;
+    charges: Array<{
+      id: string;
+      status: string;
+      amountUsd: number;
+      refundedUsd: number;
+      paid: boolean;
+      refunded: boolean;
+      createdAtMs: number;
+      receiptUrl: string | null;
+      paymentIntentId: string | null;
+    }>;
+  };
+};
+
 type StripeCrmStatusCounts = {
   active: number;
   trialing: number;
@@ -4009,6 +4054,114 @@ async function saveCachedStripeCrmSummary(env: WorkerEnv, summary: StripeCrmLive
   });
 }
 
+function buildCrmCustomerSnapshotKey(env: WorkerEnv, userId: string): string {
+  return `${normalizeBillingNamespacePrefix(env.BILLING_NAMESPACE_PREFIX)}:crm:customer:${userId}`;
+}
+
+function normalizeCrmCustomerStripeSnapshot(value: unknown): CrmCustomerStripeSnapshot | null {
+  if (!isRecord(value) || !isRecord(value.stripe) || !isRecord(value.stripe.customer)) {
+    return null;
+  }
+  const fetchedAtMs = parseFiniteNumber(value.fetchedAtMs);
+  const accountUpdatedAtMs = parseFiniteNumber(value.accountUpdatedAtMs);
+  const customerId = trimString(value.stripe.customer.id);
+  if (fetchedAtMs === undefined || accountUpdatedAtMs === undefined || !customerId) {
+    return null;
+  }
+
+  const invoicesRaw = Array.isArray(value.stripe.invoices) ? value.stripe.invoices : [];
+  const chargesRaw = Array.isArray(value.stripe.charges) ? value.stripe.charges : [];
+
+  return {
+    fetchedAtMs: Math.max(0, Math.floor(fetchedAtMs)),
+    accountUpdatedAtMs: Math.max(0, Math.floor(accountUpdatedAtMs)),
+    stripe: {
+      customer: {
+        id: customerId,
+        email: trimString(value.stripe.customer.email) ?? null,
+        name: trimString(value.stripe.customer.name) ?? null,
+        currency: trimString(value.stripe.customer.currency) ?? "usd",
+        delinquent: value.stripe.customer.delinquent === true,
+        createdAtMs: Math.floor((parseFiniteNumber(value.stripe.customer.createdAtMs) ?? 0)) || null,
+        balanceUsd: Number((parseFiniteNumber(value.stripe.customer.balanceUsd) ?? 0).toFixed(2)),
+      },
+      subscription: isRecord(value.stripe.subscription)
+        ? {
+            id: trimString(value.stripe.subscription.id) ?? null,
+            status: trimString(value.stripe.subscription.status) ?? null,
+            cancelAtPeriodEnd: value.stripe.subscription.cancelAtPeriodEnd === true,
+            cancelAtMs: Math.floor((parseFiniteNumber(value.stripe.subscription.cancelAtMs) ?? 0)) || null,
+            currentPeriodEndMs: Math.floor((parseFiniteNumber(value.stripe.subscription.currentPeriodEndMs) ?? 0)) || null,
+            canceledAtMs: Math.floor((parseFiniteNumber(value.stripe.subscription.canceledAtMs) ?? 0)) || null,
+          }
+        : null,
+      invoices: invoicesRaw
+        .map((entry) => {
+          if (!isRecord(entry)) return null;
+          const id = trimString(entry.id);
+          const status = trimString(entry.status) ?? "unknown";
+          const amountDueUsd = parseFiniteNumber(entry.amountDueUsd);
+          const amountPaidUsd = parseFiniteNumber(entry.amountPaidUsd);
+          const createdAtMs = parseFiniteNumber(entry.createdAtMs);
+          if (!id || amountDueUsd === undefined || amountPaidUsd === undefined || createdAtMs === undefined) {
+            return null;
+          }
+          return {
+            id,
+            status,
+            amountDueUsd: Number(amountDueUsd.toFixed(2)),
+            amountPaidUsd: Number(amountPaidUsd.toFixed(2)),
+            paid: entry.paid === true,
+            createdAtMs: Math.max(0, Math.floor(createdAtMs)),
+            hostedInvoiceUrl: trimString(entry.hostedInvoiceUrl) ?? null,
+            invoicePdf: trimString(entry.invoicePdf) ?? null,
+          };
+        })
+        .filter((entry): entry is CrmCustomerStripeSnapshot["stripe"]["invoices"][number] => entry !== null),
+      charges: chargesRaw
+        .map((entry) => {
+          if (!isRecord(entry)) return null;
+          const id = trimString(entry.id);
+          const status = trimString(entry.status) ?? "unknown";
+          const amountUsd = parseFiniteNumber(entry.amountUsd);
+          const refundedUsd = parseFiniteNumber(entry.refundedUsd);
+          const createdAtMs = parseFiniteNumber(entry.createdAtMs);
+          if (!id || amountUsd === undefined || refundedUsd === undefined || createdAtMs === undefined) {
+            return null;
+          }
+          return {
+            id,
+            status,
+            amountUsd: Number(amountUsd.toFixed(2)),
+            refundedUsd: Number(refundedUsd.toFixed(2)),
+            paid: entry.paid === true,
+            refunded: entry.refunded === true,
+            createdAtMs: Math.max(0, Math.floor(createdAtMs)),
+            receiptUrl: trimString(entry.receiptUrl) ?? null,
+            paymentIntentId: trimString(entry.paymentIntentId) ?? null,
+          };
+        })
+        .filter((entry): entry is CrmCustomerStripeSnapshot["stripe"]["charges"][number] => entry !== null),
+    },
+  };
+}
+
+async function loadCachedCrmCustomerStripeSnapshot(env: WorkerEnv, userId: string): Promise<CrmCustomerStripeSnapshot | null> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.get !== "function") {
+    return null;
+  }
+  const raw = await kv.get(buildCrmCustomerSnapshotKey(env, userId));
+  if (!raw) {
+    return null;
+  }
+  try {
+    return normalizeCrmCustomerStripeSnapshot(JSON.parse(raw) as unknown);
+  } catch {
+    return null;
+  }
+}
+
 async function loadBillingActivityEvents(env: WorkerEnv, userId: string): Promise<BillingActivityEvent[]> {
   const kv = env.USAGE_KV;
   if (!kv || typeof kv.get !== "function") {
@@ -4902,9 +5055,13 @@ async function resolveStripeSubscriptionIdForTarget(args: {
   env: WorkerEnv;
   stripeCustomerId: string | null;
   stripeSubscriptionId: string | null;
+  cachedSnapshot?: CrmCustomerStripeSnapshot | null;
 }): Promise<string | null> {
   if (args.stripeSubscriptionId) {
     return args.stripeSubscriptionId;
+  }
+  if (args.cachedSnapshot?.stripe.subscription?.id) {
+    return args.cachedSnapshot.stripe.subscription.id;
   }
   if (!args.stripeCustomerId) {
     return null;
@@ -4938,6 +5095,7 @@ async function handleAdminCrmCustomer(args: {
   if (!context.stripeCustomerId) {
     return errorJson(409, "Target user has no Stripe customer id yet.");
   }
+  const cachedSnapshot = await loadCachedCrmCustomerStripeSnapshot(args.env, context.targetUserId);
 
   const subscriptionId =
     trimString((isRecord(args.body) ? args.body.subscriptionId : undefined)) ??
@@ -4945,6 +5103,7 @@ async function handleAdminCrmCustomer(args: {
       env: args.env,
       stripeCustomerId: context.stripeCustomerId,
       stripeSubscriptionId: context.stripeSubscriptionId,
+      cachedSnapshot,
     }));
 
   const [customerResult, invoicesResult, chargesResult, subscriptionResult] = await Promise.all([
@@ -5063,12 +5222,14 @@ async function handleAdminCrmCancelSubscription(args: {
 
   const body = isRecord(args.body) ? args.body : {};
   const atPeriodEnd = body.atPeriodEnd !== false;
+  const cachedSnapshot = await loadCachedCrmCustomerStripeSnapshot(args.env, context.targetUserId);
   const subscriptionId =
     trimString(body.subscriptionId) ??
     (await resolveStripeSubscriptionIdForTarget({
       env: args.env,
       stripeCustomerId: context.stripeCustomerId,
       stripeSubscriptionId: context.stripeSubscriptionId,
+      cachedSnapshot,
     }));
   if (!subscriptionId) {
     return errorJson(409, "No Stripe subscription id was found for this customer.");
@@ -5146,22 +5307,26 @@ async function handleAdminCrmRefund(args: {
   const body = isRecord(args.body) ? args.body : {};
   let chargeId = trimString(body.chargeId) ?? null;
   const paymentIntentId = trimString(body.paymentIntentId) ?? null;
+  const cachedSnapshot = await loadCachedCrmCustomerStripeSnapshot(args.env, context.targetUserId);
   if (!chargeId && !paymentIntentId) {
-    const latestCharge = await stripeApiJson({
-      env: args.env,
-      method: "GET",
-      path: `/v1/charges?${new URLSearchParams({
-        customer: context.stripeCustomerId,
-        limit: "1",
-      }).toString()}`,
-    });
-    if (!latestCharge.ok) {
-      return latestCharge.response;
+    chargeId = cachedSnapshot?.stripe.charges[0]?.id ?? null;
+    if (!chargeId) {
+      const latestCharge = await stripeApiJson({
+        env: args.env,
+        method: "GET",
+        path: `/v1/charges?${new URLSearchParams({
+          customer: context.stripeCustomerId,
+          limit: "1",
+        }).toString()}`,
+      });
+      if (!latestCharge.ok) {
+        return latestCharge.response;
+      }
+      const first = Array.isArray(latestCharge.data.data)
+        ? latestCharge.data.data.find((entry) => isRecord(entry)) as Record<string, unknown> | undefined
+        : undefined;
+      chargeId = first ? trimString(first.id) ?? null : null;
     }
-    const first = Array.isArray(latestCharge.data.data)
-      ? latestCharge.data.data.find((entry) => isRecord(entry)) as Record<string, unknown> | undefined
-      : undefined;
-    chargeId = first ? trimString(first.id) ?? null : null;
   }
   if (!chargeId && !paymentIntentId) {
     return errorJson(409, "No refundable Stripe charge/payment intent was found.");

@@ -98,6 +98,8 @@ const DEFAULT_CRM_STRIPE_MAX_SUBSCRIPTIONS = 5_000;
 const MAX_CRM_STRIPE_MAX_SUBSCRIPTIONS = 25_000;
 const DEFAULT_CRM_STRIPE_CACHE_TTL_SECONDS = 5 * 60;
 const MAX_CRM_STRIPE_CACHE_TTL_SECONDS = 24 * 60 * 60;
+const DEFAULT_CRM_CUSTOMER_CACHE_TTL_SECONDS = 60;
+const MAX_CRM_CUSTOMER_CACHE_TTL_SECONDS = 15 * 60;
 const DEFAULT_AI_GATEWAY_TIMEOUT_MS = 3_000;
 const DEFAULT_AI_GATEWAY_MODEL = "cerebras/gpt-oss-120b";
 const DEFAULT_AI_GATEWAY_MEDIA_MODEL = "groq/meta-llama/llama-4-scout-17b-16e-instruct";
@@ -633,6 +635,7 @@ export type WorkerEnv = {
   CRM_STRIPE_SYNC_TIMEOUT_MS?: string;
   CRM_STRIPE_MAX_SUBSCRIPTIONS?: string;
   CRM_STRIPE_CACHE_TTL_SECONDS?: string;
+  CRM_CUSTOMER_CACHE_TTL_SECONDS?: string;
   OUTBOUND_NAMESPACE_PREFIX?: string;
   OUTBOUND_DEDUPE_TTL_SECONDS?: string;
   OUTBOUND_DELIVERY_TIMEOUT_MS?: string;
@@ -941,6 +944,14 @@ function normalizeCrmStripeCacheTtlSeconds(rawValue: string | undefined): number
     return DEFAULT_CRM_STRIPE_CACHE_TTL_SECONDS;
   }
   return clamp(Math.floor(parsed), 0, MAX_CRM_STRIPE_CACHE_TTL_SECONDS);
+}
+
+function normalizeCrmCustomerCacheTtlSeconds(rawValue: string | undefined): number {
+  const parsed = parseFiniteNumber(rawValue);
+  if (parsed === undefined) {
+    return DEFAULT_CRM_CUSTOMER_CACHE_TTL_SECONDS;
+  }
+  return clamp(Math.floor(parsed), 0, MAX_CRM_CUSTOMER_CACHE_TTL_SECONDS);
 }
 
 function normalizeNewsLimit(rawValue: unknown): number {
@@ -3958,6 +3969,11 @@ async function saveBillingAccount(env: WorkerEnv, account: BillingAccount): Prom
     throw new Error("USAGE_KV binding with put() is required for billing updates.");
   }
   await kv.put(buildBillingKey(env, account.userId), JSON.stringify(account));
+  await Promise.all([
+    deleteCachedCrmSummary(env),
+    deleteCachedStripeCrmSummary(env),
+    deleteCachedCrmCustomerStripeSnapshot(env, account.userId),
+  ]);
 }
 
 function buildCrmStripeSummaryKey(env: WorkerEnv): string {
@@ -4052,6 +4068,22 @@ async function saveCachedStripeCrmSummary(env: WorkerEnv, summary: StripeCrmLive
   await kv.put(buildCrmStripeSummaryKey(env), JSON.stringify(summary), {
     expirationTtl: ttlSeconds > 0 ? ttlSeconds * 3 : undefined,
   });
+}
+
+async function deleteCachedCrmSummary(env: WorkerEnv): Promise<void> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.delete !== "function") {
+    return;
+  }
+  await kv.delete(buildCrmSummaryKey(env));
+}
+
+async function deleteCachedStripeCrmSummary(env: WorkerEnv): Promise<void> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.delete !== "function") {
+    return;
+  }
+  await kv.delete(buildCrmStripeSummaryKey(env));
 }
 
 function buildCrmCustomerSnapshotKey(env: WorkerEnv, userId: string): string {
@@ -4160,6 +4192,25 @@ async function loadCachedCrmCustomerStripeSnapshot(env: WorkerEnv, userId: strin
   } catch {
     return null;
   }
+}
+
+async function saveCachedCrmCustomerStripeSnapshot(env: WorkerEnv, userId: string, snapshot: CrmCustomerStripeSnapshot): Promise<void> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.put !== "function") {
+    return;
+  }
+  const ttlSeconds = normalizeCrmCustomerCacheTtlSeconds(env.CRM_CUSTOMER_CACHE_TTL_SECONDS);
+  await kv.put(buildCrmCustomerSnapshotKey(env, userId), JSON.stringify(snapshot), {
+    expirationTtl: ttlSeconds > 0 ? ttlSeconds * 3 : undefined,
+  });
+}
+
+async function deleteCachedCrmCustomerStripeSnapshot(env: WorkerEnv, userId: string): Promise<void> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.delete !== "function") {
+    return;
+  }
+  await kv.delete(buildCrmCustomerSnapshotKey(env, userId));
 }
 
 async function loadBillingActivityEvents(env: WorkerEnv, userId: string): Promise<BillingActivityEvent[]> {
@@ -5185,25 +5236,32 @@ async function handleAdminCrmCustomer(args: {
       }
     : null;
 
+  const snapshot: CrmCustomerStripeSnapshot = {
+    fetchedAtMs: Date.now(),
+    accountUpdatedAtMs: context.account.updatedAtMs,
+    stripe: {
+      customer: {
+        id: trimString(customerResult.data.id) ?? context.stripeCustomerId,
+        email: trimString(customerResult.data.email) ?? null,
+        name: trimString(customerResult.data.name) ?? null,
+        currency: trimString(customerResult.data.currency) ?? "usd",
+        delinquent: customerResult.data.delinquent === true,
+        createdAtMs: Math.floor((parseFiniteNumber(customerResult.data.created) ?? 0) * 1000) || null,
+        balanceUsd: Number(((parseFiniteNumber(customerResult.data.balance) ?? 0) / 100).toFixed(2)),
+      },
+      subscription,
+      invoices,
+      charges,
+    },
+  };
+  await saveCachedCrmCustomerStripeSnapshot(args.env, context.targetUserId, snapshot);
+
   return responseJson(200, {
     ok: true,
     result: {
       targetUserId: context.targetUserId,
       account: context.account,
-      stripe: {
-        customer: {
-          id: trimString(customerResult.data.id) ?? context.stripeCustomerId,
-          email: trimString(customerResult.data.email) ?? null,
-          name: trimString(customerResult.data.name) ?? null,
-          currency: trimString(customerResult.data.currency) ?? "usd",
-          delinquent: customerResult.data.delinquent === true,
-          createdAtMs: Math.floor((parseFiniteNumber(customerResult.data.created) ?? 0) * 1000) || null,
-          balanceUsd: Number(((parseFiniteNumber(customerResult.data.balance) ?? 0) / 100).toFixed(2)),
-        },
-        subscription,
-        invoices,
-        charges,
-      },
+      stripe: snapshot.stripe,
     },
   });
 }
@@ -5276,6 +5334,7 @@ async function handleAdminCrmCancelSubscription(args: {
       : `Owner ${context.actingUserId} canceled subscription immediately.`,
     atMs: nowMs,
   });
+  await deleteCachedCrmCustomerStripeSnapshot(args.env, context.targetUserId);
 
   return responseJson(200, {
     ok: true,
@@ -5365,6 +5424,7 @@ async function handleAdminCrmRefund(args: {
     note: `Owner ${context.actingUserId} created Stripe refund ${refundId ?? "unknown"} for $${refundAmountUsd.toFixed(2)}.`,
     atMs: nowMs,
   });
+  await deleteCachedCrmCustomerStripeSnapshot(args.env, context.targetUserId);
 
   return responseJson(200, {
     ok: true,

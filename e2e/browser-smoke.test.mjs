@@ -1149,10 +1149,7 @@ test("browser protected routes surface session-unavailable recovery and recover 
         });
       });
 
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
+      await openPublicPage(page, "/osint");
 
       await page.waitForSelector("text=Session Check Unavailable", { timeout: 30_000 });
       await page.waitForSelector("text=Retry Session Check", { timeout: 30_000 });
@@ -1200,10 +1197,7 @@ test("browser protected login overlay preserves the current route in auth action
         });
       });
 
-      await page.goto(`${EDGE_BASE_URL}/billing`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
+      await openPublicPage(page, "/billing");
 
       await waitForProtectedLoginOverlay(page, { nextPath: "/billing" });
     } catch (error) {
@@ -1224,10 +1218,7 @@ test("browser public landing and 404 surfaces render expected production content
   try {
     const page = await context.newPage();
     try {
-      const landingResponse = await page.goto(`${EDGE_BASE_URL}/`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
+      const landingResponse = await openPublicPage(page, "/");
       assert.ok(landingResponse, "landing page should return a response");
       assert.equal(landingResponse.status(), 200, "landing page should render successfully");
       const landingText = (await page.textContent("body")) || "";
@@ -1235,19 +1226,13 @@ test("browser public landing and 404 surfaces render expected production content
       assert.match(landingText, /Start 7-Day Trial/i, "landing should render trial CTA");
       assert.doesNotMatch(landingText, /PyRoBOT|PyRo1121Bot/i, "landing should not render legacy branding");
 
-      const notFoundResponse = await page.goto(`${EDGE_BASE_URL}/this-page-should-not-exist-xyz`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
+      const notFoundResponse = await openPublicPage(page, "/this-page-should-not-exist-xyz");
       assert.ok(notFoundResponse, "404 page should return a response");
       assert.equal(notFoundResponse.status(), 404, "missing page should return 404");
       const notFoundText = (await page.textContent("body")) || "";
       assert.match(notFoundText, /Not Found/i, "missing page should render not found copy");
 
-      const shadowedLandingResponse = await page.goto(`${EDGE_BASE_URL}/landing`, {
-        waitUntil: "domcontentloaded",
-        timeout: 30_000,
-      });
+      const shadowedLandingResponse = await openPublicPage(page, "/landing");
       assert.ok(shadowedLandingResponse, "shadowed landing route should return a response");
       assert.equal(shadowedLandingResponse.status(), 404, "shadowed landing route should remain unavailable in production");
       const shadowedLandingText = (await page.textContent("body")) || "";
@@ -1270,26 +1255,17 @@ test("browser public landing CTAs navigate to the intended auth surfaces", async
   try {
     const page = await context.newPage();
 
-    await page.goto(`${EDGE_BASE_URL}/`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
+    await openPublicPage(page, "/");
     await page.getByRole("link", { name: "Login" }).first().click();
     await page.waitForURL(`${EDGE_BASE_URL}/login`, { timeout: 30_000 });
     assert.match((await page.textContent("body")) || "", /Sign in to Intel Dashboard/i);
 
-    await page.goto(`${EDGE_BASE_URL}/`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
+    await openPublicPage(page, "/");
     await page.getByRole("link", { name: /Start 7-Day Trial|Start Trial with OAuth/i }).first().click();
     await page.waitForURL(`${EDGE_BASE_URL}/signup`, { timeout: 30_000 });
     assert.match((await page.textContent("body")) || "", /Create your Intel Dashboard account/i);
 
-    await page.goto(`${EDGE_BASE_URL}/`, {
-      waitUntil: "domcontentloaded",
-      timeout: 30_000,
-    });
+    await openPublicPage(page, "/");
     await page.getByRole("link", { name: /Open Live Dashboard|Open Dashboard/i }).first().click();
     await page.waitForURL(`${EDGE_BASE_URL}/overview`, { timeout: 30_000 });
     await waitForProtectedLoginOverlay(page, { nextPath: "/overview" });
@@ -1430,10 +1406,7 @@ test("browser public auth start routes enforce the security gate before provider
       ];
 
       for (const route of expectations) {
-        const response = await page.goto(`${EDGE_BASE_URL}${route.path}`, {
-          waitUntil: "domcontentloaded",
-          timeout: 30_000,
-        });
+        const response = await openPublicPage(page, route.path);
         assert.ok(response, `${route.path} should return a response`);
         const finalUrl = new URL(page.url());
         assert.equal(finalUrl.pathname, route.finalPath, `${route.path} should land on the matching auth page`);
@@ -1462,10 +1435,7 @@ test("browser public pages stay free of uncaught, console, and same-origin reque
       });
 
       for (const route of PUBLIC_BROWSER_ROUTES) {
-        await page.goto(`${EDGE_BASE_URL}${route}`, {
-          waitUntil: "domcontentloaded",
-          timeout: 30_000,
-        });
+        await openPublicPage(page, route);
         await page.waitForTimeout(1_000);
       }
 
@@ -1507,10 +1477,7 @@ test("browser-authenticated sign out clears access and forces re-auth on protect
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const signOut = page.getByRole("button", { name: "Sign out" }).first();
       await signOut.waitFor({ state: "visible", timeout: 30_000 });
@@ -1528,10 +1495,7 @@ test("browser-authenticated sign out clears access and forces re-auth on protect
         "sign out should land on a public access surface",
       );
 
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const protectedBody = (await page.textContent("body")) || "";
       assert.match(

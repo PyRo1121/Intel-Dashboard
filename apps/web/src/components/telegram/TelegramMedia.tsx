@@ -84,7 +84,6 @@ export function TelegramPhotoViewer(props: {
           class="telegram-photo-img"
           classList={{ "opacity-0": !loaded(), "opacity-100": loaded() }}
           onLoad={() => setLoaded(true)}
-          onError={() => setLoaded(true)}
         />
       </button>
       <Show when={props.overflowCount > 0 && props.index === 3}>

@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getTelegramCollageCellClass, getTelegramCollageLayoutClass } from "./telegram-media-layout.ts";
+import {
+  getHiddenTelegramPhotoCount,
+  getTelegramCollageCellClass,
+  getTelegramCollageLayoutClass,
+  getVisibleTelegramPhotos,
+} from "./telegram-media-layout.ts";
 
 test("telegram collage layout helper maps counts to layout classes", () => {
   assert.equal(getTelegramCollageLayoutClass(0), "telegram-photo-collage--single");
@@ -15,4 +20,11 @@ test("telegram collage cell helper maps three-photo layouts to hero and side slo
   assert.equal(getTelegramCollageCellClass(3, 1), "telegram-photo-cell telegram-photo-cell--side-top");
   assert.equal(getTelegramCollageCellClass(3, 2), "telegram-photo-cell telegram-photo-cell--side-bottom");
   assert.equal(getTelegramCollageCellClass(2, 0), "telegram-photo-cell");
+});
+
+test("telegram collage helpers cap visible photos and compute overflow count", () => {
+  assert.deepEqual(getVisibleTelegramPhotos([1, 2, 3, 4, 5]), [1, 2, 3, 4]);
+  assert.deepEqual(getVisibleTelegramPhotos([1, 2], 1), [1]);
+  assert.equal(getHiddenTelegramPhotoCount(5), 1);
+  assert.equal(getHiddenTelegramPhotoCount(2), 0);
 });

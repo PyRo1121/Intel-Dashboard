@@ -11,7 +11,7 @@ import {
 } from "~/lib/freshness";
 import { fastHash } from "~/lib/telegram-dedupe";
 import { dedupeTelegramEntries } from "~/lib/telegram-dedupe-run";
-import { TELEGRAM_FILTER_GROUP_BY_ID, TELEGRAM_FILTER_GROUPS } from "~/lib/telegram-filter-groups";
+import { resolveTelegramFilterGroup, TELEGRAM_FILTER_GROUPS } from "~/lib/telegram-filter-groups";
 import {
   doesTelegramGroupMatchEntry,
   getTelegramEntryKey,
@@ -19,6 +19,8 @@ import {
   toTelegramSafeDomId,
 } from "~/lib/telegram-entry-meta";
 import {
+  countTelegramEntriesWithMedia,
+  countVerifiedTelegramEntries,
   isVerifiedEntry,
   messageText,
 } from "~/lib/telegram-entry";
@@ -40,7 +42,7 @@ import type {
   TelegramMessage,
 } from "~/lib/telegram-types";
 import { isTelegramMessageVisible } from "~/lib/telegram-visibility";
-import { parseTimestampMs as parseTs } from "~/lib/utils";
+import { parseTimestampMs as parseTs, truncateText } from "~/lib/utils";
 import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { TELEGRAM_DESCRIPTION, TELEGRAM_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
@@ -343,7 +345,7 @@ export default function TelegramPage() {
 
   const filteredEntries = createMemo(() => {
     const activeGroupId = groupFilter();
-    const group = TELEGRAM_FILTER_GROUP_BY_ID.get(activeGroupId) ?? TELEGRAM_FILTER_GROUPS[0];
+    const group = resolveTelegramFilterGroup(activeGroupId);
     return entries().filter((entry) => {
       if (activeGroupId !== "all" && !doesTelegramGroupMatchEntry(group, entry)) {
         return false;
@@ -355,9 +357,9 @@ export default function TelegramPage() {
     });
   });
 
-  const activeGroup = createMemo(() => TELEGRAM_FILTER_GROUP_BY_ID.get(groupFilter()) ?? TELEGRAM_FILTER_GROUPS[0]);
-  const verifiedCount = createMemo(() => entries().filter((entry) => isVerifiedEntry(entry)).length);
-  const mediaCount = createMemo(() => entries().filter((entry) => entry.message.media.length > 0).length);
+  const activeGroup = createMemo(() => resolveTelegramFilterGroup(groupFilter()));
+  const verifiedCount = createMemo(() => countVerifiedTelegramEntries(entries()));
+  const mediaCount = createMemo(() => countTelegramEntriesWithMedia(entries()));
   const selectedSignatures = createMemo(() => {
     const map = new Map(filteredEntries().map((entry) => [entry.dedupe?.clusterKey ?? "", entry] as const));
     const signatureSet = new Set<string>();
@@ -406,7 +408,7 @@ export default function TelegramPage() {
     try {
       const result = await postTelegramDedupeFeedback(args);
       if (!result.ok) {
-        setAdminStatus(`Dedupe action failed (${result.status ?? "?"}) ${result.error.slice(0, 120)}`);
+        setAdminStatus(`Dedupe action failed (${result.status ?? "?"}) ${truncateText(result.error, 120, "")}`);
         return;
       }
       setAdminStatus(`${args.action} applied to ${args.signatures.length} signatures`);
@@ -456,7 +458,7 @@ export default function TelegramPage() {
     target.searchParams.set("focus", getTelegramEntryKey(entry));
     const shareUrl = target.toString();
     const shareTitle = `${entry.channelLabel} intel update`;
-    const shareText = messageText(entry.message).slice(0, 160);
+    const shareText = truncateText(messageText(entry.message), 160, "");
     if (navigator.share) {
       try {
         await navigator.share({ title: shareTitle, text: shareText, url: shareUrl });

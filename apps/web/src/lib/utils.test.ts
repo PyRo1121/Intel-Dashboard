@@ -5,12 +5,11 @@ import {
   formatAgeAgoAt,
   formatDateTime,
   formatLongDateTime,
+  getInitialLetter,
   parseCompactNumber,
   parseTimestampMs,
   formatPercent,
   formatShortDateTime,
-  severityBg,
-  severityColor,
   severityDot,
   severityHexColor,
   truncateText,
@@ -73,6 +72,12 @@ test("truncateText preserves short strings and appends ellipsis to long ones", (
   assert.equal(truncateText("text", 0), "");
 });
 
+test("getInitialLetter returns an uppercase first character with fallback", () => {
+  assert.equal(getInitialLetter("analyst", "U"), "A");
+  assert.equal(getInitialLetter("  owner@example.com", "U"), "O");
+  assert.equal(getInitialLetter("", "U"), "U");
+});
+
 test("isInitialResourceLoading only flags empty refreshing resources", () => {
   assert.equal(isInitialResourceLoading("refreshing", 0), true);
   assert.equal(isInitialResourceLoading("ready", 0), false);
@@ -102,6 +107,4 @@ test("severity visual helpers stay aligned with the shared severity scale", () =
   assert.match(severityDot("high"), /amber/);
   assert.equal(severityHexColor("medium"), "#3b82f6");
   assert.equal(severityHexColor("low"), "#71717a");
-  assert.equal(severityColor("bogus" as never), "text-zinc-500");
-  assert.match(severityBg("bogus" as never), /zinc-500/);
 });

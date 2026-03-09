@@ -1,14 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  getTelegramAvatarLetter,
-  doesTelegramGroupMatchEntry,
   getTelegramAvatarBgColor,
+  getTelegramAvatarLetter,
   getTelegramChannelName,
+  getTelegramDomainTags,
   getTelegramEntryKey,
+  getTelegramMessageFallbackKey,
   getTelegramEntrySourceSignatures,
   getTelegramRankReasons,
+  getTelegramSources,
+  getTelegramSourceLabels,
+  getTelegramSourceLabelsTitle,
   toTelegramSafeDomId,
+  doesTelegramGroupMatchEntry,
 } from "./telegram-entry-meta.ts";
 
 const entry = {
@@ -26,15 +31,23 @@ const entry = {
     clusterKey: "cluster_1",
     sourceCount: 2,
     sourceSignatures: [" sig-1 ", "", "sig-2"],
+    sourceLabels: ["Alpha", "Beta"],
     freshnessTier: "breaking" as const,
     domainTags: ["strategic"],
     categorySet: ["ru_milblog", "naval"],
+    sources: [{ label: "Channel" }, { label: "Mirror" }],
   },
 };
 
 test("telegram entry meta helpers normalize keys, signatures, and safe ids", () => {
   assert.equal(getTelegramEntryKey(entry), "cluster_1");
+  assert.equal(getTelegramMessageFallbackKey(entry), "https://t.me/example/1");
   assert.deepEqual(getTelegramEntrySourceSignatures(entry), [" sig-1 ", "sig-2"]);
+  assert.deepEqual(getTelegramSourceLabels(entry), ["Alpha", "Beta"]);
+  assert.deepEqual(getTelegramSourceLabels(entry, 1), ["Alpha"]);
+  assert.equal(getTelegramSourceLabelsTitle(entry), "Alpha, Beta");
+  assert.deepEqual(getTelegramDomainTags(entry), ["strategic"]);
+  assert.deepEqual(getTelegramSources(entry), [{ label: "Channel" }, { label: "Mirror" }]);
   assert.equal(toTelegramSafeDomId("msg:focus/1?"), "msg_focus_1_");
 });
 
@@ -73,6 +86,6 @@ test("telegram entry meta helpers fall back cleanly for missing labels", () => {
 test("telegram entry meta helpers match groups by id, predicate, and category set", () => {
   assert.equal(doesTelegramGroupMatchEntry({ id: "all" }, entry), true);
   assert.equal(doesTelegramGroupMatchEntry({ id: "naval", categories: ["naval"] }, entry), true);
-  assert.equal(doesTelegramGroupMatchEntry({ id: "custom", predicate: (item) => item.channelUsername === "channel" }, entry), true);
+  assert.equal(doesTelegramGroupMatchEntry({ id: "custom", predicate: (item: typeof entry) => item.channelUsername === "channel" }, entry), true);
   assert.equal(doesTelegramGroupMatchEntry({ id: "none", categories: ["cyber"] }, entry), false);
 });

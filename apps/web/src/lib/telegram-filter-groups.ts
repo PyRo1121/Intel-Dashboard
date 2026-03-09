@@ -40,3 +40,7 @@ export const TELEGRAM_FILTER_GROUPS: TelegramFilterGroup[] = [
 export const TELEGRAM_FILTER_GROUP_BY_ID = new Map(
   TELEGRAM_FILTER_GROUPS.map((group) => [group.id, group] as const),
 );
+
+export function resolveTelegramFilterGroup(id: string | null | undefined): TelegramFilterGroup {
+  return (id ? TELEGRAM_FILTER_GROUP_BY_ID.get(id) : undefined) ?? TELEGRAM_FILTER_GROUPS[0];
+}

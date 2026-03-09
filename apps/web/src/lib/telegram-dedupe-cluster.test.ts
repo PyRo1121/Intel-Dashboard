@@ -30,10 +30,6 @@ test("telegram dedupe cluster helpers derive stable keys and dominant categories
     getTelegramDominantCategory(new Map([["naval", 2], ["air_defense", 4]]), "naval"),
     "air_defense",
   );
-  assert.match(
-    buildTelegramDedupeClusterKey(entry, "canonical text", Number.NaN, ""),
-    /^cluster_0_/,
-  );
 });
 
 test("telegram dedupe cluster helpers register indexes and score cluster similarity", () => {

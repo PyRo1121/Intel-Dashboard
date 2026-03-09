@@ -51,6 +51,18 @@ export function entryMediaCount(entry: TelegramEntryLike): number {
   return entry.message.media.length;
 }
 
+export function countTelegramEntriesWithMedia<TEntry extends TelegramEntryLike>(
+  entries: readonly TEntry[],
+): number {
+  let count = 0;
+  for (const entry of entries) {
+    if (entryMediaCount(entry) > 0) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 export function isVerifiedEntry(entry: TelegramEntryLike): boolean {
   if (entry.dedupe?.verificationState === "verified" || entry.dedupe?.verificationState === "corroborated") {
     return true;
@@ -60,6 +72,18 @@ export function isVerifiedEntry(entry: TelegramEntryLike): boolean {
     entry.message.media.length > 0 ||
     hasUsefulImageText(entry.message.image_text_en)
   );
+}
+
+export function countVerifiedTelegramEntries<TEntry extends TelegramEntryLike>(
+  entries: readonly TEntry[],
+): number {
+  let count = 0;
+  for (const entry of entries) {
+    if (isVerifiedEntry(entry)) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 export function freshnessBadgeClass(state: TelegramFreshnessState): string {

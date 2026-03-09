@@ -1,13 +1,18 @@
-import { createResource, For, Show } from "solid-js";
+import { createResource, For, Show, createSignal } from "solid-js";
 import { Link, Meta, Title } from "@solidjs/meta";
 import { A, useParams } from "@solidjs/router";
-import { Clock, ExternalLink, Radio, Shield } from "lucide-solid";
+import { Clock, ExternalLink, Shield } from "lucide-solid";
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
-import { OSINT_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 import { useAuth } from "~/lib/auth";
 import { isAuthUserOwner, resolveAuthUserEntitlementView } from "~/lib/auth-user";
 import { useWallClock } from "~/lib/live-refresh";
+import { fetchSubscriberFeedPreferences, saveSubscriberFeedPreferences } from "~/lib/my-feed-client";
 import { fetchOsintSourceProfile } from "~/lib/osint-source-client";
+import {
+  cloneSubscriberFeedPreferences,
+  includesSubscriberPreferenceValue,
+  toggleSubscriberPreferenceValue,
+} from "~/lib/subscriber-feed-preferences";
 import { formatRelativeTimeAt, isInitialResourceLoading } from "~/lib/utils";
 
 export default function OsintSourceProfilePage() {
@@ -15,9 +20,15 @@ export default function OsintSourceProfilePage() {
   const auth = useAuth();
   const entitled = () => resolveAuthUserEntitlementView(auth.user()).entitled;
   const owner = () => isAuthUserOwner(auth.user());
+  const [saving, setSaving] = createSignal(false);
+  const [controlsSaved, setControlsSaved] = createSignal("");
   const nowMs = useWallClock(1000);
   const provider = () => (params.provider ?? "").trim().toLowerCase();
 
+  const [preferences, { refetch: refetchPreferences }] = createResource(
+    () => (entitled() ? "enabled" : null),
+    () => fetchSubscriberFeedPreferences(),
+  );
   const [profile] = createResource(
     () => (entitled() && provider() ? provider() : null),
     (nextProvider) => fetchOsintSourceProfile(nextProvider),
@@ -25,6 +36,28 @@ export default function OsintSourceProfilePage() {
 
   const loadingInitial = () => isInitialResourceLoading(profile.state, profile()?.recentItems?.length ?? 0);
   const title = () => profile()?.source.name || provider() || "OSINT Source";
+  const favoriteSource = () => includesSubscriberPreferenceValue(preferences()?.favoriteSources ?? [], profile()?.source.name);
+
+  const persistPreferences = async (updater: (current: ReturnType<typeof cloneSubscriberFeedPreferences>) => void) => {
+    setSaving(true);
+    setControlsSaved("");
+    try {
+      const next = cloneSubscriberFeedPreferences(preferences());
+      updater(next);
+      const saved = await saveSubscriberFeedPreferences(next);
+      if (!saved) {
+        setControlsSaved("Save failed");
+        return;
+      }
+      setControlsSaved("Saved");
+      await refetchPreferences();
+    } catch (error) {
+      console.error("Failed to save provider quick actions", error);
+      setControlsSaved("Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <>
@@ -93,6 +126,58 @@ export default function OsintSourceProfilePage() {
                       <For each={payload().summary.categories}>
                         {(category) => <span class="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5">{category}</span>}
                       </For>
+                    </div>
+                  </section>
+
+                  <section class="surface-card p-4">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={saving()}
+                        onClick={() => void persistPreferences((next) => {
+                          next.favoriteSources = toggleSubscriberPreferenceValue(next.favoriteSources, payload().source.name);
+                        })}
+                        class={`rounded-xl border px-3 py-2 text-sm ${favoriteSource() ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
+                      >
+                        {favoriteSource() ? "Favorited provider" : "Favorite provider"}
+                      </button>
+                      <For each={payload().summary.regions}>
+                        {(region) => {
+                          const active = () => includesSubscriberPreferenceValue(preferences()?.watchRegions ?? [], region);
+                          return (
+                            <button
+                              type="button"
+                              disabled={saving()}
+                              onClick={() => void persistPreferences((next) => {
+                                next.watchRegions = toggleSubscriberPreferenceValue(next.watchRegions, region);
+                              })}
+                              class={`rounded-xl border px-3 py-2 text-sm ${active() ? "border-blue-400/30 bg-blue-500/10 text-blue-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
+                            >
+                              {active() ? `Watching ${region}` : `Watch ${region}`}
+                            </button>
+                          );
+                        }}
+                      </For>
+                      <For each={payload().summary.categories}>
+                        {(category) => {
+                          const active = () => includesSubscriberPreferenceValue(preferences()?.watchCategories ?? [], category);
+                          return (
+                            <button
+                              type="button"
+                              disabled={saving()}
+                              onClick={() => void persistPreferences((next) => {
+                                next.watchCategories = toggleSubscriberPreferenceValue(next.watchCategories, category);
+                              })}
+                              class={`rounded-xl border px-3 py-2 text-sm ${active() ? "border-violet-400/30 bg-violet-500/10 text-violet-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
+                            >
+                              {active() ? `Watching ${category}` : `Watch ${category}`}
+                            </button>
+                          );
+                        }}
+                      </For>
+                      <Show when={controlsSaved()}>
+                        <span class="text-xs text-zinc-400">{controlsSaved()}</span>
+                      </Show>
                     </div>
                   </section>
 

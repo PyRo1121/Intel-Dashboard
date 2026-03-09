@@ -60,7 +60,7 @@ test("browser-authenticated dashboard routes render primary headings without aut
       const routes = AUTHENTICATED_BROWSER_ROUTES;
 
       for (const route of routes) {
-        const response = await page.goto(`${EDGE_BASE_URL}${route.path}`, {
+        const response = await openPage(page, route.path, {
           waitUntil: "domcontentloaded",
           timeout: 30_000,
         });
@@ -449,10 +449,7 @@ test("browser-authenticated Telegram freshness banner reacts to state transition
     const page = await context.newPage();
     try {
       await installMockClock(page);
-      await page.goto(`${EDGE_BASE_URL}/telegram`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/telegram");
 
       const freshnessPill = page.locator('[title^="Freshness thresholds:"]').first();
       await freshnessPill.waitFor({ state: "visible", timeout: 30_000 });
@@ -505,10 +502,7 @@ test("browser-authenticated non-Telegram freshness banners react to state transi
       const page = await context.newPage();
       try {
         await installMockClock(page);
-        await page.goto(`${EDGE_BASE_URL}${check.path}`, {
-          waitUntil: "networkidle",
-          timeout: 45_000,
-        });
+        await openDashboardPage(page, check.path);
 
         const freshnessPill = page.locator('[title^="Freshness thresholds:"]').first();
         await freshnessPill.waitFor({ state: "visible", timeout: 30_000 });
@@ -802,10 +796,7 @@ test("browser-authenticated dashboard controls support keyboard activation", asy
       await page.keyboard.press("Enter");
       assert.equal(await osintCritical.getAttribute("aria-pressed"), "true", "OSINT critical filter should respond to keyboard activation");
 
-      await page.goto(`${EDGE_BASE_URL}/air-sea`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/air-sea");
 
       const airFilter = page.getByRole("button", { name: "Air domain filter" });
       await airFilter.focus();
@@ -817,10 +808,7 @@ test("browser-authenticated dashboard controls support keyboard activation", asy
       await page.keyboard.press(" ");
       assert.equal(await highSeverity.getAttribute("aria-pressed"), "true", "Air/Sea high-severity filter should respond to keyboard activation");
 
-      await page.goto(`${EDGE_BASE_URL}/map`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/map");
 
       const regionCard = page.locator('button[aria-label^="Inspect "]').first();
       await regionCard.focus();
@@ -1040,10 +1028,7 @@ test("browser-authenticated app pages stay free of uncaught, console, and same-o
       });
 
       for (const route of AUTHENTICATED_BROWSER_NOERROR_ROUTES) {
-        await page.goto(`${EDGE_BASE_URL}${route}`, {
-          waitUntil: "networkidle",
-          timeout: 45_000,
-        });
+        await openDashboardPage(page, route);
         await page.waitForTimeout(1_000);
       }
 

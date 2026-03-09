@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import type { APIEvent } from "@solidjs/start/server";
-import { proxyAuthenticatedApi } from "./server-api-proxy.ts";
+import { createProxyGetHandler, proxyAuthenticatedApi } from "./server-api-proxy.ts";
 
 const ORIGINAL_PROXY_ORIGIN = process.env.INTEL_EDGE_PROXY_ORIGIN;
 
@@ -136,6 +136,28 @@ describe("proxyAuthenticatedApi", () => {
       assert.equal(payload.error, "Upstream API unavailable");
       assert.match(String(payload.detail || ""), /ECONNREFUSED/);
       assert.equal(response.headers.get("Cache-Control"), "private, no-store, no-cache, must-revalidate");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("createProxyGetHandler delegates to proxyAuthenticatedApi with the bound path", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: input instanceof Request ? input.url : String(input), init });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+
+    try {
+      const handler = createProxyGetHandler("/api/air-sea");
+      const response = await handler(buildEvent(new Request("https://localhost:3200/api/air-sea?limit=3")));
+
+      assert.equal(response.status, 200);
+      assert.equal(calls[0]?.url, "https://intel.pyro1121.com/api/air-sea?limit=3");
     } finally {
       globalThis.fetch = originalFetch;
     }

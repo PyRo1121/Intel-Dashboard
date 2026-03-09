@@ -87,6 +87,8 @@ const MAX_NEWS_HOT_OVERLAY_LIMIT = 1000;
 const DEFAULT_NEWS_HOT_OVERLAY_SHARD_FANOUT = 1;
 const DEFAULT_NEWS_HOT_OVERLAY_TIMEOUT_MS = 350;
 const MAX_NEWS_HOT_OVERLAY_TIMEOUT_MS = 5000;
+const DEFAULT_NEWS_HOT_OVERLAY_CACHE_MS = 750;
+const MAX_NEWS_HOT_OVERLAY_CACHE_MS = 10_000;
 const DEFAULT_OUTBOUND_ASYNC = true;
 const DEFAULT_STRIPE_API_BASE = "https://api.stripe.com";
 const DEFAULT_CRM_STRIPE_LIVE_ENABLED = true;
@@ -674,6 +676,8 @@ export type WorkerEnv = {
 type JsonRecord = Record<string, unknown>;
 
 const newsFeedMemoryCache = new Map<string, NewsFeedCacheEntry>();
+const newsFeedMergedMemoryCache = new Map<string, NewsFeedCacheEntry>();
+const newsHotOverlayMemoryCache = new Map<string, NewsFeedCacheEntry>();
 const kvBindingCacheIds = new WeakMap<object, string>();
 let kvBindingCacheIdCounter = 0;
 
@@ -948,6 +952,14 @@ function normalizeNewsHotOverlayTimeoutMs(rawValue: string | undefined): number 
     return DEFAULT_NEWS_HOT_OVERLAY_TIMEOUT_MS;
   }
   return clamp(Math.floor(parsed), 50, MAX_NEWS_HOT_OVERLAY_TIMEOUT_MS);
+}
+
+function normalizeNewsHotOverlayCacheMs(rawValue: string | undefined): number {
+  const parsed = parseFiniteNumber(rawValue);
+  if (parsed === undefined) {
+    return DEFAULT_NEWS_HOT_OVERLAY_CACHE_MS;
+  }
+  return clamp(Math.floor(parsed), 0, MAX_NEWS_HOT_OVERLAY_CACHE_MS);
 }
 
 function resolveTierPolicies(env: WorkerEnv): TierPolicies {
@@ -5306,9 +5318,17 @@ async function readNewsFeedFromStorageKey(env: WorkerEnv, storageKey: string): P
 async function readNewsFeed(env: WorkerEnv): Promise<NewsItem[]> {
   const storageKeys = resolveNewsFeedStorageKeysForRead(env);
   const maxFeedItems = normalizeNewsFeedMaxItems(env.NEWS_FEED_MAX_ITEMS);
+  const cacheTtlMs = normalizeNewsReadCacheMs(env.NEWS_READ_CACHE_MS);
 
   if (storageKeys.length <= 1) {
     return readNewsFeedFromStorageKey(env, storageKeys[0]);
+  }
+
+  const mergedCacheKey = `${normalizeBillingNamespacePrefix(env.BILLING_NAMESPACE_PREFIX)}:news-merged:${storageKeys.join("|")}:${maxFeedItems}`;
+  const nowMs = Date.now();
+  const mergedEntry = newsFeedMergedMemoryCache.get(mergedCacheKey);
+  if (cacheTtlMs > 0 && mergedEntry && nowMs - mergedEntry.cachedAtMs <= cacheTtlMs) {
+    return mergedEntry.items;
   }
 
   const shardFeeds = await Promise.all(
@@ -5318,6 +5338,12 @@ async function readNewsFeed(env: WorkerEnv): Promise<NewsItem[]> {
   let merged: NewsItem[] = [];
   for (const shardFeed of shardFeeds) {
     merged = mergeNewsStreamsDescending(merged, shardFeed, maxFeedItems);
+  }
+  if (cacheTtlMs > 0) {
+    newsFeedMergedMemoryCache.set(mergedCacheKey, {
+      cachedAtMs: nowMs,
+      items: merged,
+    });
   }
   return merged;
 }
@@ -5335,6 +5361,8 @@ async function writeNewsFeed(env: WorkerEnv, items: NewsItem[], storageKey?: str
     cachedAtMs: Date.now(),
     items: trimmed,
   });
+  newsFeedMergedMemoryCache.clear();
+  newsHotOverlayMemoryCache.clear();
 }
 
 function mergeNewsStreamsDescending(primary: NewsItem[], secondary: NewsItem[], maxItems: number): NewsItem[] {
@@ -5491,6 +5519,13 @@ async function readCoordinatorHotFeed(env: WorkerEnv, limit: number): Promise<Ne
   const maxLimit = normalizeNewsHotOverlayLimit(env.NEWS_HOT_OVERLAY_LIMIT);
   const finalLimit = Math.min(limit, maxLimit);
   const perShardLimit = Math.max(1, Math.ceil(finalLimit / Math.max(1, shardNames.length)) + 2);
+  const overlayCacheTtlMs = normalizeNewsHotOverlayCacheMs(env.NEWS_HOT_OVERLAY_CACHE_MS);
+  const overlayCacheKey = `${normalizeBillingNamespacePrefix(env.BILLING_NAMESPACE_PREFIX)}:news-hot:${shardNames.join("|")}:${finalLimit}:${perShardLimit}`;
+  const cached = newsHotOverlayMemoryCache.get(overlayCacheKey);
+  const nowMs = Date.now();
+  if (overlayCacheTtlMs > 0 && cached && nowMs - cached.cachedAtMs <= overlayCacheTtlMs) {
+    return cached.items;
+  }
 
   const results = await Promise.all(
     shardNames.map(async (coordinatorName) => {
@@ -5534,7 +5569,14 @@ async function readCoordinatorHotFeed(env: WorkerEnv, limit: number): Promise<Ne
   for (const shardItems of results) {
     merged = mergeNewsStreamsDescending(merged, shardItems, finalLimit);
   }
-  return merged.slice(0, finalLimit);
+  const output = merged.slice(0, finalLimit);
+  if (overlayCacheTtlMs > 0) {
+    newsHotOverlayMemoryCache.set(overlayCacheKey, {
+      cachedAtMs: nowMs,
+      items: output,
+    });
+  }
+  return output;
 }
 
 function resolveNewsFeedCacheKey(env: WorkerEnv, storageKey?: string): string {

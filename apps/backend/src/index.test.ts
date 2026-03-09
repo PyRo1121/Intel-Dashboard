@@ -1187,6 +1187,79 @@ describe("intel-dashboard backend worker", () => {
     expect(coordinatorFetch).toHaveBeenCalledTimes(1);
   });
 
+  it("reuses coordinator hot overlay cache across repeated entitled reads", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(12_000_000);
+    const kv = createKvMapBinding({
+      "intel-dashboard:usage:news:feed": [
+        {
+          id: "kv-old-1",
+          title: "Old KV",
+          url: "https://example.com/kv-old",
+          publishedAtMs: 11_000_000,
+        },
+      ],
+      "intel-dashboard:billing:account:pro-user": {
+        userId: "pro-user",
+        status: "active",
+        subscribedAtMs: 11_500_000,
+        monthlyPriceUsd: 8,
+        updatedAtMs: 11_500_000,
+      },
+    });
+
+    const coordinatorFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          ok: true,
+          result: {
+            items: [
+              {
+                id: "hot-1",
+                title: "Hot DO",
+                url: "https://example.com/hot",
+                publishedAtMs: 11_999_900,
+              },
+            ],
+          },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    const coordinatorNamespace = {
+      idFromName: vi.fn(() => ({ id: "global" } as unknown as DurableObjectId)),
+      get: vi.fn(() => ({ fetch: coordinatorFetch } as unknown as DurableObjectStub)),
+    } as unknown as DurableObjectNamespace;
+
+    const buildRequest = () =>
+      new Request("https://backend.example.com/api/intel-dashboard/news", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "pro-user", limit: 1 }),
+      });
+
+    const env = {
+      USAGE_DATA_SOURCE_TOKEN: "api-token",
+      BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+      NEWS_HOT_OVERLAY_ENABLED: "true",
+      NEWS_HOT_OVERLAY_CACHE_MS: "60000",
+      NEWS_INGEST_COORDINATOR: coordinatorNamespace,
+      USAGE_KV: kv.binding,
+    };
+
+    const first = await worker.fetch(buildRequest(), env);
+    expect(first.status).toBe(200);
+    const second = await worker.fetch(buildRequest(), env);
+    expect(second.status).toBe(200);
+    expect(coordinatorFetch.mock.calls.length).toBeLessThanOrEqual(1);
+  });
+
   it("routes publish through sharded coordinator names when configured", async () => {
     const kv = createKvMapBinding();
     const idFromName = vi.fn((name: string) => ({ id: name } as unknown as DurableObjectId));

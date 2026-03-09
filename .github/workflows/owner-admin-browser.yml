@@ -58,13 +58,13 @@ jobs:
         if: steps.secrets.outputs.enabled == 'true'
         run: bun run e2e:save-secrets
 
-      - name: Check owner/admin live e2e configuration
-        if: steps.secrets.outputs.enabled == 'true'
-        run: bun run check:e2e-owner-admin-live
-
       - name: Allowlist runner IP for owner/admin browser checks
         if: steps.secrets.outputs.enabled == 'true'
         run: bun run security:cf:allow-owner-e2e-ip
+
+      - name: Check owner/admin live e2e configuration
+        if: steps.secrets.outputs.enabled == 'true'
+        run: bun run check:e2e-owner-admin-live
 
       - name: Create artifact directory
         if: steps.secrets.outputs.enabled == 'true'

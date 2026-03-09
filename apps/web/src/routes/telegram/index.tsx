@@ -55,9 +55,15 @@ import { TELEGRAM_DESCRIPTION, TELEGRAM_TITLE } from "@intel-dashboard/shared/ro
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 
 export default function TelegramPage() {
-  const TELEGRAM_SNAPSHOT_CACHE_KEY = "telegram-feed-snapshot-v1";
   const TELEGRAM_SNAPSHOT_CACHE_TTL_MS = 2 * 60 * 1000;
   const auth = useAuth();
+  const sessionSnapshotKey = createMemo(() => {
+    const user = auth.user();
+    const login = (user?.login ?? "").trim().toLowerCase();
+    const tier = (user?.entitlement?.tier ?? "anon").trim().toLowerCase();
+    const role = (user?.entitlement?.role ?? "anon").trim().toLowerCase();
+    return `telegram-feed-snapshot-v1:${login || "anon"}:${role}:${tier}`;
+  });
   const [data, setData] = createSignal<TelegramData | null>(null);
   const [loadingInitial, setLoadingInitial] = createSignal(true);
   const [refreshing, setRefreshing] = createSignal(false);
@@ -115,7 +121,7 @@ export default function TelegramPage() {
       if (changed) {
         setData(merged);
         lastTimestamp = next.timestamp;
-        saveSessionSnapshot(TELEGRAM_SNAPSHOT_CACHE_KEY, merged);
+        saveSessionSnapshot(sessionSnapshotKey(), merged);
       }
       return changed;
     } catch {
@@ -127,7 +133,7 @@ export default function TelegramPage() {
   };
 
   onMount(() => {
-    const cached = loadSessionSnapshot<TelegramData>(TELEGRAM_SNAPSHOT_CACHE_KEY, TELEGRAM_SNAPSHOT_CACHE_TTL_MS);
+    const cached = loadSessionSnapshot<TelegramData>(sessionSnapshotKey(), TELEGRAM_SNAPSHOT_CACHE_TTL_MS);
     if (cached) {
       setData(cached);
       lastTimestamp = cached.timestamp;

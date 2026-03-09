@@ -25,16 +25,23 @@ import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 const FILTERS: (Severity | "all")[] = ["all", "critical", "high", "medium", "low"];
 
 export default function OsintFeed() {
-  const OSINT_SNAPSHOT_CACHE_KEY = "osint-feed-snapshot-v1";
   const OSINT_SNAPSHOT_CACHE_TTL_MS = 2 * 60 * 1000;
   const [filter, setFilter] = createSignal<Severity | "all">("all");
+  const auth = useAuth();
+  const sessionSnapshotKey = createMemo(() => {
+    const user = auth.user();
+    const login = (user?.login ?? "").trim().toLowerCase();
+    const tier = (user?.entitlement?.tier ?? "anon").trim().toLowerCase();
+    const role = (user?.entitlement?.role ?? "anon").trim().toLowerCase();
+    return `osint-feed-snapshot-v1:${login || "anon"}:${role}:${tier}`;
+  });
   const [osint, { refetch }] = createResource(fetchOsintItems, { initialValue: [] as IntelItem[] });
   const [cachedItems, setCachedItems] = createSignal<IntelItem[]>([]);
   const feedThresholds = STANDARD_FEED_FRESHNESS_THRESHOLDS;
   const nowMs = useWallClock(1000);
 
   onMount(() => {
-    const cached = loadSessionSnapshot<IntelItem[]>(OSINT_SNAPSHOT_CACHE_KEY, OSINT_SNAPSHOT_CACHE_TTL_MS);
+    const cached = loadSessionSnapshot<IntelItem[]>(sessionSnapshotKey(), OSINT_SNAPSHOT_CACHE_TTL_MS);
     if (Array.isArray(cached) && cached.length > 0) {
       setCachedItems(cached);
     }
@@ -53,7 +60,7 @@ export default function OsintFeed() {
   createEffect(() => {
     const current = readLatestArray(osint.latest, osint());
     if (current.length > 0) {
-      saveSessionSnapshot(OSINT_SNAPSHOT_CACHE_KEY, current);
+      saveSessionSnapshot(sessionSnapshotKey(), current);
       setCachedItems(current);
     }
   });

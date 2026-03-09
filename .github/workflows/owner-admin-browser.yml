@@ -16,14 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      E2E_SESSION_TOKEN: ${{ secrets.E2E_SESSION_TOKEN }}
-      E2E_SIGNOUT_SESSION_TOKEN: ${{ secrets.E2E_SIGNOUT_SESSION_TOKEN }}
-      E2E_BACKEND_TOKEN: ${{ secrets.E2E_BACKEND_TOKEN }}
-      E2E_USER_ID: ${{ secrets.E2E_USER_ID }}
-      E2E_NON_OWNER_USER_ID: ${{ secrets.E2E_NON_OWNER_USER_ID }}
+      E2E_SESSION_COOKIE: ${{ secrets.E2E_SESSION_COOKIE }}
       E2E_EDGE_BASE_URL: https://intel.pyro1121.com
-      E2E_BACKEND_BASE_URL: https://backend-e2e.pyro1121.com
       E2E_REQUIRE_AUTH: "1"
       E2E_STRICT: "1"
     steps:
@@ -46,12 +40,8 @@ jobs:
       - name: Save e2e secrets
         run: bun run e2e:save-secrets
 
-      - name: Check live e2e configuration
-        run: bun run check:e2e-live
-
-      - name: Allowlist runner IP for owner/admin browser checks
-        if: env.CLOUDFLARE_API_TOKEN != ''
-        run: bun run security:cf:allow-owner-e2e-ip
+      - name: Check owner/admin live e2e configuration
+        run: bun run check:e2e-owner-admin-live
 
       - name: Create artifact directory
         run: mkdir -p output/e2e-browser
@@ -77,7 +67,3 @@ jobs:
           name: owner-admin-browser-artifacts
           path: output/e2e-browser
           if-no-files-found: ignore
-
-      - name: Clear runner IP allowlist
-        if: always() && env.CLOUDFLARE_API_TOKEN != ''
-        run: bun run security:cf:clear-owner-e2e-ip

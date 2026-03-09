@@ -40,6 +40,7 @@
     "check:typegen": "node scripts/check-cloudflare-typegen-sync.mjs",
     "check:repo-hygiene": "node scripts/check-repo-hygiene.mjs",
     "check:e2e-live": "node --experimental-strip-types scripts/check-e2e-live-config.mjs",
+    "check:e2e-owner-admin-live": "node --experimental-strip-types scripts/check-e2e-owner-admin-live-config.mjs",
     "bench:latency": "node --experimental-strip-types scripts/benchmark-latency.mjs",
     "bench:assert": "node scripts/compare-benchmarks.mjs",
     "security:cf:apply": "node scripts/cloudflare-hardening.mjs",

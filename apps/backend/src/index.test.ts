@@ -2031,6 +2031,293 @@ describe("intel-dashboard backend worker", () => {
     });
   });
 
+  it("uses maintained cached CRM summary even when it is older than the configured TTL", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const kv = createKvMapBinding({
+      "intel-dashboard:billing:crm:summary": {
+        generatedAtMs: 100_000,
+        billing: {
+          trackedUsers: 1,
+          statuses: {
+            active: 1,
+            trialing: 0,
+            canceled: 0,
+            expired: 0,
+            none: 0,
+          },
+          mrrActiveUsd: 29,
+          arrActiveUsd: 348,
+          accounts: [
+            {
+              userId: "user-a",
+              status: "active",
+              monthlyPriceUsd: 29,
+              updatedAtMs: 100_000,
+            },
+          ],
+        },
+        telemetry: {
+          events24h: 0,
+          events7d: 1,
+          uniqueUsers24h: 0,
+          uniqueUsers7d: 1,
+          trialStarts7d: 0,
+          paidStarts7d: 1,
+          cancellations7d: 0,
+          cancellations30d: 0,
+          topKinds7d: [{ kind: "subscription_set_active", count: 1 }],
+        },
+        latestEvents: [
+          {
+            id: "evt-paid",
+            userId: "user-a",
+            atMs: 100_000,
+            kind: "subscription_set_active",
+            source: "api",
+          },
+        ],
+        degraded: {
+          partial: false,
+          accountsTruncated: false,
+          activityTruncated: false,
+          reasons: [],
+        },
+      },
+    });
+    kv.binding.list = vi.fn(async () => {
+      throw new Error("crm summary should not enumerate KV when a maintained cache exists");
+    });
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/admin/crm/summary", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "owner-id" }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+        BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+        CRM_SUMMARY_CACHE_TTL_SECONDS: "1",
+        USAGE_KV: kv.binding,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      result: {
+        generatedAtMs: 100_000,
+        billing: {
+          trackedUsers: 1,
+          mrrActiveUsd: 29,
+        },
+        telemetry: {
+          events7d: 1,
+        },
+      },
+    });
+  });
+
+  it("maintains a fresh cached CRM summary across billing trial writes without KV enumeration", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const kv = createKvMapBinding({
+      "intel-dashboard:billing:crm:summary": {
+        generatedAtMs: 999_900,
+        billing: {
+          trackedUsers: 0,
+          statuses: {
+            active: 0,
+            trialing: 0,
+            canceled: 0,
+            expired: 0,
+            none: 0,
+          },
+          mrrActiveUsd: 0,
+          arrActiveUsd: 0,
+          accounts: [],
+        },
+        telemetry: {
+          events24h: 0,
+          events7d: 0,
+          uniqueUsers24h: 0,
+          uniqueUsers7d: 0,
+          trialStarts7d: 0,
+          paidStarts7d: 0,
+          cancellations7d: 0,
+          cancellations30d: 0,
+          topKinds7d: [],
+        },
+        latestEvents: [],
+        degraded: {
+          partial: false,
+          accountsTruncated: false,
+          activityTruncated: false,
+          reasons: [],
+        },
+        telemetryKindCounts7d: {},
+      },
+    });
+    kv.binding.list = vi.fn(async () => {
+      throw new Error("crm summary should not enumerate KV when cache is maintained on writes");
+    });
+
+    const startTrial = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/billing/start-trial", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "user-a" }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+        BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+        USAGE_KV: kv.binding,
+      },
+    );
+    expect(startTrial.status).toBe(200);
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/admin/crm/summary", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "owner-id" }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+        BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+        USAGE_KV: kv.binding,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      result: {
+        billing: {
+          trackedUsers: 1,
+          statuses: {
+            trialing: 1,
+          },
+        },
+        telemetry: {
+          events7d: 1,
+          trialStarts7d: 1,
+          uniqueUsers7d: 1,
+        },
+        degraded: {
+          partial: false,
+        },
+      },
+    });
+  });
+
+  it("warms CRM summary snapshot on scheduled runs without requiring Stripe live sync", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const kv = createKvMapBinding({
+      "intel-dashboard:billing:account:user-a": {
+        userId: "user-a",
+        status: "active",
+        monthlyPriceUsd: 29,
+        updatedAtMs: 999_000,
+      },
+      "intel-dashboard:billing:activity:user-a": [
+        {
+          id: "evt-paid",
+          userId: "user-a",
+          atMs: 999_500,
+          kind: "subscription_set_active",
+          source: "api",
+        },
+      ],
+    });
+
+    await worker.scheduled({} as ScheduledController, {
+      USAGE_KV: kv.binding,
+      BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+      NEWS_RSS_INGEST_ENABLED: "false",
+      USAGE_CACHE_WARM_ENABLED: "false",
+      CRM_STRIPE_LIVE_ENABLED: "false",
+    });
+
+    const cached = kv.data.get("intel-dashboard:billing:crm:summary");
+    expect(cached).toBeTruthy();
+    const decoded = cached ? JSON.parse(cached) : null;
+    expect(decoded?.billing?.trackedUsers).toBe(1);
+    expect(decoded?.telemetry?.events7d).toBe(1);
+  });
+
+  it("counts CRM accounts and activity beyond the prior safety cap without truncation", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const entries: Record<string, unknown> = {};
+    for (let index = 0; index < 2501; index += 1) {
+      const userId = `user-${index}`;
+      entries[`intel-dashboard:billing:account:${userId}`] = {
+        userId,
+        status: "active",
+        monthlyPriceUsd: 29,
+        updatedAtMs: 1_000_000 - index,
+      };
+      entries[`intel-dashboard:billing:activity:${userId}`] = [
+        {
+          id: `evt-${index}`,
+          userId,
+          atMs: 1_000_000 - index,
+          kind: "subscription_set_active",
+          source: "api",
+        },
+      ];
+    }
+
+    const kv = createKvMapBinding(entries);
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/admin/crm/summary", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "owner-id" }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+        BILLING_NAMESPACE_PREFIX: "intel-dashboard:billing",
+        USAGE_KV: kv.binding,
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      result: {
+        degraded: {
+          partial: false,
+          accountsTruncated: false,
+          activityTruncated: false,
+          reasons: [],
+        },
+        billing: {
+          trackedUsers: 2501,
+        },
+        telemetry: {
+          events7d: 2501,
+        },
+      },
+    });
+  });
+
   it("returns owner CRM AI telemetry snapshot", async () => {
     const analyticsFetch = vi.fn(async () =>
       new Response(
@@ -3671,6 +3958,43 @@ describe("intel-dashboard backend worker", () => {
     });
   });
 
+  it("rolls back queued ai batch state and idempotency when enqueue fails", async () => {
+    const kv = createKvMapBinding();
+
+    await expect(
+      worker.fetch(
+        new Request("https://backend.example.com/api/intel-dashboard/ai/jobs", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer admin-token",
+          },
+          body: JSON.stringify({
+            async: true,
+            idempotencyKey: "batch-retry-key",
+            jobs: [
+              {
+                type: "dedupe",
+                payload: { title: "Repeated update", url: "https://example.com/repeated" },
+              },
+            ],
+          }),
+        }),
+        {
+          BILLING_ADMIN_TOKEN: "admin-token",
+          AI_JOBS_PATH: "/api/intel-dashboard/ai/jobs",
+          USAGE_KV: kv.binding,
+          AI_JOB_QUEUE: {
+            send: async () => {
+              throw new Error("queue down");
+            },
+          },
+        },
+      ),
+    ).rejects.toThrow("queue down");
+    expect(kv.data.size).toBe(0);
+  });
+
   it("serves ai job status from lightweight meta records without full state payload", async () => {
     const kv = createKvMapBinding({
       "intel-dashboard:ai-batch:meta:batch-meta-only": {
@@ -4010,6 +4334,91 @@ describe("intel-dashboard backend worker", () => {
     expect(persisted).toBeTruthy();
     const decoded = persisted ? JSON.parse(persisted) : null;
     expect(decoded?.updatedAtMs).toBe(10);
+  });
+
+  it("recovers stale internal AI batches during scheduled runs even without a queue", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const kv = createKvMapBinding({
+      "intel-dashboard:ai-batch:state:batch-stale": {
+        id: "batch-stale",
+        status: "queued",
+        createdAtMs: 10,
+        updatedAtMs: 10,
+        provider: "internal",
+        jobs: [
+          {
+            type: "dedupe",
+            payload: { title: "One", url: "https://example.com/one" },
+          },
+        ],
+        maxConnections: 10,
+        pollAttempts: 0,
+      },
+      "intel-dashboard:ai-batch:pending:batch-stale": {
+        id: "batch-stale",
+        updatedAtMs: 10,
+        status: "queued",
+      },
+    });
+
+    await worker.scheduled({} as ScheduledController, {
+      USAGE_KV: kv.binding,
+      AI_BATCH_PROVIDER: "internal",
+      AI_BATCH_POLL_DELAY_SECONDS: "60",
+      NEWS_RSS_INGEST_ENABLED: "false",
+      USAGE_CACHE_WARM_ENABLED: "false",
+    });
+
+    const persisted = kv.data.get("intel-dashboard:ai-batch:state:batch-stale");
+    expect(persisted).toBeTruthy();
+    const decoded = persisted ? JSON.parse(persisted) : null;
+    expect(decoded?.status).toBe("completed");
+    expect(decoded?.results).toHaveLength(1);
+    expect(kv.data.has("intel-dashboard:ai-batch:pending:batch-stale")).toBe(false);
+  });
+
+  it("skips full state loads for fresh pending AI batches during recovery", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const kv = createKvMapBinding({
+      "intel-dashboard:ai-batch:state:batch-fresh": {
+        id: "batch-fresh",
+        status: "queued",
+        createdAtMs: 900_000,
+        updatedAtMs: 999_500,
+        provider: "internal",
+        jobs: [
+          {
+            type: "dedupe",
+            payload: { title: "One", url: "https://example.com/one" },
+          },
+        ],
+        maxConnections: 10,
+        pollAttempts: 0,
+      },
+      "intel-dashboard:ai-batch:pending:batch-fresh": {
+        id: "batch-fresh",
+        updatedAtMs: 999_500,
+        status: "queued",
+      },
+    });
+    const getCalls: string[] = [];
+    const originalGet = kv.binding.get;
+    kv.binding.get = async (key) => {
+      getCalls.push(key);
+      return originalGet(key);
+    };
+
+    await worker.scheduled({} as ScheduledController, {
+      USAGE_KV: kv.binding,
+      AI_JOB_QUEUE: { send: async () => undefined },
+      AI_BATCH_PROVIDER: "internal",
+      AI_BATCH_POLL_DELAY_SECONDS: "60",
+      NEWS_RSS_INGEST_ENABLED: "false",
+      USAGE_CACHE_WARM_ENABLED: "false",
+    });
+
+    expect(getCalls).toContain("intel-dashboard:ai-batch:pending:batch-fresh");
+    expect(getCalls).not.toContain("intel-dashboard:ai-batch:state:batch-fresh");
   });
 
   it("starts trial with delayed news access", async () => {

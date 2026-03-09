@@ -124,31 +124,36 @@ export default function TelegramSourceHistoryPage() {
 
                   <section class="surface-card p-4">
                     <h2 class="mb-3 text-sm font-semibold text-white">Recent notable events</h2>
-                    <div class="space-y-2">
-                      <For each={payload().recentEvents}>
-                        {(event) => (
-                          <a href={event.link} target="_blank" rel="noopener noreferrer" class="block rounded-xl border border-white/[0.08] bg-black/20 p-3 no-underline">
-                            <div class="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
-                              <Show when={event.signalGrade}>
-                                <span class="rounded-full border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-violet-200">
-                                  {event.signalGrade} · {event.signalScore}
-                                </span>
-                              </Show>
-                              <span><Clock size={11} class="mr-1 inline" />{formatRelativeTimeAt(event.datetime, nowMs())}</span>
-                            </div>
-                            <h3 class="text-sm font-medium text-white">{event.title}</h3>
-                            <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
-                              <For each={event.rankReasons}>
-                                {(reason) => (
-                                  <span class="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5">{reason}</span>
-                                )}
-                              </For>
-                              <span class="inline-flex items-center gap-1 text-blue-300">Source <ExternalLink size={11} /></span>
-                            </div>
-                          </a>
-                        )}
-                      </For>
-                    </div>
+                    <Show
+                      when={payload().recentEvents.length > 0}
+                      fallback={<p class="text-sm text-zinc-400">No notable events in this window.</p>}
+                    >
+                      <div class="space-y-2">
+                        <For each={payload().recentEvents}>
+                          {(event) => (
+                            <a href={event.link} target="_blank" rel="noopener noreferrer" class="block rounded-xl border border-white/[0.08] bg-black/20 p-3 no-underline">
+                              <div class="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
+                                <Show when={event.signalGrade}>
+                                  <span class="rounded-full border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-violet-200">
+                                    {event.signalGrade} · {event.signalScore}
+                                  </span>
+                                </Show>
+                                <span><Clock size={11} class="mr-1 inline" />{formatRelativeTimeAt(event.datetime, nowMs())}</span>
+                              </div>
+                              <h3 class="text-sm font-medium text-white">{event.title}</h3>
+                              <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+                                <For each={event.rankReasons}>
+                                  {(reason) => (
+                                    <span class="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5">{reason}</span>
+                                  )}
+                                </For>
+                                <span class="inline-flex items-center gap-1 text-blue-300">Source <ExternalLink size={11} /></span>
+                              </div>
+                            </a>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
                   </section>
 
                   <Show when={owner() && payload().ownerDiagnostics}>

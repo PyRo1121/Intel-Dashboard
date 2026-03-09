@@ -5803,9 +5803,10 @@ export default {
         }
         return privateApiJson(origin, 200, payload);
       } catch (error) {
+        console.error("[telegram-source-history] query failed", error instanceof Error ? error.message : error);
         return privateApiJson(origin, 500, {
           error: "Telegram source history query failed",
-          detail: error instanceof Error ? error.message : "unknown_error",
+          detail: "internal_error",
         });
       }
     }

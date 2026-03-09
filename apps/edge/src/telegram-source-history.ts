@@ -204,22 +204,24 @@ export async function queryTelegramSourceHistory(args: {
     }),
   };
 
-  const recentEvents: TelegramSourceHistoryEvent[] = recentRows.map((row) => ({
-    eventId: normalizeString(row.event_id),
-    datetime: normalizeString(row.datetime),
-    title: [normalizeString(row.text_en), normalizeString(row.text_original)].find(Boolean) ?? "",
-    signalScore: normalizeScore(row.signal_score),
-    signalGrade: normalizeString(row.signal_grade) || undefined,
-    rankReasons: (() => {
-      try {
-        const parsed = JSON.parse(normalizeString(row.signal_reasons_json) || "[]");
-        return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
-      } catch {
-        return [];
-      }
-    })(),
-    link: normalizeString(row.message_link),
-  }));
+  const recentEvents: TelegramSourceHistoryEvent[] = recentRows
+    .map((row) => ({
+      eventId: normalizeString(row.event_id),
+      datetime: normalizeString(row.datetime),
+      title: [normalizeString(row.text_en), normalizeString(row.text_original)].find(Boolean) ?? "",
+      signalScore: normalizeScore(row.signal_score),
+      signalGrade: normalizeString(row.signal_grade) || undefined,
+      rankReasons: (() => {
+        try {
+          const parsed = JSON.parse(normalizeString(row.signal_reasons_json) || "[]");
+          return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+        } catch {
+          return [];
+        }
+      })(),
+      link: normalizeString(row.message_link),
+    }))
+    .filter((event) => Boolean(event.title) || Boolean(event.link));
 
   let ownerDiagnostics: TelegramSourceHistoryOwnerDiagnostics | undefined;
   if (args.owner) {

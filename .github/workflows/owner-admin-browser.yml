@@ -63,6 +63,10 @@ jobs:
         if: steps.secrets.outputs.enabled == 'true'
         run: bun run security:cf:allow-owner-e2e-ip
 
+      - name: Let owner/admin allowlist propagate
+        if: steps.secrets.outputs.enabled == 'true'
+        run: sleep 20
+
       - name: Create artifact directory
         if: steps.secrets.outputs.enabled == 'true'
         run: mkdir -p output/e2e-browser

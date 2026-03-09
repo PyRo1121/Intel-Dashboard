@@ -1,0 +1,23 @@
+apps/backend/src/index.ts
+  97be4a1d5dcfd3ae 101-102,638,949-956,3972-3976,4073-4086,4197-4211,4213,5239-5241,5256-5257,5264,5337,5427
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.8",
+  "base_commit_sha": "ca55b49cd73578c7e2e585c1182c7dd1421ecf6f",
+  "prompts": {
+    "97be4a1d5dcfd3ae": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd02f-1beb-7a51-b766-6dbd1330483e",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 74,
+      "total_deletions": 14,
+      "accepted_lines": 60,
+      "overriden_lines": 0
+    }
+  }
+}

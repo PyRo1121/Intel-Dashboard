@@ -1,4 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import { A } from "@solidjs/router";
 import { ChevronLeft, ChevronRight, Clock, Copy, Eye, Share2, X } from "lucide-solid";
 import { TelegramPhotoViewer, TelegramVideoPlayer } from "./TelegramMedia";
 import { formatEventLabel } from "~/lib/event-label";
@@ -169,9 +170,21 @@ export default function TelegramMessageCard(props: {
               </span>
             </Show>
             <Show when={firstReporterLabel()}>
-              <span class="inline-flex rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-sky-200">
-                First Reporter {firstReporterLabel()}
-              </span>
+              <Show
+                when={props.entry.dedupe?.firstReporterChannel}
+                fallback={
+                  <span class="inline-flex rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-sky-200">
+                    First Reporter {firstReporterLabel()}
+                  </span>
+                }
+              >
+                <A
+                  href={`/telegram/source/${encodeURIComponent(props.entry.dedupe?.firstReporterChannel ?? "")}`}
+                  class="inline-flex rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-sky-200 no-underline hover:text-sky-100"
+                >
+                  First Reporter {firstReporterLabel()}
+                </A>
+              </Show>
             </Show>
             <For each={rankReasons()}>
               {(reason) => (

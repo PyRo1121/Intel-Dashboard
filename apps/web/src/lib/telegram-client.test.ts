@@ -4,6 +4,7 @@ import {
   EMPTY_TELEGRAM_DATA,
   fetchTelegramDedupeFeedbackStatus,
   fetchTelegramFeed,
+  fetchTelegramSourceHistory,
   fetchTelegramSourceLeaderboard,
   postTelegramDedupeFeedback,
   resolveTelegramFeedData,
@@ -116,6 +117,51 @@ test("fetchTelegramSourceLeaderboard returns payload on success and null on fail
         headers: { "Content-Type": "application/json" },
       })) as typeof fetch;
     assert.equal(await fetchTelegramSourceLeaderboard("7d"), null);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchTelegramSourceHistory returns payload on success and null on failure", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({
+        window: "24h",
+        generatedAt: "2026-03-09T12:00:00.000Z",
+        source: {
+          channel: "alpha",
+          label: "Alpha",
+          category: "ukraine",
+          trustTier: "core",
+          latencyTier: "instant",
+        },
+        summary: {
+          score: 88,
+          leadCount: 2,
+          duplicateCount: 1,
+          recentFirstReports: 2,
+          averageSignalScore: 82,
+          duplicateRate: 0.25,
+          topReasons: ["first", "fresh"],
+          lastSeenAt: "2026-03-09T11:00:00.000Z",
+          verdict: "High-value first reporter",
+        },
+        recentEvents: [],
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })) as typeof fetch;
+
+    assert.equal((await fetchTelegramSourceHistory("alpha", "24h"))?.source.channel, "alpha");
+
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: "Not Found" }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      })) as typeof fetch;
+
+    assert.equal(await fetchTelegramSourceHistory("missing", "7d"), null);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -1,0 +1,29 @@
+e2e/browser-smoke.test.mjs
+  ee18a179ffd1e45f 443,469-476
+apps/web/src/routes/crm.tsx
+  ee18a179ffd1e45f 203,205,207-208,216,218,220-221,342-349,533,556-558,560-564,783-803,830-832
+apps/backend/src/index.test.ts
+  ee18a179ffd1e45f 1862-1870
+apps/backend/src/index.ts
+  ee18a179ffd1e45f 4231,4233,4235-4236,4296-4297,4309-4324,4331-4348,4383-4390,4394-4399,4423,4425,4427-4428
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.8",
+  "base_commit_sha": "88c442e534df615c6ad7adf12a0eb64909dbc855",
+  "prompts": {
+    "ee18a179ffd1e45f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cb3ea-8647-7d20-a2a7-33c67b4f0702",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 146,
+      "total_deletions": 127,
+      "accepted_lines": 128,
+      "overriden_lines": 0
+    }
+  }
+}

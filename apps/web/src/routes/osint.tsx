@@ -192,11 +192,8 @@ export default function OsintFeed() {
           <div class="space-y-2">
             <For each={filtered()}>
               {(item, idx) => (
-                <a
-                  href={item.url || "#"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="block surface-card surface-card-hover p-3.5 transition-all duration-200 group relative overflow-hidden no-underline cursor-pointer"
+                <article
+                  class="surface-card surface-card-hover p-3.5 transition-all duration-200 group relative overflow-hidden"
                   style={idx() < 20 ? `animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: ${idx() * 25}ms` : undefined}
                 >
                   {/* Severity accent line */}
@@ -224,9 +221,14 @@ export default function OsintFeed() {
                       </div>
                       <h3 class="text-sm font-medium text-white leading-snug group-hover:text-blue-50 transition-colors [overflow-wrap:anywhere]">{item.title}</h3>
                       <p class="text-[12px] text-zinc-500 mt-1.5 leading-relaxed line-clamp-2 break-words [overflow-wrap:anywhere]">{item.summary}</p>
-                      <div class="inline-flex items-center gap-1 mt-2 text-[11px] text-zinc-600 group-hover:text-blue-400 transition-colors">
+                      <a
+                        href={item.url || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center gap-1 mt-2 text-[11px] text-zinc-600 transition-colors hover:text-blue-400"
+                      >
                         View source <ExternalLink size={10} />
-                      </div>
+                      </a>
                     </div>
                     <Show when={item.timestamp}>
                       <div class="flex items-center gap-1 flex-shrink-0">
@@ -237,7 +239,7 @@ export default function OsintFeed() {
                       </div>
                     </Show>
                   </div>
-                </a>
+                </article>
               )}
             </For>
           </div>

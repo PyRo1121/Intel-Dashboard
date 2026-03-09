@@ -7,5 +7,5 @@ const INTEL_TAG_COLORS: Record<string, string> = {
 };
 
 export function getIntelTagStyle(tag: string): string | null {
-  return Object.prototype.hasOwnProperty.call(INTEL_TAG_COLORS, tag) ? INTEL_TAG_COLORS[tag] : null;
+  return INTEL_TAG_COLORS[tag] ?? null;
 }

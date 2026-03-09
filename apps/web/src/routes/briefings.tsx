@@ -6,7 +6,7 @@ import {
   freshnessBannerTone,
   freshnessPillTone,
   freshnessTooltip,
-  maxIsoTimestamp,
+  maxIsoTimestampBy,
   useFeedFreshness,
 } from "~/lib/freshness";
 import { readLatestArray } from "~/lib/resource-latest";
@@ -30,7 +30,7 @@ export default function Briefings() {
 
   const items = () => readLatestArray(briefings.latest, briefings());
   const loadingInitial = () => isInitialResourceLoading(briefings.state, items().length);
-  const latestBriefingTs = createMemo(() => maxIsoTimestamp(items().map((briefing) => briefing.timestamp)));
+  const latestBriefingTs = createMemo(() => maxIsoTimestampBy(items(), (briefing) => briefing.timestamp));
   const freshness = useFeedFreshness({
     nowMs,
     latestTimestampMs: latestBriefingTs,

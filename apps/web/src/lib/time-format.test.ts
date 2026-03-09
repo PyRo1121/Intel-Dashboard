@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createRoot, createSignal } from "solid-js";
 import { formatAgeCompactFromMs, formatRelativeTimeAt } from "./utils.ts";
-import { buildFreshnessStatusAt, useFeedFreshness } from "./freshness.ts";
+import { buildFreshnessStatusAt, maxIsoTimestampBy, useFeedFreshness } from "./freshness.ts";
 import { nextWallClockDelay } from "./live-refresh.ts";
 
 test("formatRelativeTimeAt formats relative windows from injected now", () => {
@@ -37,6 +37,22 @@ test("buildFreshnessStatusAt computes state from injected now", () => {
     buildFreshnessStatusAt(now, 0, thresholds, { noData: "Missing" }),
     { state: "stale", minutes: null, ageMs: null, label: "Missing" },
   );
+});
+
+test("maxIsoTimestampBy selects the latest valid ISO timestamp from item collections", () => {
+  assert.equal(
+    maxIsoTimestampBy(
+      [
+        { timestamp: "2026-03-07T11:58:00.000Z" },
+        { timestamp: "2026-03-07T12:00:00.000Z" },
+        { timestamp: "" },
+      ],
+      (item) => item.timestamp,
+    ),
+    Date.UTC(2026, 2, 7, 12, 0, 0),
+  );
+
+  assert.equal(maxIsoTimestampBy([{ timestamp: "" }], (item) => item.timestamp), 0);
 });
 
 test("formatAgeCompactFromMs formats second and minute precision labels", () => {

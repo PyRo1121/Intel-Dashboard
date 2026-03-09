@@ -1,4 +1,5 @@
 import { fetchPublicJson } from "./client-json.ts";
+import { readLatestValue } from "./resource-latest.ts";
 import type { Severity } from "./types.ts";
 
 export interface Aircraft {
@@ -67,4 +68,11 @@ export const EMPTY_AIR_SEA_PAYLOAD: AirSeaPayload = {
 export async function fetchAirSeaPayload(): Promise<AirSeaPayload> {
   const result = await fetchPublicJson<AirSeaPayload>("/api/air-sea");
   return result.ok ? result.data : EMPTY_AIR_SEA_PAYLOAD;
+}
+
+export function resolveAirSeaPayload(
+  latest: AirSeaPayload | null | undefined,
+  current: AirSeaPayload | null | undefined,
+): AirSeaPayload {
+  return readLatestValue<AirSeaPayload>(latest ?? undefined, current ?? undefined, EMPTY_AIR_SEA_PAYLOAD);
 }

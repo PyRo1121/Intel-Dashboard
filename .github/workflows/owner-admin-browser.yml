@@ -13,7 +13,7 @@ on:
 
 jobs:
   owner-admin-browser:
-    if: (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.fork == false && github.actor != 'dependabot[bot]')) && env.E2E_SESSION_COOKIE != '' && env.CLOUDFLARE_API_TOKEN != ''
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.fork == false && github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -35,33 +35,50 @@ jobs:
         with:
           bun-version: 1.3.8
 
+      - name: Check required owner/admin secrets
+        id: secrets
+        shell: bash
+        run: |
+          if [ -n "${E2E_SESSION_COOKIE}" ] && [ -n "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Owner/admin browser lane skipped: missing required secrets." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Install dependencies
+        if: steps.secrets.outputs.enabled == 'true'
         run: bun install --frozen-lockfile
 
       - name: Install Chromium
+        if: steps.secrets.outputs.enabled == 'true'
         run: bunx playwright install chromium
 
       - name: Save e2e secrets
+        if: steps.secrets.outputs.enabled == 'true'
         run: bun run e2e:save-secrets
 
       - name: Check owner/admin live e2e configuration
+        if: steps.secrets.outputs.enabled == 'true'
         run: bun run check:e2e-owner-admin-live
 
       - name: Allowlist runner IP for owner/admin browser checks
-        if: env.CLOUDFLARE_API_TOKEN != ''
+        if: steps.secrets.outputs.enabled == 'true'
         run: bun run security:cf:allow-owner-e2e-ip
 
       - name: Create artifact directory
+        if: steps.secrets.outputs.enabled == 'true'
         run: mkdir -p output/e2e-browser
 
       - name: Run owner/admin browser lane
+        if: steps.secrets.outputs.enabled == 'true'
         shell: bash
         run: |
           set -o pipefail
           bun run test:e2e:owner-admin | tee output/e2e-browser/owner-admin-browser.log
 
       - name: Upload owner/admin browser log
-        if: always()
+        if: always() && steps.secrets.outputs.enabled == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: owner-admin-browser-log
@@ -69,7 +86,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload owner/admin browser artifacts
-        if: failure()
+        if: failure() && steps.secrets.outputs.enabled == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: owner-admin-browser-artifacts
@@ -77,6 +94,6 @@ jobs:
           if-no-files-found: ignore
 
       - name: Clear runner IP allowlist
-        if: always() && env.CLOUDFLARE_API_TOKEN != ''
+        if: always() && steps.secrets.outputs.enabled == 'true'
         continue-on-error: true
         run: bun run security:cf:clear-owner-e2e-ip

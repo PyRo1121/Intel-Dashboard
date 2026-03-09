@@ -96,6 +96,13 @@ describe("resolveBackendApiToken", () => {
     );
     assert.equal(
       resolveBackendApiToken({
+        USAGE_DATA_SOURCE_TOKEN: "   ",
+        INTEL_API_TOKEN: " intel-token ",
+      }),
+      "intel-token",
+    );
+    assert.equal(
+      resolveBackendApiToken({
         INTEL_API_TOKEN: " intel-token ",
       }),
       "intel-token",

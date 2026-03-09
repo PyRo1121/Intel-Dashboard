@@ -4,7 +4,14 @@ import { join } from "node:path";
 import test from "node:test";
 import { chromium } from "@playwright/test";
 import { SITE_ORIGIN } from "@intel-dashboard/shared/site-config.ts";
-import { waitForBillingDashboard, waitForCrmAiSurface, waitForCrmDashboard } from "./browser-test-helpers.mjs";
+import {
+  CRM_AI_WINDOWS,
+  MISSING_BILLING_STATE_PATTERN,
+  waitForBillingDashboard,
+  waitForCrmAiSurface,
+  waitForCrmDashboard,
+  waitForMissingBillingState,
+} from "./browser-test-helpers.mjs";
 import {
   AUTHENTICATED_BROWSER_NOERROR_ROUTES,
   AUTHENTICATED_BROWSER_ROUTES,
@@ -458,13 +465,10 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
       await matchingRow.getByRole("button", { name: /Manage /i }).click();
       await page.getByTestId("crm-selected-user-panel").waitFor({ state: "visible", timeout: 30_000 });
       assert.match((await page.getByTestId("crm-selected-user-panel").textContent()) || "", /PyRo1121/i, "CRM selected-user panel should render the owner record");
-      await page.waitForFunction(() => {
-        const text = document.body.textContent || "";
-        return /Billing account not found for target user\.|Target user has no Stripe customer id yet\./i.test(text);
-      }, { timeout: 30_000 });
+      await waitForMissingBillingState(page);
       assert.match(
         (await page.textContent("body")) || "",
-        /Billing account not found for target user\.|Target user has no Stripe customer id yet\./i,
+        MISSING_BILLING_STATE_PATTERN,
         "CRM should surface a safe non-destructive missing-billing state for the selected owner account",
       );
 
@@ -474,8 +478,7 @@ test("browser-authenticated CRM controls filter, export, and enforce refund guar
       await page.getByTestId("crm-ops-error").waitFor({ state: "visible", timeout: 10_000 });
       assert.match((await page.getByTestId("crm-ops-error").textContent()) || "", /Refund amount must be a positive number\./i);
 
-      const aiWindows = ["15m", "1h", "24h", "7d", "30d"];
-      for (const window of aiWindows) {
+      for (const window of CRM_AI_WINDOWS) {
         const toggle = page.getByTestId(`crm-ai-window-${window}`);
         await toggle.click();
         assert.equal(await toggle.getAttribute("aria-pressed"), "true", `CRM AI window ${window} should become active`);

@@ -18,6 +18,8 @@ export const ACCESS_CLIENT_SECRET = trim(process.env.E2E_CF_ACCESS_CLIENT_SECRET
 export const SKIP_SESSION_PREFLIGHT = process.env.E2E_SKIP_SESSION_PREFLIGHT === "1";
 export const ARTIFACT_DIR = join(process.cwd(), "output", "e2e-browser");
 export const sessionValidationCache = new Map();
+export const CRM_AI_WINDOWS = ["15m", "1h", "24h", "7d", "30d"];
+export const MISSING_BILLING_STATE_PATTERN = /Billing account not found for target user\.|Target user has no Stripe customer id yet\./i;
 
 export function buildCloudflareAccessHeaders(clientId = ACCESS_CLIENT_ID, clientSecret = ACCESS_CLIENT_SECRET) {
   if (!trim(clientId) || !trim(clientSecret)) return undefined;
@@ -228,6 +230,13 @@ export async function waitForCrmAiSurface(page) {
     configuredCount,
     unavailableCount,
   };
+}
+
+export async function waitForMissingBillingState(page) {
+  await page.waitForFunction((patternSource) => {
+    const text = document.body.textContent || "";
+    return new RegExp(patternSource, "i").test(text);
+  }, MISSING_BILLING_STATE_PATTERN.source, { timeout: 30_000 });
 }
 
 export function collectBrowserDiagnostics(page, baseUrl) {

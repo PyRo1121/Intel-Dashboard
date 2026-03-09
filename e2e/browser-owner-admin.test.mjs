@@ -3,11 +3,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   captureBrowserArtifacts,
+  CRM_AI_WINDOWS,
   createBrowserContext,
   EDGE_BASE_URL,
   waitForBillingDashboard,
   waitForCrmAiSurface,
   waitForCrmDashboard,
+  waitForMissingBillingState,
 } from "./browser-test-helpers.mjs";
 
 test("owner-admin billing actions surface owner bypass notices", async (t) => {
@@ -91,7 +93,7 @@ test("owner-admin CRM controls filter, export, and enforce refund guardrails", a
       await page.getByTestId("crm-ops-error").waitFor({ state: "visible", timeout: 10_000 });
       assert.match((await page.getByTestId("crm-ops-error").textContent()) || "", /Refund amount must be a positive number\./i);
 
-      for (const window of ["15m", "1h", "24h", "7d", "30d"]) {
+      for (const window of CRM_AI_WINDOWS) {
         const toggle = page.getByTestId(`crm-ai-window-${window}`);
         await toggle.click();
         assert.equal(await toggle.getAttribute("aria-pressed"), "true");
@@ -137,10 +139,7 @@ test("owner-admin CRM keyboard navigation stays intact", async (t) => {
       const refreshCustomer = page.getByTestId("crm-refresh-customer");
       await refreshCustomer.focus();
       await refreshCustomer.press("Enter");
-      await page.waitForFunction(() => {
-        const text = document.body.textContent || "";
-        return /Target user has no Stripe customer id yet\.|Billing account not found for target user\./i.test(text);
-      }, { timeout: 30_000 });
+      await waitForMissingBillingState(page);
 
       await page.goto(`${EDGE_BASE_URL}/osint`, {
         waitUntil: "networkidle",

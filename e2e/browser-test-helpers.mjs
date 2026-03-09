@@ -384,6 +384,26 @@ export async function assertPublicAccessSurface(page, message = "expected a publ
   assert.match((await page.textContent("body")) || "", PUBLIC_ACCESS_SURFACE_PATTERN, message);
 }
 
+export async function assertLandingCtaDestination(page, options) {
+  const {
+    ctaName,
+    expectedUrl,
+    accessMessage,
+    protectedNextPath,
+  } = options;
+
+  await openPublicPage(page, "/");
+  await page.getByRole("link", { name: ctaName }).first().click();
+  await page.waitForURL(expectedUrl, { timeout: 30_000 });
+
+  if (protectedNextPath) {
+    await waitForProtectedLoginOverlay(page, { nextPath: protectedNextPath });
+    return;
+  }
+
+  await assertPublicAccessSurface(page, accessMessage);
+}
+
 export async function assertRouteMetadata(page, expectation, options = {}) {
   const {
     titleWaitMs = 750,

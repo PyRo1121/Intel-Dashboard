@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   advanceMockClock,
   assertNoBrowserDiagnostics,
+  assertLandingCtaDestination,
   assertPublicAccessSurface,
   assertPublicLandingSurface,
   assertSidebarRouteNavigation,
@@ -1221,20 +1222,23 @@ test("browser public landing CTAs navigate to the intended auth surfaces", async
   try {
     const page = await context.newPage();
 
-    await openPublicPage(page, "/");
-    await page.getByRole("link", { name: "Login" }).first().click();
-    await page.waitForURL(`${EDGE_BASE_URL}/login`, { timeout: 30_000 });
-    await assertPublicAccessSurface(page, "login CTA should land on a public auth surface");
+    await assertLandingCtaDestination(page, {
+      ctaName: "Login",
+      expectedUrl: `${EDGE_BASE_URL}/login`,
+      accessMessage: "login CTA should land on a public auth surface",
+    });
 
-    await openPublicPage(page, "/");
-    await page.getByRole("link", { name: /Start 7-Day Trial|Start Trial with OAuth/i }).first().click();
-    await page.waitForURL(`${EDGE_BASE_URL}/signup`, { timeout: 30_000 });
-    await assertPublicAccessSurface(page, "trial CTA should land on a public auth surface");
+    await assertLandingCtaDestination(page, {
+      ctaName: /Start 7-Day Trial|Start Trial with OAuth/i,
+      expectedUrl: `${EDGE_BASE_URL}/signup`,
+      accessMessage: "trial CTA should land on a public auth surface",
+    });
 
-    await openPublicPage(page, "/");
-    await page.getByRole("link", { name: /Open Live Dashboard|Open Dashboard/i }).first().click();
-    await page.waitForURL(`${EDGE_BASE_URL}/overview`, { timeout: 30_000 });
-    await waitForProtectedLoginOverlay(page, { nextPath: "/overview" });
+    await assertLandingCtaDestination(page, {
+      ctaName: /Open Live Dashboard|Open Dashboard/i,
+      expectedUrl: `${EDGE_BASE_URL}/overview`,
+      protectedNextPath: "/overview",
+    });
   } finally {
     await context.close();
     await browser.close();

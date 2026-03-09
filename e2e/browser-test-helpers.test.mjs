@@ -11,6 +11,7 @@ import {
   parseCookieHeader,
   sanitizeArtifactName,
   trim,
+  waitForSurfaceOrCloudflareChallenge,
 } from "./browser-test-helpers.mjs";
 
 test("buildCloudflareAccessHeaders returns undefined unless both values are present", () => {
@@ -142,4 +143,34 @@ test("assertNoCloudflareChallengePage throws a dedicated challenge error", async
     () => assertNoCloudflareChallengePage(page, undefined, "Cloudflare challenged /login"),
     (error) => error instanceof CloudflareChallengeError && error.message === "Cloudflare challenged /login",
   );
+});
+
+
+test("waitForSurfaceOrCloudflareChallenge throws a challenge error when the page reports a challenge state", async () => {
+  const page = {
+    waitForFunction: async () => ({
+      jsonValue: async () => "challenge",
+      dispose: async () => {},
+    }),
+  };
+
+  await assert.rejects(
+    () => waitForSurfaceOrCloudflareChallenge(page, '[data-testid="billing-status-surface"]', 'Cloudflare challenged /billing'),
+    (error) => error instanceof CloudflareChallengeError && error.message === 'Cloudflare challenged /billing',
+  );
+});
+
+test("waitForSurfaceOrCloudflareChallenge resolves when the target surface becomes ready", async () => {
+  let disposed = false;
+  const page = {
+    waitForFunction: async () => ({
+      jsonValue: async () => "ready",
+      dispose: async () => {
+        disposed = true;
+      },
+    }),
+  };
+
+  await waitForSurfaceOrCloudflareChallenge(page, '[data-testid="billing-status-surface"]', 'Cloudflare challenged /billing');
+  assert.equal(disposed, true);
 });

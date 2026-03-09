@@ -8,6 +8,16 @@ import {
 } from "./security-guards";
 import { TelegramScraperDO } from "./telegram-scraper-do";
 import { queryTelegramSourceLeaderboard } from "./telegram-source-leaderboard";
+import {
+  createEmptySubscriberFeedPreferences,
+  filterSubscriberFeedItems,
+  normalizeOsintSubscriberFeedItem,
+  normalizeSubscriberFeedPreferences,
+  normalizeSubscriberFeedScope,
+  normalizeTelegramSubscriberFeedItem,
+  sortSubscriberFeedItems,
+  type SubscriberFeedPreferences,
+} from "./subscriber-feed";
 import { createEdgeAuth } from "./auth";
 import { misconfiguredApiResponse, unauthorizedApiResponse } from "./auth-api-response";
 import { buildDeterministicAvatarDataUrl } from "./avatar-fallback";
@@ -73,6 +83,17 @@ import { buildRobotsTxt, buildSitemapXml } from "@intel-dashboard/shared/seo-ass
 import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, siteUrl } from "@intel-dashboard/shared/site-config.ts";
 
 export { IntelCacheDO, TelegramScraperDO };
+
+type SubscriberOsintItem = {
+  title: string;
+  summary: string;
+  source: string;
+  url: string;
+  timestamp: string;
+  region: string;
+  category: string;
+  severity: string;
+};
 
 export interface Env extends Cloudflare.Env {
   BACKEND_URL?: string;
@@ -2169,6 +2190,185 @@ function parseProviderList(raw: unknown): string[] {
     .split(",")
     .map((entry) => entry.trim().toLowerCase())
     .filter((entry) => entry.length > 0);
+}
+
+let subscriberFeedSchemaReady = false;
+
+async function ensureSubscriberFeedSchema(env: Env): Promise<void> {
+  if (subscriberFeedSchemaReady) return;
+  await env.INTEL_DB.prepare(
+    `CREATE TABLE IF NOT EXISTS subscriber_feed_preferences (
+      user_id TEXT PRIMARY KEY,
+      updated_at TEXT NOT NULL
+    )`,
+  ).run();
+  await env.INTEL_DB.prepare(
+    `CREATE TABLE IF NOT EXISTS subscriber_feed_favorite_channels (
+      user_id TEXT NOT NULL,
+      channel TEXT NOT NULL,
+      PRIMARY KEY (user_id, channel)
+    )`,
+  ).run();
+  await env.INTEL_DB.prepare(
+    `CREATE TABLE IF NOT EXISTS subscriber_feed_favorite_sources (
+      user_id TEXT NOT NULL,
+      source TEXT NOT NULL,
+      PRIMARY KEY (user_id, source)
+    )`,
+  ).run();
+  await env.INTEL_DB.prepare(
+    `CREATE TABLE IF NOT EXISTS subscriber_feed_watch_regions (
+      user_id TEXT NOT NULL,
+      region TEXT NOT NULL,
+      PRIMARY KEY (user_id, region)
+    )`,
+  ).run();
+  await env.INTEL_DB.prepare(
+    `CREATE TABLE IF NOT EXISTS subscriber_feed_watch_tags (
+      user_id TEXT NOT NULL,
+      tag TEXT NOT NULL,
+      PRIMARY KEY (user_id, tag)
+    )`,
+  ).run();
+  await env.INTEL_DB.prepare(
+    `CREATE TABLE IF NOT EXISTS subscriber_feed_watch_categories (
+      user_id TEXT NOT NULL,
+      category TEXT NOT NULL,
+      PRIMARY KEY (user_id, category)
+    )`,
+  ).run();
+  subscriberFeedSchemaReady = true;
+}
+
+async function requireSubscriberEntitlement(params: {
+  env: Env;
+  user: VerifiedSession | null;
+  origin: string | null;
+}): Promise<
+  | { ok: true; entitlement: FeedEntitlement; userId: string }
+  | { ok: false; response: Response }
+> {
+  if (!params.user) {
+    return {
+      ok: false,
+      response: privateApiJson(params.origin, 403, { error: "Forbidden" }),
+    };
+  }
+  const userId = resolveUserId(params.user);
+  const entitlement = await fetchFeedEntitlement({
+    env: params.env,
+    userId,
+    userLogin: params.user.login,
+  });
+  const role = (entitlement.role ?? entitlement.tier ?? "").toLowerCase();
+  if (!(entitlement.entitled || role === "subscriber" || role === "owner")) {
+    return {
+      ok: false,
+      response: privateApiJson(params.origin, 403, { error: "Forbidden" }),
+    };
+  }
+  return { ok: true, entitlement, userId };
+}
+
+async function loadSubscriberFeedPreferences(env: Env, userId: string) {
+  await ensureSubscriberFeedSchema(env);
+  const [baseRow, channels, sources, regions, tags, categories] = await Promise.all([
+    env.INTEL_DB.prepare(`SELECT updated_at FROM subscriber_feed_preferences WHERE user_id = ?`).bind(userId).first<Record<string, unknown>>(),
+    env.INTEL_DB.prepare(`SELECT channel FROM subscriber_feed_favorite_channels WHERE user_id = ? ORDER BY channel ASC`).bind(userId).all<Record<string, unknown>>(),
+    env.INTEL_DB.prepare(`SELECT source FROM subscriber_feed_favorite_sources WHERE user_id = ? ORDER BY source ASC`).bind(userId).all<Record<string, unknown>>(),
+    env.INTEL_DB.prepare(`SELECT region FROM subscriber_feed_watch_regions WHERE user_id = ? ORDER BY region ASC`).bind(userId).all<Record<string, unknown>>(),
+    env.INTEL_DB.prepare(`SELECT tag FROM subscriber_feed_watch_tags WHERE user_id = ? ORDER BY tag ASC`).bind(userId).all<Record<string, unknown>>(),
+    env.INTEL_DB.prepare(`SELECT category FROM subscriber_feed_watch_categories WHERE user_id = ? ORDER BY category ASC`).bind(userId).all<Record<string, unknown>>(),
+  ]);
+
+  return normalizeSubscriberFeedPreferences({
+    favoriteChannels: (channels.results ?? []).map((row) => normalizeString(row.channel)).filter((value): value is string => Boolean(value)),
+    favoriteSources: (sources.results ?? []).map((row) => normalizeString(row.source)).filter((value): value is string => Boolean(value)),
+    watchRegions: (regions.results ?? []).map((row) => normalizeString(row.region)).filter((value): value is string => Boolean(value)),
+    watchTags: (tags.results ?? []).map((row) => normalizeString(row.tag)).filter((value): value is string => Boolean(value)),
+    watchCategories: (categories.results ?? []).map((row) => normalizeString(row.category)).filter((value): value is string => Boolean(value)),
+    updatedAt: normalizeString(baseRow?.updated_at) ?? undefined,
+  });
+}
+
+async function saveSubscriberFeedPreferences(env: Env, userId: string, preferences: SubscriberFeedPreferences): Promise<void> {
+  await ensureSubscriberFeedSchema(env);
+  const updatedAt = new Date().toISOString();
+  const statements = [
+    env.INTEL_DB.prepare(
+      `INSERT OR REPLACE INTO subscriber_feed_preferences (user_id, updated_at) VALUES (?, ?)`,
+    ).bind(userId, updatedAt),
+    env.INTEL_DB.prepare(`DELETE FROM subscriber_feed_favorite_channels WHERE user_id = ?`).bind(userId),
+    env.INTEL_DB.prepare(`DELETE FROM subscriber_feed_favorite_sources WHERE user_id = ?`).bind(userId),
+    env.INTEL_DB.prepare(`DELETE FROM subscriber_feed_watch_regions WHERE user_id = ?`).bind(userId),
+    env.INTEL_DB.prepare(`DELETE FROM subscriber_feed_watch_tags WHERE user_id = ?`).bind(userId),
+    env.INTEL_DB.prepare(`DELETE FROM subscriber_feed_watch_categories WHERE user_id = ?`).bind(userId),
+    ...preferences.favoriteChannels.map((value) =>
+      env.INTEL_DB.prepare(`INSERT INTO subscriber_feed_favorite_channels (user_id, channel) VALUES (?, ?)`).bind(userId, value),
+    ),
+    ...preferences.favoriteSources.map((value) =>
+      env.INTEL_DB.prepare(`INSERT INTO subscriber_feed_favorite_sources (user_id, source) VALUES (?, ?)`).bind(userId, value),
+    ),
+    ...preferences.watchRegions.map((value) =>
+      env.INTEL_DB.prepare(`INSERT INTO subscriber_feed_watch_regions (user_id, region) VALUES (?, ?)`).bind(userId, value),
+    ),
+    ...preferences.watchTags.map((value) =>
+      env.INTEL_DB.prepare(`INSERT INTO subscriber_feed_watch_tags (user_id, tag) VALUES (?, ?)`).bind(userId, value),
+    ),
+    ...preferences.watchCategories.map((value) =>
+      env.INTEL_DB.prepare(`INSERT INTO subscriber_feed_watch_categories (user_id, category) VALUES (?, ?)`).bind(userId, value),
+    ),
+  ];
+  await env.INTEL_DB.batch(statements);
+}
+
+async function loadTelegramCanonicalEvents(env: Env): Promise<Array<Record<string, unknown>>> {
+  let raw: string | null = null;
+  try {
+    const scraperId = env.TELEGRAM_SCRAPER.idFromName("main");
+    const scraperStub = env.TELEGRAM_SCRAPER.get(scraperId);
+    const response = await scraperStub.fetch(new Request("https://do/state"));
+    if (response.ok) {
+      raw = await response.text();
+    }
+  } catch {
+    // fallback to KV
+  }
+  if (!raw) {
+    raw = await env.TELEGRAM_STATE.get("latest-telegram-intel");
+  }
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (isRecord(parsed)) {
+      await rewriteTelegramMediaUrlsForResponse({ env, state: parsed });
+      return Array.isArray(parsed.canonical_events) ? parsed.canonical_events.filter((entry): entry is Record<string, unknown> => isRecord(entry)) : [];
+    }
+  } catch {
+    // ignore invalid state
+  }
+  return [];
+}
+
+async function loadSubscriberOsintItems(env: Env): Promise<SubscriberOsintItem[]> {
+  let response: Response;
+  try {
+    const id = env.INTEL_CACHE.idFromName("main");
+    response = await env.INTEL_CACHE.get(id).fetch(new Request("https://do/api/intel"));
+  } catch {
+    return [];
+  }
+  if (!response.ok) {
+    return [];
+  }
+  try {
+    const payload = (await response.json()) as unknown;
+    return Array.isArray(payload)
+      ? payload.filter((item): item is SubscriberOsintItem => isRecord(item))
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 async function loadCrmDirectorySnapshot(env: Env): Promise<{
@@ -5333,18 +5533,90 @@ export default {
       if (!entitlement.entitled && entitlement.tier !== "subscriber" && entitlement.role !== "owner") {
         return privateApiJson(origin, 403, { error: "Forbidden" });
       }
-      const payload = await queryTelegramSourceLeaderboard({
-        db: env.INTEL_DB,
-        windowRaw: url.searchParams.get("window"),
-      });
-      return new Response(JSON.stringify(payload), {
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "private, no-store, no-cache, must-revalidate",
-          "CDN-Cache-Control": "no-store",
-          "Vary": mergeVary(null, ["Origin", "Cookie", "Authorization"]),
-          ...corsHeaders(origin),
-        },
+      try {
+        const payload = await queryTelegramSourceLeaderboard({
+          db: env.INTEL_DB,
+          windowRaw: url.searchParams.get("window"),
+        });
+        return new Response(JSON.stringify(payload), {
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "private, no-store, no-cache, must-revalidate",
+            "CDN-Cache-Control": "no-store",
+            "Vary": mergeVary(null, ["Origin", "Cookie", "Authorization"]),
+            ...corsHeaders(origin),
+          },
+        });
+      } catch (error) {
+        return privateApiJson(origin, 500, {
+          error: "Telegram leaderboard query failed",
+          detail: error instanceof Error ? error.message : "unknown_error",
+        });
+      }
+    }
+
+    if (path === "/api/subscriber/feed-preferences") {
+      if (!env.INTEL_DB) {
+        return privateApiJson(origin, 503, { error: "Subscriber feed unavailable" });
+      }
+      const gate = await requireSubscriberEntitlement({ env, user, origin });
+      if (!gate.ok) {
+        return gate.response;
+      }
+
+      if (request.method === "GET") {
+        const preferences = await loadSubscriberFeedPreferences(env, gate.userId);
+        return privateApiJson(origin, 200, preferences);
+      }
+
+      if (request.method === "POST") {
+        let payload: unknown;
+        try {
+          payload = await request.json();
+        } catch {
+          return privateApiJson(origin, 400, { error: "Invalid JSON" });
+        }
+        const preferences = normalizeSubscriberFeedPreferences(payload);
+        await saveSubscriberFeedPreferences(env, gate.userId, preferences);
+        return privateApiJson(origin, 200, {
+          ...preferences,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      return privateApiMethodNotAllowed(origin, "GET, POST");
+    }
+
+    if (path === "/api/subscriber/my-feed") {
+      if (request.method !== "GET") {
+        return privateApiMethodNotAllowed(origin, "GET");
+      }
+      if (!env.INTEL_DB) {
+        return privateApiJson(origin, 503, { error: "Subscriber feed unavailable" });
+      }
+      const gate = await requireSubscriberEntitlement({ env, user, origin });
+      if (!gate.ok) {
+        return gate.response;
+      }
+
+      const [preferences, telegramEvents, intelItems] = await Promise.all([
+        loadSubscriberFeedPreferences(env, gate.userId),
+        loadTelegramCanonicalEvents(env),
+        loadSubscriberOsintItems(env),
+      ]);
+
+      const mergedItems = [
+        ...telegramEvents.map((event) => normalizeTelegramSubscriberFeedItem(event as never, preferences)),
+        ...intelItems.map((item) => normalizeOsintSubscriberFeedItem(item, preferences)),
+      ];
+      const scope = normalizeSubscriberFeedScope(url.searchParams.get("scope"));
+      const limitRaw = normalizeNumber(url.searchParams.get("limit"));
+      const limit = limitRaw === null ? 60 : Math.min(Math.max(1, Math.floor(limitRaw)), 200);
+      const items = sortSubscriberFeedItems(filterSubscriberFeedItems(mergedItems, scope)).slice(0, limit);
+
+      return privateApiJson(origin, 200, {
+        preferences,
+        items,
       });
     }
 

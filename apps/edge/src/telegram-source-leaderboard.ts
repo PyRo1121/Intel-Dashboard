@@ -108,7 +108,7 @@ export async function queryTelegramSourceLeaderboard(args: {
         s.label,
         e.signal_score,
         e.signal_grade,
-        e.verification_state,
+        e.source_count,
         h.score AS source_history_score,
         h.trust_tier,
         h.latency_tier,
@@ -131,7 +131,7 @@ export async function queryTelegramSourceLeaderboard(args: {
       COUNT(*) AS lead_count,
       AVG(COALESCE(signal_score, 0)) AS avg_signal_score,
       SUM(CASE WHEN signal_grade IN ('A', 'B') THEN 1 ELSE 0 END) AS high_signal_lead_count,
-      SUM(CASE WHEN verification_state IN ('verified', 'corroborated') THEN 1 ELSE 0 END) AS corroborated_lead_count,
+      SUM(CASE WHEN source_count >= 2 THEN 1 ELSE 0 END) AS corroborated_lead_count,
       MAX(COALESCE(source_history_score, 0)) AS source_history_score,
       MAX(COALESCE(trust_tier, 'watch')) AS trust_tier,
       MAX(COALESCE(latency_tier, 'monitor')) AS latency_tier
@@ -141,7 +141,7 @@ export async function queryTelegramSourceLeaderboard(args: {
     ORDER BY
       (COUNT(*) * 8 + AVG(COALESCE(signal_score, 0)) * 0.6 +
        SUM(CASE WHEN signal_grade IN ('A', 'B') THEN 1 ELSE 0 END) * 4 +
-       SUM(CASE WHEN verification_state IN ('verified', 'corroborated') THEN 1 ELSE 0 END) * 2 +
+       SUM(CASE WHEN source_count >= 2 THEN 1 ELSE 0 END) * 2 +
        MAX(COALESCE(source_history_score, 0)) * 0.4) DESC,
       COUNT(*) DESC,
       AVG(COALESCE(signal_score, 0)) DESC

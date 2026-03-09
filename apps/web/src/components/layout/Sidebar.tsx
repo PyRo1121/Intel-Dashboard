@@ -16,6 +16,7 @@ import {
   Anchor,
   FileText,
   MessageSquare,
+  BellRing,
   Shield,
   PanelLeftClose,
   PanelLeft,
@@ -48,6 +49,7 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { href: DASHBOARD_HOME_PATH, label: "Overview", icon: LayoutDashboard },
   { href: "/osint", label: "OSINT Feed", icon: Radio },
+  { href: "/my-feed", label: "My Feed", icon: BellRing },
   { href: "/map", label: "Threat Map", icon: Globe },
   { href: "/air-sea", label: "Air/Sea Ops", icon: Anchor },
   { href: "/briefings", label: "Briefings", icon: FileText },
@@ -108,7 +110,11 @@ export default function Sidebar() {
     return location.pathname.startsWith(href);
   };
 
-  const navItems = () => (isAuthUserOwner(auth.user()) ? [...mainNavItems, ownerNavItem] : mainNavItems);
+  const navItems = () => {
+    const entitled = resolveAuthUserEntitlementView(auth.user()).entitled;
+    const filteredMain = entitled ? mainNavItems : mainNavItems.filter((item) => item.href !== "/my-feed");
+    return isAuthUserOwner(auth.user()) ? [...filteredMain, ownerNavItem] : filteredMain;
+  };
 
   const renderNavItem = (item: NavItem, index: number, opts?: { collapsed?: boolean }) => {
     const compact = opts?.collapsed === true;

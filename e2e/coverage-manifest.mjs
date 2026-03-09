@@ -13,6 +13,8 @@ import {
   LOGIN_TITLE,
   MAP_DESCRIPTION,
   MAP_TITLE,
+  MY_FEED_DESCRIPTION,
+  MY_FEED_TITLE,
   OSINT_DESCRIPTION,
   OVERVIEW_DESCRIPTION,
   PRODUCTION_HOME_DESCRIPTION,
@@ -29,6 +31,7 @@ import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 export const AUTHENTICATED_BROWSER_ROUTES = Object.freeze([
   { path: DASHBOARD_HOME_PATH, heading: "Intel Dashboard Overview" },
   { path: "/osint", heading: "OSINT Feed" },
+  { path: "/my-feed", heading: "My Feed" },
   { path: "/telegram", heading: "Telegram Intel" },
   { path: "/map", heading: "Threat Map" },
   { path: "/air-sea", heading: "Air / Sea Ops" },
@@ -40,6 +43,7 @@ export const AUTHENTICATED_BROWSER_ROUTES = Object.freeze([
 export const AUTHENTICATED_BROWSER_NOERROR_ROUTES = Object.freeze([
   DASHBOARD_HOME_PATH,
   "/osint",
+  "/my-feed",
   "/telegram",
   "/map",
   "/air-sea",
@@ -89,6 +93,13 @@ export const BROWSER_METADATA_EXPECTATIONS = Object.freeze([
     title: OSINT_TITLE,
     description: OSINT_DESCRIPTION,
     canonicalHref: siteUrl("/osint"),
+    robotsPattern: /noindex,nofollow/i,
+  },
+  {
+    path: "/my-feed",
+    title: MY_FEED_TITLE,
+    description: MY_FEED_DESCRIPTION,
+    canonicalHref: siteUrl("/my-feed"),
     robotsPattern: /noindex,nofollow/i,
   },
   {
@@ -155,6 +166,7 @@ export const APP_ROUTE_FILE_CLASSIFICATION = Object.freeze({
   "landing.tsx": "worker-shadowed-root",
   "login.tsx": "browser-public-auth",
   "map.tsx": "browser-authenticated",
+  "my-feed.tsx": "browser-authenticated",
   "overview.tsx": "browser-authenticated",
   "osint.tsx": "browser-authenticated",
   "signup.tsx": "browser-public-auth",

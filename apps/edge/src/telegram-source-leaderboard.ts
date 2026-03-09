@@ -52,7 +52,7 @@ export function normalizeTelegramSourceLeaderboardRows(rows: unknown[]): Telegra
       if (!row || typeof row !== "object") return null;
       const record = row as Record<string, unknown>;
       const channel = typeof record.channel === "string" ? record.channel.trim() : "";
-      const label = typeof record.label === "string" ? record.label.trim() : channel;
+      const label = typeof record.label === "string" && record.label.trim() ? record.label.trim() : channel;
       if (!channel || !label) return null;
       const leadCount = normalizeCount(record.lead_count);
       const avgSignalScore = normalizeScore(record.avg_signal_score);

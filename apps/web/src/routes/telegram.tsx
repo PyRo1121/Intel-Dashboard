@@ -635,7 +635,7 @@ export default function TelegramPage() {
           </Show>
         </div>
 
-        <Show when={signalSubscriber() && (sourceLeaderboard()?.entries?.length ?? 0) > 0}>
+        <Show when={signalSubscriber()}>
           <div class="rounded-xl border border-violet-400/15 bg-violet-500/5 p-3">
             <div class="mb-2 flex flex-wrap items-center gap-2">
               <p class="text-[12px] font-semibold text-violet-100">Best First Reporters</p>
@@ -654,31 +654,36 @@ export default function TelegramPage() {
                 </For>
               </div>
             </div>
-            <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              <For each={sourceLeaderboard()?.entries?.slice(0, 6) ?? []}>
-                {(entry, index) => (
-                  <div class="rounded-xl border border-white/[0.08] bg-black/20 p-3">
-                    <div class="flex items-center justify-between gap-2">
-                      <p class="truncate text-[12px] font-semibold text-white">{index() + 1}. {entry.label}</p>
-                      <span class="rounded-full border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-200">
-                        Score {entry.leaderboardScore}
-                      </span>
+            <Show
+              when={(sourceLeaderboard()?.entries?.length ?? 0) > 0}
+              fallback={<p class="text-[11px] text-zinc-400">No ranked first reporters yet for {leaderboardWindow()}.</p>}
+            >
+              <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                <For each={sourceLeaderboard()?.entries?.slice(0, 6) ?? []}>
+                  {(entry, index) => (
+                    <div class="rounded-xl border border-white/[0.08] bg-black/20 p-3">
+                      <div class="flex items-center justify-between gap-2">
+                        <p class="truncate text-[12px] font-semibold text-white">{index() + 1}. {entry.label}</p>
+                        <span class="rounded-full border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-200">
+                          Score {entry.leaderboardScore}
+                        </span>
+                      </div>
+                      <div class="mt-2 flex flex-wrap gap-1.5 text-[10px] text-zinc-400">
+                        <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
+                          {entry.leadCount} first
+                        </span>
+                        <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
+                          avg {entry.avgSignalScore}
+                        </span>
+                        <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
+                          {entry.highSignalLeadCount} A/B
+                        </span>
+                      </div>
                     </div>
-                    <div class="mt-2 flex flex-wrap gap-1.5 text-[10px] text-zinc-400">
-                      <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
-                        {entry.leadCount} first
-                      </span>
-                      <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
-                        avg {entry.avgSignalScore}
-                      </span>
-                      <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
-                        {entry.highSignalLeadCount} A/B
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </For>
-            </div>
+                  )}
+                </For>
+              </div>
+            </Show>
           </div>
         </Show>
 

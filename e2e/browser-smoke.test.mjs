@@ -407,10 +407,7 @@ test("browser-authenticated feed item ages update with wall clock drift", async 
             });
           });
         }
-        await page.goto(`${EDGE_BASE_URL}${check.path}`, {
-          waitUntil: "networkidle",
-          timeout: 45_000,
-        });
+        await openDashboardPage(page, check.path);
 
         if (typeof check.setup === "function") {
           await check.setup(page);
@@ -588,10 +585,7 @@ test("browser-authenticated freshness pills advance with wall clock drift on act
             });
           });
         }
-        await page.goto(`${EDGE_BASE_URL}${route}`, {
-          waitUntil: "networkidle",
-          timeout: 45_000,
-        });
+        await openDashboardPage(page, route);
 
         const freshnessPill = page.locator('span[title^="Freshness thresholds:"]').first();
         await freshnessPill.waitFor({ state: "visible", timeout: 30_000 });
@@ -635,10 +629,7 @@ test("browser-authenticated live feeds stay healthy during refresh dwell", async
           extraIgnoredConsolePatterns: SMOKE_IGNORED_CONSOLE_PATTERNS,
         });
 
-        await page.goto(`${EDGE_BASE_URL}${check.path}`, {
-          waitUntil: "networkidle",
-          timeout: 45_000,
-        });
+        await openDashboardPage(page, check.path);
         assert.match((await page.textContent("body")) || "", check.heading, `${check.path} should render the expected heading`);
 
         const freshnessPill = page.locator('[title^="Freshness thresholds:"]').first();
@@ -883,10 +874,7 @@ test("browser desktop sidebar collapse and expand controls toggle nav state", as
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const desktopSidebar = page.locator("#desktop-navigation");
       const collapseSidebar = desktopSidebar.getByRole("button", { name: "Collapse sidebar" });
@@ -922,10 +910,7 @@ test("browser desktop collapsed nav persists across reload and keeps link routin
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const desktopSidebar = page.locator("#desktop-navigation");
       await desktopSidebar.getByRole("button", { name: "Collapse sidebar" }).click();
@@ -964,10 +949,7 @@ test("browser mobile drawer opens, navigates, and closes cleanly", async (t) => 
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const openNavigation = page.getByRole("button", { name: "Open navigation" });
       assert.equal(await openNavigation.getAttribute("aria-expanded"), "false", "mobile drawer should start closed");
@@ -1020,10 +1002,7 @@ test("browser mobile drawer stays expanded even when desktop collapse preference
         window.localStorage.setItem("sidebar-collapsed", "true");
       });
 
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const openNavigation = page.getByRole("button", { name: "Open navigation" });
       await openNavigation.click();
@@ -1430,10 +1409,7 @@ test("browser mobile sidebar brand link returns to overview", async (t) => {
   try {
     const page = await context.newPage();
     try {
-      await page.goto(`${EDGE_BASE_URL}/osint`, {
-        waitUntil: "networkidle",
-        timeout: 45_000,
-      });
+      await openDashboardPage(page, "/osint");
 
       const openNavigation = page.getByRole("button", { name: "Open navigation" }).first();
       await openNavigation.waitFor({ state: "visible", timeout: 30_000 });

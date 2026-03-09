@@ -15,6 +15,7 @@ import { resolveBackendEndpointUrl, usesBackendServiceBinding } from "./backend-
 import { buildClientXProfileDiagnostics, type XProfileSyncDiagnostics } from "./auth-diagnostics";
 import { normalizeSafeAuthRedirectLocation } from "./auth-redirect";
 import { summarizeCrmDataQuality } from "./crm-quality";
+import { buildOwnerCrmAiTelemetryFailureResponse } from "./crm-ai-telemetry-proxy";
 import { getDashboardAppRoutePrefixes, normalizeSafePostAuthPath } from "./post-auth-path";
 import { createTurnstileGateToken, type TurnstileMode, verifyTurnstileGateToken } from "./turnstile";
 import { DASHBOARD_HOME_PATH, DEFAULT_POST_AUTH_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
@@ -2412,11 +2413,15 @@ async function fetchOwnerCrmBackendSummary(params: {
   return { ok: true, payload: result };
 }
 
+type OwnerCrmAiTelemetryFetchResult =
+  | { ok: true; payload: Record<string, unknown> }
+  | { ok: false; status: number; error: string };
+
 async function fetchOwnerCrmAiTelemetry(params: {
   env: Env;
   user: VerifiedSession;
   window: string;
-}): Promise<{ ok: true; payload: Record<string, unknown> } | { ok: false; status: number; error: string }> {
+}): Promise<OwnerCrmAiTelemetryFetchResult> {
   const backendToken = resolveBackendApiToken(params.env);
   if (!backendToken) {
     return { ok: false, status: 503, error: "Backend API token is not configured." };
@@ -5480,15 +5485,7 @@ export default {
         window,
       });
       if (!backendTelemetry.ok) {
-        return new Response(
-          JSON.stringify({
-            error: backendTelemetry.error,
-          }),
-          {
-            status: backendTelemetry.status,
-            headers: privateApiHeaders(origin),
-          },
-        );
+        return buildOwnerCrmAiTelemetryFailureResponse(origin, backendTelemetry);
       }
 
       return new Response(

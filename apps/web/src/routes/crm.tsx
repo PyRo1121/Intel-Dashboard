@@ -200,8 +200,12 @@ type AiTelemetryPayload = {
       totalTokens?: number;
       promptTokens?: number;
       completionTokens?: number;
+      outputInputRatio?: number;
       avgDurationMs?: number;
+      p95DurationMs?: number;
       failures?: number;
+      cacheHits?: number;
+      cacheMisses?: number;
     }>;
     models?: Array<{
       label?: string;
@@ -209,8 +213,12 @@ type AiTelemetryPayload = {
       totalTokens?: number;
       promptTokens?: number;
       completionTokens?: number;
+      outputInputRatio?: number;
       avgDurationMs?: number;
+      p95DurationMs?: number;
       failures?: number;
+      cacheHits?: number;
+      cacheMisses?: number;
     }>;
     outcomes?: Array<{
       label?: string;
@@ -329,6 +337,14 @@ function normalizeEventLabel(raw: string | undefined): string {
   const value = (raw || "").trim();
   if (!value) return "—";
   return value.replaceAll("_", " ");
+}
+
+function computeHitRatePercent(input: { cacheHits?: number; cacheMisses?: number } | null | undefined): number {
+  const hits = Math.max(0, input?.cacheHits ?? 0);
+  const misses = Math.max(0, input?.cacheMisses ?? 0);
+  const total = hits + misses;
+  if (total <= 0) return 0;
+  return (hits / total) * 100;
 }
 
 export default function CrmRoute() {
@@ -514,7 +530,7 @@ export default function CrmRoute() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `sentinelstream-crm-customers-${Date.now()}.csv`;
+    link.download = `intel-dashboard-crm-customers-${Date.now()}.csv`;
     document.body.append(link);
     link.click();
     link.remove();
@@ -537,14 +553,16 @@ export default function CrmRoute() {
   const aiSeriesMaxCalls = createMemo(() =>
     Math.max(...((aiTelemetry()?.result?.series ?? []).map((entry) => entry.calls ?? 0)), 1),
   );
-  const aiCacheTotal = createMemo(() =>
-    (aiTelemetry()?.result?.summary?.cacheHits ?? 0) + (aiTelemetry()?.result?.summary?.cacheMisses ?? 0),
+  const aiCacheHitPct = createMemo(() => computeHitRatePercent(aiTelemetry()?.result?.summary));
+  const aiWorstFailureLane = createMemo(() =>
+    [...(aiTelemetry()?.result?.lanes ?? [])].sort((left, right) => (right.failures ?? 0) - (left.failures ?? 0))[0] ?? null,
   );
-  const aiCacheHitPct = createMemo(() => {
-    const total = aiCacheTotal();
-    if (total <= 0) return 0;
-    return ((aiTelemetry()?.result?.summary?.cacheHits ?? 0) / total) * 100;
-  });
+  const aiSlowestLane = createMemo(() =>
+    [...(aiTelemetry()?.result?.lanes ?? [])].sort((left, right) => (right.p95DurationMs ?? 0) - (left.p95DurationMs ?? 0))[0] ?? null,
+  );
+  const aiHungriestLane = createMemo(() =>
+    [...(aiTelemetry()?.result?.lanes ?? [])].sort((left, right) => (right.outputInputRatio ?? 0) - (left.outputInputRatio ?? 0))[0] ?? null,
+  );
 
   return (
     <>
@@ -762,6 +780,30 @@ export default function CrmRoute() {
                       </article>
                     </section>
 
+                    <section class="mt-4 grid gap-3 xl:grid-cols-3">
+                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Failure Hotspot</p>
+                        <p class="mt-1 text-sm font-semibold text-zinc-100">{normalizeEventLabel(aiWorstFailureLane()?.label)}</p>
+                        <p class="mt-2 text-xs text-zinc-400">
+                          {formatNumber(aiWorstFailureLane()?.failures)} failures across {formatNumber(aiWorstFailureLane()?.calls)} calls
+                        </p>
+                      </article>
+                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Slowest Lane (P95)</p>
+                        <p class="mt-1 text-sm font-semibold text-zinc-100">{normalizeEventLabel(aiSlowestLane()?.label)}</p>
+                        <p class="mt-2 text-xs text-zinc-400">
+                          {formatNumber(aiSlowestLane()?.p95DurationMs)}ms p95 latency
+                        </p>
+                      </article>
+                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                        <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Most Output-Heavy Lane</p>
+                        <p class="mt-1 text-sm font-semibold text-zinc-100">{normalizeEventLabel(aiHungriestLane()?.label)}</p>
+                        <p class="mt-2 text-xs text-zinc-400">
+                          {formatPercent((aiHungriestLane()?.outputInputRatio ?? 0) * 100)} output/input ratio
+                        </p>
+                      </article>
+                    </section>
+
                     <section class="mt-4 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
                       <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
                         <div class="flex items-center justify-between">
@@ -785,6 +827,9 @@ export default function CrmRoute() {
                                     <span>{formatNumber(item.calls)} calls</span>
                                     <span>{formatNumber(item.failures)} failures</span>
                                     <span>{formatNumber(item.avgDurationMs)}ms avg</span>
+                                    <span>{formatNumber(item.p95DurationMs)}ms p95</span>
+                                    <span>{formatPercent(computeHitRatePercent(item))} cache hit</span>
+                                    <span>{formatPercent((item.outputInputRatio ?? 0) * 100)} output/input</span>
                                   </div>
                                 </div>
                               );

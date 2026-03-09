@@ -14,6 +14,7 @@ This backend runs as a standalone Cloudflare Worker from `apps/backend`.
 - Owner CRM customer drill-down: `POST /api/intel-dashboard/admin/crm/customer`
 - Owner CRM subscription cancel: `POST /api/intel-dashboard/admin/crm/cancel-subscription`
 - Owner CRM refund: `POST /api/intel-dashboard/admin/crm/refund`
+- Owner CRM AI telemetry: `POST /api/intel-dashboard/admin/crm/ai-telemetry`
 - Sources catalog: `GET|POST /api/intel-dashboard/sources`
 - AI jobs (admin, batch): `POST /api/intel-dashboard/ai/jobs`
 - Billing start trial: `POST /api/intel-dashboard/billing/start-trial`
@@ -58,6 +59,7 @@ This backend runs as a standalone Cloudflare Worker from `apps/backend`.
 - `USAGE_SEED_ASYNC` (default `true` in this backend): queue seed writes instead of inline KV writes.
 - `USAGE_SEED_ASYNC_BATCH_SIZE` (default `100`): queue publish batch size.
 - `USAGE_ANALYTICS_SAMPLE_RATE` (default `1`): Analytics Engine sampling ratio for request telemetry.
+- `AI_TELEMETRY_SAMPLE_RATE` (default `1`): Analytics Engine sampling ratio for AI telemetry writes.
 - `FREE_RATE_LIMIT_PER_MINUTE` (default `60`): per-user, per-minute request cap for free tier API routes.
 - `TRIAL_RATE_LIMIT_PER_MINUTE` (default `180`): per-user, per-minute request cap for trial tier.
 - `SUBSCRIBER_RATE_LIMIT_PER_MINUTE` (default `600`): per-user, per-minute request cap for subscriber tier.
@@ -71,6 +73,9 @@ This backend runs as a standalone Cloudflare Worker from `apps/backend`.
 - `NEWS_COORDINATOR_SHARD_COUNT` (default `4`): number of coordinator shards for publish parallelism under many scrapers.
 - `NEWS_COORDINATOR_ALLOW_FALLBACK` (default `false` in deployed envs): when `false`, publish returns `503` if coordinator is unavailable instead of risking cross-shard fallback writes.
 - `OWNER_USER_IDS` (default `PyRo1121`): comma-separated user IDs always treated as entitled owner/admin in user-info and paid gating logic.
+- `AI_TELEMETRY_QUERY_ACCOUNT_ID`: Cloudflare account ID used for Analytics Engine SQL queries.
+- `AI_TELEMETRY_QUERY_API_TOKEN`: Cloudflare API token used for Analytics Engine SQL queries.
+- `AI_TELEMETRY_DATASET` (default `intel_dashboard_ai`): Analytics Engine dataset name queried by owner AI telemetry routes.
 - `NEWS_HOT_OVERLAY_ENABLED` (default `true`): enables entitled-read hot overlay from coordinator to reduce KV propagation lag.
 - `NEWS_HOT_OVERLAY_LIMIT` (default `250`): max hot entries maintained/read from coordinator overlay.
 - `NEWS_HOT_OVERLAY_SHARD_FANOUT` (default `4`): number of coordinator shards queried for entitled hot overlay reads.

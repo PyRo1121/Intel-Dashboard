@@ -1799,6 +1799,93 @@ describe("intel-dashboard backend worker", () => {
     });
   });
 
+  it("returns owner CRM AI telemetry snapshot", async () => {
+    const analyticsFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              calls: 12,
+              prompt_tokens: 120,
+              completion_tokens: 48,
+              total_tokens: 168,
+              output_input_ratio: 0.4,
+              avg_duration_ms: 210.5,
+              p95_duration_ms: 480.2,
+              failures: 1,
+              cache_hits: 8,
+              cache_misses: 4,
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", analyticsFetch);
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/admin/crm/ai-telemetry", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "owner-id", window: "1h" }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+        AI_TELEMETRY_QUERY_ACCOUNT_ID: "acct_123",
+        AI_TELEMETRY_QUERY_API_TOKEN: "cf_api_token",
+        AI_TELEMETRY_DATASET: "intel_dashboard_ai",
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      result: {
+        window: "1h",
+        summary: {
+          calls: 12,
+          promptTokens: 120,
+          completionTokens: 48,
+          totalTokens: 168,
+          outputInputRatio: 0.4,
+          failures: 1,
+          cacheHits: 8,
+          cacheMisses: 4,
+        },
+      },
+    });
+    expect(analyticsFetch).toHaveBeenCalled();
+  });
+
+  it("fails closed when owner CRM AI telemetry query credentials are missing", async () => {
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/admin/crm/ai-telemetry", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer api-token",
+        },
+        body: JSON.stringify({ userId: "owner-id", window: "15m" }),
+      }),
+      {
+        USAGE_DATA_SOURCE_TOKEN: "api-token",
+        OWNER_USER_IDS: "owner-id",
+      },
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "AI telemetry query credentials are not configured.",
+    });
+  });
+
   it("uses live Stripe subscription metrics for CRM revenue when configured", async () => {
     const now = Date.now();
     const kv = createKvMapBinding({

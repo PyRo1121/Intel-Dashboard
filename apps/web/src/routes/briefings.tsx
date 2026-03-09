@@ -1,5 +1,6 @@
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
 import { Title, Meta, Link } from "@solidjs/meta";
+import { fetchBriefings } from "~/lib/briefings-client";
 import type { Briefing } from "~/lib/types";
 import {
   freshnessBannerTone,
@@ -8,7 +9,6 @@ import {
   maxIsoTimestamp,
   useFeedFreshness,
 } from "~/lib/freshness";
-import { fetchPublicJson } from "~/lib/client-json";
 import { readLatestArray } from "~/lib/resource-latest";
 import { getSeveritySummaryAccentClass, getSeveritySummaryTotal } from "~/lib/severity-summary";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
@@ -18,13 +18,8 @@ import FeedAccessNotice from "~/components/billing/FeedAccessNotice";
 import { BRIEFINGS_DESCRIPTION, BRIEFINGS_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
 
-async function loadBriefings(): Promise<Briefing[]> {
-  const result = await fetchPublicJson<unknown>("/api/briefings");
-  return result.ok && Array.isArray(result.data) ? result.data : [];
-}
-
 export default function Briefings() {
-  const [briefings, { refetch }] = createResource(loadBriefings, { initialValue: [] as Briefing[] });
+  const [briefings, { refetch }] = createResource(fetchBriefings, { initialValue: [] as Briefing[] });
   const [expanded, setExpanded] = createSignal<string | null>(null);
   const feedThresholds = { liveMaxMinutes: 240, delayedMaxMinutes: 480 } as const;
   const nowMs = useWallClock(1000);

@@ -26,7 +26,6 @@ export type TelegramEntryLike = {
 export type TelegramFilterGroupLike<TEntry extends TelegramEntryLike = TelegramEntryLike> = {
   id: string;
   categories?: string[];
-  categorySet?: Set<string>;
   predicate?: (entry: TEntry) => boolean;
 };
 
@@ -66,6 +65,14 @@ const AVATAR_BG_BY_TEXT_CLASS: Record<string, string> = {
 export function getTelegramAvatarBgColor(category: string): string {
   const style = getIntelCategoryStyle(category);
   return AVATAR_BG_BY_TEXT_CLASS[style.text] ?? "#a1a1aa";
+}
+
+export function getTelegramChannelName(entry: TelegramEntryLike): string {
+  return entry.channelLabel || entry.channelUsername || "Telegram source";
+}
+
+export function getTelegramAvatarLetter(entry: TelegramEntryLike): string {
+  return getTelegramChannelName(entry).charAt(0).toUpperCase() || "T";
 }
 
 export function getTelegramEntryKey(entry: TelegramEntryLike): string {
@@ -111,8 +118,8 @@ export function doesTelegramGroupMatchEntry<TEntry extends TelegramEntryLike>(
 ): boolean {
   if (group.id === "all") return true;
   if (group.predicate?.(entry)) return true;
-  const categorySet = group.categorySet ?? (group.categories ? new Set(group.categories) : undefined);
-  if (!categorySet || categorySet.size === 0) return false;
+  const categorySet = new Set(group.categories ?? []);
+  if (categorySet.size === 0) return false;
   if (categorySet.has(entry.category)) return true;
   return entry.dedupe?.categorySet?.some((category) => categorySet.has(category)) ?? false;
 }

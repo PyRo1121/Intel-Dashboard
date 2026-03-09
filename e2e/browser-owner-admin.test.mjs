@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
-  CloudflareChallengeError,
   navigateByKeyboard,
   openDashboardPage,
   openBillingDashboard,
@@ -31,10 +30,6 @@ test("owner-admin billing actions surface owner bypass notices", async (t) => {
 
       await page.getByTestId("billing-activity-surface").waitFor({ state: "visible", timeout: 30_000 });
     } catch (error) {
-      if (error instanceof CloudflareChallengeError) {
-        t.skip(error.message);
-        return;
-      }
       await captureBrowserArtifacts(page, "owner-admin-billing-actions", error);
       throw error;
     }
@@ -93,10 +88,6 @@ test("owner-admin CRM controls filter, export, and enforce refund guardrails", a
         assert.ok(configuredCount > 0 || unavailableCount > 0);
       }
     } catch (error) {
-      if (error instanceof CloudflareChallengeError) {
-        t.skip(error.message);
-        return;
-      }
       await captureBrowserArtifacts(page, "owner-admin-crm-controls", error);
       throw error;
     }
@@ -122,10 +113,6 @@ test("owner-admin CRM keyboard navigation stays intact", async (t) => {
       const overviewLink = page.getByRole("link", { name: "Overview" }).first();
       await navigateByKeyboard(overviewLink, page, /\/overview$/);
     } catch (error) {
-      if (error instanceof CloudflareChallengeError) {
-        t.skip(error.message);
-        return;
-      }
       await captureBrowserArtifacts(page, "owner-admin-crm-keyboard", error);
       throw error;
     }

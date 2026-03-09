@@ -36,20 +36,24 @@ const SEVERITY_STYLES: Record<Severity, {
   },
 };
 
+function resolveSeverityStyle(severity: Severity | "") {
+  return severity ? SEVERITY_STYLES[severity] ?? null : null;
+}
+
 export function severityColor(severity: Severity | ""): string {
-  return severity ? SEVERITY_STYLES[severity].text : "text-zinc-500";
+  return resolveSeverityStyle(severity)?.text ?? "text-zinc-500";
 }
 
 export function severityBg(severity: Severity | ""): string {
-  return severity ? SEVERITY_STYLES[severity].surface : "bg-zinc-500/10 text-zinc-500 ring-zinc-500/20";
+  return resolveSeverityStyle(severity)?.surface ?? "bg-zinc-500/10 text-zinc-500 ring-zinc-500/20";
 }
 
 export function severityDot(severity: Severity | ""): string {
-  return severity ? SEVERITY_STYLES[severity].dot : "bg-zinc-500";
+  return resolveSeverityStyle(severity)?.dot ?? "bg-zinc-500";
 }
 
 export function severityHexColor(severity: Severity | ""): string {
-  return severity ? SEVERITY_STYLES[severity].hex : "#71717a";
+  return resolveSeverityStyle(severity)?.hex ?? "#71717a";
 }
 
 export function formatRelativeTimeAt(timestamp: string, now: number): string {

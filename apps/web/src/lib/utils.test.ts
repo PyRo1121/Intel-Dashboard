@@ -10,6 +10,8 @@ import {
   parseTimestampMs,
   formatPercent,
   formatShortDateTime,
+  severityBg,
+  severityColor,
   severityDot,
   severityHexColor,
   truncateText,
@@ -107,4 +109,6 @@ test("severity visual helpers stay aligned with the shared severity scale", () =
   assert.match(severityDot("high"), /amber/);
   assert.equal(severityHexColor("medium"), "#3b82f6");
   assert.equal(severityHexColor("low"), "#71717a");
+  assert.equal(severityColor("bogus" as never), "text-zinc-500");
+  assert.match(severityBg("bogus" as never), /zinc-500/);
 });

@@ -20,6 +20,7 @@ test("escapeCsvCell quotes commas, quotes, and newlines", () => {
   assert.equal(escapeCsvCell("comma,value"), "\"comma,value\"");
   assert.equal(escapeCsvCell("quote\"value"), "\"quote\"\"value\"");
   assert.equal(escapeCsvCell("line\nbreak"), "\"line\nbreak\"");
+  assert.equal(escapeCsvCell("line\rbreak"), "\"line\rbreak\"");
 });
 
 test("getCrmLatestEventDisplay formats kind and timestamp with safe fallbacks", () => {

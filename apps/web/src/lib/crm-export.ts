@@ -30,7 +30,7 @@ export function getCrmLatestEventDisplay(
 
 export function escapeCsvCell(value: unknown): string {
   const text = String(value ?? "");
-  if (text.includes(",") || text.includes("\"") || text.includes("\n")) {
+  if (text.includes(",") || text.includes("\"") || text.includes("\n") || text.includes("\r")) {
     return `"${text.replaceAll("\"", "\"\"")}"`;
   }
   return text;

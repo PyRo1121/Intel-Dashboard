@@ -284,6 +284,7 @@ export default function Sidebar() {
                               alt={userDisplay().displayName}
                               class="w-7 h-7 rounded-sm flex-shrink-0 ring-1 ring-white/[0.06]"
                               referrerpolicy="no-referrer"
+                              loading="lazy"
                               onError={() => setAvatarFailed(true)}
                             />
                           </Show>

@@ -1,0 +1,29 @@
+apps/backend/README.md
+  fbdbb1d68cb02f36 100,103
+apps/backend/src/index.ts
+  fbdbb1d68cb02f36 107,109
+.gitignore
+  fbdbb1d68cb02f36 59
+apps/backend/src/index.test.ts
+  fbdbb1d68cb02f36 3807,3824,3830,3839-3841,3890,3899,3905,3950,3975-3976,3978-3979,4013-4014,4027,4065-4066,4177,4191,4230,4242
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.10",
+  "base_commit_sha": "a504b8692b59c3ee8a3b604e52c076aaef2722ec",
+  "prompts": {
+    "fbdbb1d68cb02f36": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd0d9-c76f-7c23-b348-713dec4ebf33",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 28,
+      "total_deletions": 30,
+      "accepted_lines": 28,
+      "overriden_lines": 0
+    }
+  }
+}

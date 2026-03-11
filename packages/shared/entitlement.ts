@@ -87,7 +87,7 @@ export function isOwnerRole(value: string | undefined): boolean {
 
 export function entitlementTierTone(value: string | undefined): string {
   const raw = normalizeEntitlementValue(value, "free");
-  if (raw === "owner") return "text-emerald-300";
+  if (raw === "owner") return "text-[var(--color-accent)]";
   if (raw === "subscriber") return "text-sky-300";
   if (raw === "trial") return "text-amber-300";
   return "text-zinc-500";

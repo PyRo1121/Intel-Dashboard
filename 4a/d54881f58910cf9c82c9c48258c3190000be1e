@@ -1,0 +1,23 @@
+apps/edge/src/telegram-scraper-do.ts
+  0e65710de4296aeb 50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.10",
+  "base_commit_sha": "4ad54881f58910cf9c82c9c48258c3190000be1e",
+  "prompts": {
+    "0e65710de4296aeb": {
+      "agent_id": {
+        "tool": "gemini",
+        "id": "a593c47a-6e5b-4f70-be98-74166862486a",
+        "model": "gemini-3.1-pro-preview"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 12,
+      "total_deletions": 12,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}

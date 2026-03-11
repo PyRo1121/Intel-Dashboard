@@ -28,7 +28,7 @@ export function trustTierForSignals(args: {
 }
 
 export function trustBadgeClass(tier: TelegramTrustTier): string {
-  if (tier === "High") return "border-emerald-400/30 bg-emerald-500/10 text-emerald-200";
+  if (tier === "High") return "border-amber-400/30 bg-amber-500/10 text-amber-200";
   if (tier === "Medium") return "border-blue-400/30 bg-blue-500/10 text-blue-200";
   return "border-zinc-500/20 bg-zinc-500/10 text-zinc-300";
 }

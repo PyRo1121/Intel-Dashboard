@@ -1,3 +1,4 @@
+import { CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT } from "@intel-dashboard/shared/telegram-signal.ts";
 export type TelegramSourceLeaderboardWindow = "24h" | "7d" | "30d";
 
 export type TelegramSourceLeaderboardEntry = {
@@ -61,8 +62,19 @@ export function normalizeTelegramSourceLeaderboardRows(rows: unknown[]): Telegra
       const sourceHistoryScore = normalizeScore(record.source_history_score);
       const trustTier = normalizeTier(record.trust_tier, ["core", "verified", "watch"] as const, "watch");
       const latencyTier = normalizeTier(record.latency_tier, ["instant", "fast", "monitor"] as const, "monitor");
+      const leadVolumeScore = Math.min(18, Math.round(Math.sqrt(leadCount) * 6));
+      const confirmedHitRate = leadCount > 0 ? highSignalLeadCount / leadCount : 0;
+      const corroborationRate = leadCount > 0 ? corroboratedLeadCount / leadCount : 0;
+      const trustBoost = trustTier === "core" ? 10 : trustTier === "verified" ? 5 : 0;
       const leaderboardScore = clamp(
-        Math.round(leadCount * 8 + avgSignalScore * 0.6 + highSignalLeadCount * 4 + corroboratedLeadCount * 2 + sourceHistoryScore * 0.4),
+        Math.round(
+          leadVolumeScore +
+            avgSignalScore * 0.35 +
+            confirmedHitRate * 30 +
+            corroborationRate * 12 +
+            sourceHistoryScore * 0.18 +
+            trustBoost,
+        ),
         0,
         999,
       );
@@ -82,8 +94,9 @@ export function normalizeTelegramSourceLeaderboardRows(rows: unknown[]): Telegra
     .filter((entry): entry is TelegramSourceLeaderboardEntry => entry !== null)
     .sort((left, right) => {
       if (right.leaderboardScore !== left.leaderboardScore) return right.leaderboardScore - left.leaderboardScore;
-      if (right.leadCount !== left.leadCount) return right.leadCount - left.leadCount;
-      return right.avgSignalScore - left.avgSignalScore;
+      if (right.highSignalLeadCount !== left.highSignalLeadCount) return right.highSignalLeadCount - left.highSignalLeadCount;
+      if (right.avgSignalScore !== left.avgSignalScore) return right.avgSignalScore - left.avgSignalScore;
+      return right.leadCount - left.leadCount;
     })
     .slice(0, TELEGRAM_LEADERBOARD_RETURN_LIMIT);
 }
@@ -128,10 +141,10 @@ export async function queryTelegramSourceLeaderboard(args: {
     SELECT
       channel,
       MAX(label) AS label,
-      COUNT(*) AS lead_count,
+      SUM(CASE WHEN source_count >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT THEN 1 ELSE 0 END) AS lead_count,
       AVG(COALESCE(signal_score, 0)) AS avg_signal_score,
-      SUM(CASE WHEN signal_grade IN ('A', 'B') THEN 1 ELSE 0 END) AS high_signal_lead_count,
-      SUM(CASE WHEN source_count >= 2 THEN 1 ELSE 0 END) AS corroborated_lead_count,
+      SUM(CASE WHEN source_count >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT AND signal_grade IN ('A', 'B') THEN 1 ELSE 0 END) AS high_signal_lead_count,
+      SUM(CASE WHEN source_count >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT THEN 1 ELSE 0 END) AS corroborated_lead_count,
       MAX(COALESCE(source_history_score, 0)) AS source_history_score,
       MAX(COALESCE(trust_tier, 'watch')) AS trust_tier,
       MAX(COALESCE(latency_tier, 'monitor')) AS latency_tier
@@ -139,13 +152,28 @@ export async function queryTelegramSourceLeaderboard(args: {
     WHERE rank_in_event = 1
     GROUP BY channel
     ORDER BY
-      (COUNT(*) * 8 + AVG(COALESCE(signal_score, 0)) * 0.6 +
-       SUM(CASE WHEN signal_grade IN ('A', 'B') THEN 1 ELSE 0 END) * 4 +
-       SUM(CASE WHEN source_count >= 2 THEN 1 ELSE 0 END) * 2 +
-       MAX(COALESCE(source_history_score, 0)) * 0.4) DESC,
-      COUNT(*) DESC,
-      AVG(COALESCE(signal_score, 0)) DESC
-    LIMIT ${TELEGRAM_LEADERBOARD_RETURN_LIMIT}`,
+      (
+        MIN(18, SQRT(SUM(CASE WHEN source_count >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT THEN 1 ELSE 0 END)) * 6) +
+        AVG(COALESCE(signal_score, 0)) * 0.35 +
+        (CASE
+          WHEN SUM(CASE WHEN source_count >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT THEN 1 ELSE 0 END) > 0
+          THEN (SUM(CASE WHEN source_count >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT AND signal_grade IN ('A', 'B') THEN 1 ELSE 0 END) * 1.0 /
+                SUM(CASE WHEN source_count >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT THEN 1 ELSE 0 END)) * 30
+          ELSE 0
+        END) +
+        (CASE
+          WHEN SUM(CASE WHEN source_count >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT THEN 1 ELSE 0 END) > 0
+          THEN (SUM(CASE WHEN source_count >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT THEN 1 ELSE 0 END) * 1.0 /
+                SUM(CASE WHEN source_count >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT THEN 1 ELSE 0 END)) * 12
+          ELSE 0
+        END) +
+        MAX(COALESCE(source_history_score, 0)) * 0.18 +
+        CASE MAX(COALESCE(trust_tier, 'watch')) WHEN 'core' THEN 10 WHEN 'verified' THEN 5 ELSE 0 END
+      ) DESC,
+      SUM(CASE WHEN source_count >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT AND signal_grade IN ('A', 'B') THEN 1 ELSE 0 END) DESC,
+      AVG(COALESCE(signal_score, 0)) DESC,
+      SUM(CASE WHEN source_count >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT THEN 1 ELSE 0 END) DESC
+    LIMIT ${TELEGRAM_LEADERBOARD_RETURN_LIMIT}`.replaceAll("CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT", String(CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT)),
   ).bind(cutoffIso).all<Record<string, unknown>>();
 
   return {

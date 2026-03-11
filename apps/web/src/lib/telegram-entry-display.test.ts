@@ -20,7 +20,7 @@ test("telegram entry display helpers map trust tiers and verification labels", (
   assert.equal(trustTierForSignals({ trustTier: "core" }), "High");
   assert.equal(trustTierForSignals({ sourceCount: 3 }), "Medium");
   assert.equal(trustTierForSignals({ sourceCount: 1 }), "Watch");
-  assert.match(trustBadgeClass("High"), /emerald/);
+  assert.match(trustBadgeClass("High"), /amber/);
 
   assert.equal(verificationLabelForSignals({ verificationState: "verified" }), "Cross-confirmed");
   assert.equal(verificationLabelForSignals({ sourceCount: 2 }), "Multi-source");

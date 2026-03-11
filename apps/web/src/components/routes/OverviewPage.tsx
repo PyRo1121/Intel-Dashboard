@@ -54,7 +54,7 @@ export default function OverviewPage(props: { canonicalHref: string }) {
         <header class="intel-page-header">
           <div>
             <div class="intel-badge mb-2">
-              <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
+              <span class="h-1.5 w-1.5 rounded-none bg-amber-400 shadow-[0_0_6px_rgba(34,197,94,0.5)]" />
               Live
             </div>
             <h1 class="intel-heading">Intel Dashboard Overview</h1>
@@ -62,7 +62,7 @@ export default function OverviewPage(props: { canonicalHref: string }) {
             <p class="mt-1 text-xs text-zinc-600">{TRIAL_DAYS}-day trial, then ${PREMIUM_PRICE_USD}/month. Free users receive delayed and capped feeds (up to {FREE_FEED_DELAY_MINUTES} minutes).</p>
           </div>
           <div class="flex items-center gap-2">
-            <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+            <span class={`rounded-none border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
               Feed: {freshness.feedFreshness().label}
               <Show when={freshness.latestFeedAgeMs() !== null}> ({freshness.latestFeedAgeLabel()})</Show>
             </span>
@@ -75,7 +75,7 @@ export default function OverviewPage(props: { canonicalHref: string }) {
         <Show when={freshness.freshnessNotice()}>
           {(notice) => (
             <output
-              class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
+              class={`freshness-transition-banner rounded-sm border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
               aria-live="polite"
             >
               {notice().message}
@@ -93,7 +93,7 @@ export default function OverviewPage(props: { canonicalHref: string }) {
 
         <div>
           <div class="flex items-center gap-3 mb-5">
-            <div class="w-1 h-6 rounded-full bg-cyan-500" />
+            <div class="w-1 h-6 rounded-none bg-cyan-500" />
             <div>
               <h2 class="text-lg font-semibold text-white">Recent Intelligence</h2>
               <p class="text-[11px] text-zinc-600">Latest from GDELT, RSS, and OSINT sources</p>
@@ -103,7 +103,7 @@ export default function OverviewPage(props: { canonicalHref: string }) {
             when={intelItems().length > 0}
             fallback={
               <div class="surface-card p-10 text-center">
-                <div class="w-12 h-12 mx-auto mb-3 rounded-2xl bg-blue-500/10 flex items-center justify-center">
+                <div class="w-12 h-12 mx-auto mb-3 rounded-sm bg-blue-500/10 flex items-center justify-center">
                   <Activity size={24} class="text-blue-400/60" />
                 </div>
                 <h3 class="text-sm font-medium text-zinc-400 mb-1">{loadingInitial() ? "Loading OSINT data..." : "No intelligence events yet"}</h3>

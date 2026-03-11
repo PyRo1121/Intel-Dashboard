@@ -121,3 +121,34 @@ test("applyTelegramSourcePerformanceContribution preserves a neutral seed state"
   assert.equal(next.corroboratedReports, 1);
   assert.equal(next.lastSeenAtMs, Date.UTC(2026, 2, 9, 12, 0, 0));
 });
+
+
+test("computeTelegramSourcePerformanceScore penalizes high-volume low-yield channels", () => {
+  const highVolumeLowYield = computeTelegramSourcePerformanceScore({
+    baseSubscriberValue: 88,
+    trustTier: "verified",
+    latencyTier: "instant",
+    totalEvents: 60,
+    leadReports: 6,
+    followOnReports: 48,
+    corroboratedReports: 10,
+    singleSourceReports: 18,
+    lastLeadAtMs: Date.UTC(2026, 2, 9, 11, 30, 0),
+    nowMs: Date.UTC(2026, 2, 9, 12, 0, 0),
+  });
+
+  const lowerVolumeHighYield = computeTelegramSourcePerformanceScore({
+    baseSubscriberValue: 80,
+    trustTier: "watch",
+    latencyTier: "fast",
+    totalEvents: 12,
+    leadReports: 5,
+    followOnReports: 3,
+    corroboratedReports: 7,
+    singleSourceReports: 1,
+    lastLeadAtMs: Date.UTC(2026, 2, 9, 11, 45, 0),
+    nowMs: Date.UTC(2026, 2, 9, 12, 0, 0),
+  });
+
+  assert.ok(lowerVolumeHighYield > highVolumeLowYield);
+});

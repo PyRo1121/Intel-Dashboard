@@ -204,10 +204,10 @@ export default function AirSeaOps() {
         <div>
           <div class="flex items-center gap-2 mb-2">
             <div class="intel-badge">
-              <div class="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.5)] animate-pulse" />
+              <div class="w-1.5 h-1.5 rounded-none bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.5)] animate-pulse" />
               Live Feed
             </div>
-            <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+            <span class={`rounded-none border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
               {freshness.feedFreshness().label}
               <Show when={freshness.latestFeedAgeMs() !== null}> ({freshness.latestFeedAgeLabel()})</Show>
             </span>
@@ -227,7 +227,7 @@ export default function AirSeaOps() {
               <p class="intel-kpi-label">Air Intel</p>
             </div>
             <div class="intel-kpi-segment">
-              <p class="intel-kpi-value text-emerald-300">{airSea().stats.seaIntelCount}</p>
+              <p class="intel-kpi-value text-amber-300">{airSea().stats.seaIntelCount}</p>
               <p class="intel-kpi-label">Sea Intel</p>
             </div>
             <div class="intel-kpi-segment">
@@ -246,7 +246,7 @@ export default function AirSeaOps() {
       <Show when={freshness.freshnessNotice()}>
         {(notice) => (
           <section
-            class={`rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
+            class={`rounded-sm border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
             role="status"
             aria-live="polite"
           >
@@ -274,11 +274,11 @@ export default function AirSeaOps() {
           {/* Map */}
           <div class="relative">
             <div ref={mapEl} class="h-[350px] w-full" />
-            <div class="pointer-events-none absolute bottom-3 left-3 z-[500] rounded-lg border border-white/10 bg-black/70 backdrop-blur-sm px-2.5 py-1.5 text-[10px] text-zinc-400 font-mono-data">
+            <div class="pointer-events-none absolute bottom-3 left-3 z-[500] rounded-sm border border-white/10 bg-black/70 backdrop-blur-sm px-2.5 py-1.5 text-[10px] text-zinc-400 font-mono-data">
                 {airSea().aviation.aircraft.length} aircraft &bull; real ADS-B positions
             </div>
             <Show when={airSea().aviation.emergencies > 0}>
-              <div class="pointer-events-none absolute top-3 right-3 z-[500] rounded-lg border border-red-500/30 bg-red-500/15 px-2.5 py-1.5 text-[11px] text-red-300 font-semibold animate-pulse">
+              <div class="pointer-events-none absolute top-3 right-3 z-[500] rounded-sm border border-red-500/30 bg-red-500/15 px-2.5 py-1.5 text-[11px] text-red-300 font-semibold animate-pulse">
                 {airSea().aviation.emergencies} EMERGENCY SQUAWK
               </div>
             </Show>
@@ -308,7 +308,7 @@ export default function AirSeaOps() {
                   >
                     <div class="flex items-center justify-between gap-2">
                       <div class="flex items-center gap-2.5 min-w-0">
-                        <span class={`h-2 w-2 rounded-full shrink-0 ${severityDot(ac.severity)}`} />
+                        <span class={`h-2 w-2 rounded-none shrink-0 ${severityDot(ac.severity)}`} />
                         <span class="font-mono-data text-sm font-bold text-white truncate">{ac.callsign}</span>
                         <span class={`shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] uppercase tracking-wider font-medium ${severityBg(ac.severity).replace("ring-", "border-")}`}>{ac.type}</span>
                       </div>
@@ -357,19 +357,19 @@ export default function AirSeaOps() {
 
         {/* Filters */}
         <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Air and sea filters">
-          <button type="button" aria-label="All domain filter" aria-pressed={domainFilter() === "all"} onClick={() => setDomainFilter("all")} class={`min-h-10 px-3 py-1.5 text-xs rounded-xl border transition ${domainFilter() === "all" ? "border-white/20 bg-white/10 text-white" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>All</button>
-          <button type="button" aria-label="Air domain filter" aria-pressed={domainFilter() === "air"} onClick={() => setDomainFilter("air")} class={`min-h-10 px-3 py-1.5 text-xs rounded-xl border transition inline-flex items-center gap-1.5 ${domainFilter() === "air" ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>
+          <button type="button" aria-label="All domain filter" aria-pressed={domainFilter() === "all"} onClick={() => setDomainFilter("all")} class={`min-h-10 px-3 py-1.5 text-xs rounded-sm border transition ${domainFilter() === "all" ? "border-white/20 bg-white/10 text-white" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>All</button>
+          <button type="button" aria-label="Air domain filter" aria-pressed={domainFilter() === "air"} onClick={() => setDomainFilter("air")} class={`min-h-10 px-3 py-1.5 text-xs rounded-sm border transition inline-flex items-center gap-1.5 ${domainFilter() === "air" ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>
             <Plane size={12} /> Air
           </button>
-          <button type="button" aria-label="Sea domain filter" aria-pressed={domainFilter() === "sea"} onClick={() => setDomainFilter("sea")} class={`min-h-10 px-3 py-1.5 text-xs rounded-xl border transition inline-flex items-center gap-1.5 ${domainFilter() === "sea" ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>
+          <button type="button" aria-label="Sea domain filter" aria-pressed={domainFilter() === "sea"} onClick={() => setDomainFilter("sea")} class={`min-h-10 px-3 py-1.5 text-xs rounded-sm border transition inline-flex items-center gap-1.5 ${domainFilter() === "sea" ? "border-amber-400/30 bg-amber-400/10 text-amber-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>
             <Ship size={12} /> Sea
           </button>
 
           <div class="mx-1 h-6 w-px bg-white/[0.08]" />
 
-          <button type="button" aria-label="Any severity filter" aria-pressed={sevFilter() === "all"} onClick={() => setSevFilter("all")} class={`min-h-10 px-3 py-1.5 text-xs rounded-xl border transition ${sevFilter() === "all" ? "border-white/20 bg-white/10 text-white" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>Any</button>
-          <button type="button" aria-label="Critical severity filter" aria-pressed={sevFilter() === "critical"} onClick={() => setSevFilter("critical")} class={`min-h-10 px-3 py-1.5 text-xs rounded-xl border transition ${sevFilter() === "critical" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>Critical</button>
-          <button type="button" aria-label="High severity filter" aria-pressed={sevFilter() === "high"} onClick={() => setSevFilter("high")} class={`min-h-10 px-3 py-1.5 text-xs rounded-xl border transition ${sevFilter() === "high" ? "border-amber-400/30 bg-amber-500/10 text-amber-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>High</button>
+          <button type="button" aria-label="Any severity filter" aria-pressed={sevFilter() === "all"} onClick={() => setSevFilter("all")} class={`min-h-10 px-3 py-1.5 text-xs rounded-sm border transition ${sevFilter() === "all" ? "border-white/20 bg-white/10 text-white" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>Any</button>
+          <button type="button" aria-label="Critical severity filter" aria-pressed={sevFilter() === "critical"} onClick={() => setSevFilter("critical")} class={`min-h-10 px-3 py-1.5 text-xs rounded-sm border transition ${sevFilter() === "critical" ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>Critical</button>
+          <button type="button" aria-label="High severity filter" aria-pressed={sevFilter() === "high"} onClick={() => setSevFilter("high")} class={`min-h-10 px-3 py-1.5 text-xs rounded-sm border transition ${sevFilter() === "high" ? "border-amber-400/30 bg-amber-500/10 text-amber-200" : "border-white/10 text-zinc-500 hover:text-zinc-300"}`}>High</button>
 
           <div class="relative ml-auto flex-1 min-w-[200px] max-w-sm">
             <Search size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
@@ -377,7 +377,7 @@ export default function AirSeaOps() {
               value={query()}
               onInput={(e) => setQuery(e.currentTarget.value)}
               placeholder="Search reports, channels, tags..."
-              class="h-10 w-full rounded-xl border border-white/10 bg-black/30 pl-9 pr-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-cyan-400/30 focus:outline-none"
+              class="h-10 w-full rounded-sm border border-white/10 bg-black/30 pl-9 pr-3 text-sm text-zinc-200 placeholder-zinc-600 focus:border-cyan-400/30 focus:outline-none"
             />
           </div>
         </div>
@@ -401,13 +401,13 @@ export default function AirSeaOps() {
                   <div class="flex items-start gap-3">
                     {/* Severity indicator */}
                     <div class="pt-1 shrink-0">
-                      <div class={`h-2.5 w-2.5 rounded-full ${severityDot(report.severity)}`} />
+                      <div class={`h-2.5 w-2.5 rounded-none ${severityDot(report.severity)}`} />
                     </div>
 
                     <div class="min-w-0 flex-1 space-y-2">
                       {/* Top row: domain + channel + time */}
                       <div class="flex items-center flex-wrap gap-2">
-                        <span class={`rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-wider font-semibold ${report.domain === "air" ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/25" : "bg-emerald-500/15 text-emerald-300 border-emerald-500/25"}`}>
+                        <span class={`rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-wider font-semibold ${report.domain === "air" ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/25" : "bg-amber-500/15 text-amber-300 border-amber-500/25"}`}>
                           {report.domain === "air" ? "AIR" : "SEA"}
                         </span>
                         <span class={`rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-wider font-medium ${cs.bg} ${cs.border} ${cs.text}`}>
@@ -426,12 +426,12 @@ export default function AirSeaOps() {
                       <div class="flex items-center flex-wrap gap-1.5">
                         <For each={report.tags.filter((tag) => getIntelTagStyle(tag))}>
                           {(tag) => (
-                            <span class={`rounded-full border px-2 py-0.5 text-[9px] uppercase tracking-wider font-medium ${getIntelTagStyle(tag)}`}>
+                            <span class={`rounded-none border px-2 py-0.5 text-[9px] uppercase tracking-wider font-medium ${getIntelTagStyle(tag)}`}>
                               {tag}
                             </span>
                           )}
                         </For>
-                        <span class="rounded-full bg-white/[0.04] border border-white/[0.08] px-2 py-0.5 text-[9px] text-zinc-500 uppercase tracking-wider">
+                        <span class="rounded-none bg-white/[0.04] border border-white/[0.08] px-2 py-0.5 text-[9px] text-zinc-500 uppercase tracking-wider">
                           {formatTitleLabel(report.region, "—")}
                         </span>
                         <Show when={parseCompactNumber(report.views) > 0}>

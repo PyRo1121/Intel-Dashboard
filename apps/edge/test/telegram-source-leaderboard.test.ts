@@ -11,15 +11,15 @@ test("resolveTelegramLeaderboardWindowStart returns expected cutoff", () => {
   assert.equal(resolveTelegramLeaderboardWindowStart(nowMs, "24h"), "2026-03-08T12:00:00.000Z");
 });
 
-test("normalizeTelegramSourceLeaderboardRows ranks and clamps rows", () => {
+test("normalizeTelegramSourceLeaderboardRows favors high-signal hit rate and trust over raw volume", () => {
   const rows = normalizeTelegramSourceLeaderboardRows([
     {
       channel: "alpha",
       label: "Alpha",
-      lead_count: 4,
+      lead_count: 3,
       avg_signal_score: 88,
       high_signal_lead_count: 3,
-      corroborated_lead_count: 2,
+      corroborated_lead_count: 3,
       source_history_score: 91,
       trust_tier: "core",
       latency_tier: "instant",
@@ -27,11 +27,11 @@ test("normalizeTelegramSourceLeaderboardRows ranks and clamps rows", () => {
     {
       channel: "beta",
       label: "Beta",
-      lead_count: 1,
-      avg_signal_score: 70,
+      lead_count: 14,
+      avg_signal_score: 54,
       high_signal_lead_count: 1,
-      corroborated_lead_count: 1,
-      source_history_score: 60,
+      corroborated_lead_count: 14,
+      source_history_score: 45,
       trust_tier: "watch",
       latency_tier: "monitor",
     },

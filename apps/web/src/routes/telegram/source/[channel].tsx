@@ -103,7 +103,7 @@ export default function TelegramSourceHistoryPage() {
                   type="button"
                   aria-pressed={window() === entryWindow}
                   onClick={() => setWindow(entryWindow)}
-                  class={`rounded-xl border px-3 py-1.5 text-[12px] ${window() === entryWindow ? "border-blue-400/40 bg-blue-500/15 text-blue-200" : "border-white/[0.08] bg-black/20 text-zinc-500"}`}
+                  class={`rounded-sm border px-3 py-1.5 text-[12px] ${window() === entryWindow ? "border-blue-400/40 bg-blue-500/15 text-blue-200" : "border-white/[0.08] bg-black/20 text-zinc-500"}`}
                 >
                   {entryWindow}
                 </button>
@@ -155,7 +155,7 @@ export default function TelegramSourceHistoryPage() {
                     <div class="flex flex-wrap gap-2">
                       <For each={payload().summary.topReasons}>
                         {(reason) => (
-                          <span class="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-200">{reason}</span>
+                          <span class="rounded-none border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200">{reason}</span>
                         )}
                       </For>
                     </div>
@@ -169,7 +169,7 @@ export default function TelegramSourceHistoryPage() {
                         onClick={() => void persistPreferences((next) => {
                           next.favoriteChannels = toggleSubscriberPreferenceValue(next.favoriteChannels, payload().source.channel);
                         })}
-                        class={`rounded-xl border px-3 py-2 text-sm ${favoriteChannel() ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
+                        class={`rounded-sm border px-3 py-2 text-sm ${favoriteChannel() ? "border-amber-400/30 bg-amber-500/10 text-amber-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
                       >
                         {favoriteChannel() ? "Favorited channel" : "Favorite channel"}
                       </button>
@@ -179,7 +179,7 @@ export default function TelegramSourceHistoryPage() {
                         onClick={() => void persistPreferences((next) => {
                           next.watchCategories = toggleSubscriberPreferenceValue(next.watchCategories, payload().source.category);
                         })}
-                        class={`rounded-xl border px-3 py-2 text-sm ${watchCategory() ? "border-blue-400/30 bg-blue-500/10 text-blue-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
+                        class={`rounded-sm border px-3 py-2 text-sm ${watchCategory() ? "border-blue-400/30 bg-blue-500/10 text-blue-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
                       >
                         {watchCategory() ? "Watching category" : "Watch category"}
                       </button>
@@ -198,10 +198,10 @@ export default function TelegramSourceHistoryPage() {
                       <div class="space-y-2">
                         <For each={payload().recentEvents}>
                           {(event) => (
-                            <a href={event.link} target="_blank" rel="noopener noreferrer" class="block rounded-xl border border-white/[0.08] bg-black/20 p-3 no-underline">
+                            <a href={event.link} target="_blank" rel="noopener noreferrer" class="block rounded-sm border border-white/[0.08] bg-black/20 p-3 no-underline">
                               <div class="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
                                 <Show when={event.signalGrade}>
-                                  <span class="rounded-full border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-violet-200">
+                                  <span class="rounded-none border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-violet-200">
                                     {event.signalGrade} · {event.signalScore}
                                   </span>
                                 </Show>
@@ -211,7 +211,7 @@ export default function TelegramSourceHistoryPage() {
                               <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
                                 <For each={event.rankReasons}>
                                   {(reason) => (
-                                    <span class="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5">{reason}</span>
+                                    <span class="rounded-none border border-white/[0.08] bg-white/[0.03] px-2 py-0.5">{reason}</span>
                                   )}
                                 </For>
                                 <span class="inline-flex items-center gap-1 text-blue-300">Source <ExternalLink size={11} /></span>

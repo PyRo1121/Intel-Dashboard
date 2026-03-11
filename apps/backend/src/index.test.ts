@@ -734,7 +734,7 @@ describe("intel-dashboard backend worker", () => {
     expect(fetchedUrls.length).toBe(36);
   });
 
-  it("rotates non-priority RSS source selection per configured rotation window", async () => {
+  it("rotates the non-fast-lane RSS subset when the per-run budget exceeds the fast lane", async () => {
     const kvData = new Map<string, string>();
     const fetchedUrls: string[] = [];
     const feedXml =
@@ -764,9 +764,9 @@ describe("intel-dashboard backend worker", () => {
       {
         USAGE_STORAGE_MODE: "kv",
         USAGE_CACHE_WARM_ENABLED: "false",
-        FREE_TIER_MODE: "true",
+        FREE_TIER_MODE: "false",
         NEWS_RSS_INGEST_ENABLED: "true",
-        NEWS_RSS_SOURCES_PER_RUN: "12",
+        NEWS_RSS_SOURCES_PER_RUN: "36",
         NEWS_RSS_ITEMS_PER_SOURCE: "3",
         NEWS_RSS_ROTATION_WINDOW_SECONDS: "60",
         USAGE_KV: {
@@ -790,9 +790,9 @@ describe("intel-dashboard backend worker", () => {
       {
         USAGE_STORAGE_MODE: "kv",
         USAGE_CACHE_WARM_ENABLED: "false",
-        FREE_TIER_MODE: "true",
+        FREE_TIER_MODE: "false",
         NEWS_RSS_INGEST_ENABLED: "true",
-        NEWS_RSS_SOURCES_PER_RUN: "12",
+        NEWS_RSS_SOURCES_PER_RUN: "36",
         NEWS_RSS_ITEMS_PER_SOURCE: "3",
         NEWS_RSS_ROTATION_WINDOW_SECONDS: "60",
         USAGE_KV: {
@@ -805,8 +805,8 @@ describe("intel-dashboard backend worker", () => {
     );
     const secondRun = [...fetchedUrls];
 
-    expect(firstRun.length).toBe(12);
-    expect(secondRun.length).toBe(12);
+    expect(firstRun.length).toBe(36);
+    expect(secondRun.length).toBe(36);
     expect(secondRun.join("|")).not.toBe(firstRun.join("|"));
   });
 
@@ -864,6 +864,74 @@ describe("intel-dashboard backend worker", () => {
 
     expect(fetchedUrls.length).toBe(20);
     expect(regions.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it("includes all priority RSS sources when the per-run budget is high enough", async () => {
+    const kvData = new Map<string, string>();
+    const fetchedUrls: string[] = [];
+    const feedXml =
+      '<?xml version="1.0" encoding="UTF-8"?><rss><channel><item><title>Headline</title><link>https://example.com/headline</link><description>Summary</description><pubDate>Wed, 04 Mar 2026 12:00:00 GMT</pubDate></item></channel></rss>';
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        fetchedUrls.push(url);
+        return new Response(feedXml, {
+          status: 200,
+          headers: { "content-type": "application/rss+xml; charset=utf-8" },
+        });
+      }),
+    );
+
+    await worker.scheduled(
+      {
+        cron: "* * * * *",
+        scheduledTime: Date.now(),
+        noRetry: () => {},
+      },
+      {
+        USAGE_STORAGE_MODE: "kv",
+        USAGE_CACHE_WARM_ENABLED: "false",
+        FREE_TIER_MODE: "false",
+        NEWS_RSS_INGEST_ENABLED: "true",
+        NEWS_RSS_SOURCES_PER_RUN: "36",
+        NEWS_RSS_ITEMS_PER_SOURCE: "4",
+        NEWS_RSS_ROTATION_WINDOW_SECONDS: "60",
+        NEWS_RSS_FETCH_CONCURRENCY: "12",
+        USAGE_KV: {
+          get: async (key: string) => kvData.get(key) ?? null,
+          put: async (key: string, value: string) => {
+            kvData.set(key, value);
+          },
+        },
+      },
+    );
+
+    const prioritySources = OSINT_SOURCE_CATALOG.filter(
+      (source) =>
+        typeof source.feedUrl === "string" &&
+        source.feedUrl.length > 0 &&
+        [
+          "aljazeera-world",
+          "bbc-world",
+          "cnn-world",
+          "defense-news",
+          "defense-one",
+          "defence-blog",
+          "dw-world",
+          "euronews-world",
+          "guardian-world",
+          "insider-paper",
+          "npr-world",
+          "the-hindu-international",
+          "war-on-the-rocks",
+        ].includes(source.id),
+    ).map((source) => source.feedUrl);
+
+    for (const feedUrl of prioritySources) {
+      expect(fetchedUrls).toContain(feedUrl);
+    }
   });
 
   it("reuses RSS validators via conditional request headers", async () => {

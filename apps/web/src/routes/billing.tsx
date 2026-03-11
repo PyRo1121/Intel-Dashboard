@@ -121,7 +121,7 @@ export default function BillingRoute() {
         <Show when={notice()}>
           {(value) => (
             <div
-              class="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200"
+              class="rounded-sm border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
               data-testid="billing-notice"
               aria-live="polite"
             >
@@ -132,7 +132,7 @@ export default function BillingRoute() {
         <Show when={error()}>
           {(value) => (
             <div
-              class="rounded-2xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+              class="rounded-sm border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-200"
               data-testid="billing-error"
               aria-live="assertive"
             >
@@ -152,23 +152,23 @@ export default function BillingRoute() {
           >
             {(payload) => (
               <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="billing-summary-grid">
-                <article class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4" data-testid="billing-summary-tier">
+                <article class="rounded-sm border border-white/[0.06] bg-white/[0.02] p-4" data-testid="billing-summary-tier">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-600">Tier</p>
                   <p class="mt-1 text-base font-semibold text-white">{formatEntitlementTier(payload().result?.tier)}</p>
                 </article>
-                <article class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4" data-testid="billing-summary-status">
+                <article class="rounded-sm border border-white/[0.06] bg-white/[0.02] p-4" data-testid="billing-summary-status">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-600">Status</p>
                   <p class="mt-1 text-base font-semibold text-white">
                     {formatSubscriptionStatus(payload().result?.subscription?.status)}
                   </p>
                 </article>
-                <article class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4" data-testid="billing-summary-delay">
+                <article class="rounded-sm border border-white/[0.06] bg-white/[0.02] p-4" data-testid="billing-summary-delay">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-600">Feed Delay</p>
                   <p class="mt-1 text-base font-semibold text-white">
                     {formatDelayMinutesShortLabel(Number(payload().result?.delayMinutes ?? 0))}
                   </p>
                 </article>
-                <article class="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4" data-testid="billing-summary-plan">
+                <article class="rounded-sm border border-white/[0.06] bg-white/[0.02] p-4" data-testid="billing-summary-plan">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-600">Plan</p>
                   <p class="mt-1 text-base font-semibold text-white">
                     ${Number(payload().result?.monthlyPriceUsd ?? PREMIUM_PRICE_USD)}/mo
@@ -247,9 +247,9 @@ export default function BillingRoute() {
           >
             <div class="space-y-2" data-testid="billing-activity-list">
               {(activity()?.result?.events || []).map((event) => (
-                <article class="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5" data-testid="billing-activity-item">
+                <article class="rounded-sm border border-white/[0.08] bg-white/[0.02] px-3 py-2.5" data-testid="billing-activity-item">
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="inline-flex items-center rounded-full border border-zinc-600 bg-zinc-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-300">
+                    <span class="inline-flex items-center rounded-none border border-zinc-600 bg-zinc-900/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-300">
                       {formatActivityKindLabel(event.kind)}
                     </span>
                     <span data-e2e="billing-event-age" class="text-xs text-zinc-500">{formatAgeAgoAt(event.atMs, nowMs())}</span>

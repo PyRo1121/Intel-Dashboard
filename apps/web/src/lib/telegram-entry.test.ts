@@ -29,7 +29,7 @@ test("telegram trust helpers map explicit and inferred trust tiers", () => {
   assert.equal(trustTierForSignals({ trustTier: "verified" }), "Medium");
   assert.equal(trustTierForSignals({ sourceCount: 3 }), "Medium");
   assert.equal(trustTierForSignals({ sourceCount: 1 }), "Watch");
-  assert.match(trustBadgeClass("High"), /emerald/);
+  assert.match(trustBadgeClass("High"), /amber/);
 });
 
 test("telegram verification helper maps explicit and inferred signals", () => {

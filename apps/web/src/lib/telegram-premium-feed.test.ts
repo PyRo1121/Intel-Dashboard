@@ -8,13 +8,14 @@ import {
   shouldHideTelegramPremiumNoise,
 } from "./telegram-premium-feed.ts";
 
-test("applyTelegramPremiumFeed promotes stronger corroborated entries ahead of raw recency", () => {
+test("applyTelegramPremiumFeed prefers fresher entries before signal strength within signal-first mode", () => {
   const entries = [
     {
       message: { datetime: "2026-03-09T12:05:00.000Z" },
       dedupe: {
         rankScore: 61,
         signalScore: 72,
+        signalGrade: "B" as const,
         freshnessTier: "breaking" as const,
         verificationState: "single_source" as const,
         sourceCount: 1,
@@ -26,9 +27,10 @@ test("applyTelegramPremiumFeed promotes stronger corroborated entries ahead of r
       dedupe: {
         rankScore: 92,
         signalScore: 68,
-        freshnessTier: "fresh" as const,
+        signalGrade: "C" as const,
+        freshnessTier: "watch" as const,
         verificationState: "verified" as const,
-        sourceCount: 3,
+        sourceCount: 6,
         duplicateCount: 4,
       },
     },
@@ -40,9 +42,8 @@ test("applyTelegramPremiumFeed promotes stronger corroborated entries ahead of r
     hideNoise: false,
   });
 
-  assert.equal(ranked[0]?.dedupe?.signalScore, 72);
-  assert.equal(ranked[0]?.dedupe?.rankScore, 61);
-  assert.equal(ranked[1]?.dedupe?.signalScore, 68);
+  assert.equal(ranked[0]?.dedupe?.freshnessTier, "breaking");
+  assert.equal(ranked[1]?.dedupe?.freshnessTier, "watch");
 });
 
 test("shouldHideTelegramPremiumNoise removes low-signal stale duplicate chatter", () => {
@@ -95,7 +96,7 @@ test("high signal and first-report helpers use signal metadata", () => {
   assert.equal(
     isFirstReportTelegramEntry({
       message: { datetime: "2026-03-09T12:05:00.000Z" },
-      dedupe: { signalReasons: ["first", "fresh"] },
+      dedupe: { signalReasons: ["first", "fresh"], sourceCount: 6 },
     }),
     true,
   );
@@ -110,4 +111,15 @@ test("telegram premium defaults stay freshness-first", () => {
     signalFirst: false,
     hideNoise: false,
   });
+});
+
+
+test("first-report helper requires corroboration threshold", () => {
+  assert.equal(
+    isFirstReportTelegramEntry({
+      message: { datetime: "2026-03-09T12:05:00.000Z" },
+      dedupe: { signalReasons: ["first", "fresh"], sourceCount: 5 },
+    }),
+    false,
+  );
 });

@@ -29,7 +29,7 @@ export default function LandingRoute() {
           <header class="intel-panel px-4 py-3 md:px-6">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div class="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-zinc-100">
-                <span class="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_0_6px_rgba(16,185,129,0.18)]" />
+                <span class="h-2.5 w-2.5 rounded-none bg-amber-400 shadow-[0_0_0_6px_rgba(16,185,129,0.18)]" />
                 Intel Dashboard
               </div>
               <div class="flex flex-wrap items-center gap-2">
@@ -56,30 +56,30 @@ export default function LandingRoute() {
               </div>
 
               <div class="mt-6 flex flex-wrap gap-2 text-xs text-zinc-400">
-                <span class="rounded-full border border-emerald-400/30 bg-emerald-500/12 px-3 py-1 font-medium text-emerald-200">{LANDING_HERO_CONTENT.oauthTag}</span>
-                <span class="rounded-full border border-cyan-400/30 bg-cyan-500/12 px-3 py-1 font-medium text-cyan-200">Up to {formatDelayMinutesLong(FREE_FEED_DELAY_MINUTES)} delay + capped feed on free tier</span>
-                <span class="rounded-full border border-sky-400/30 bg-sky-500/12 px-3 py-1 font-medium text-sky-200">{LANDING_HERO_CONTENT.premiumTag}</span>
+                <span class="rounded-none border border-amber-400/30 bg-amber-500/12 px-3 py-1 font-medium text-amber-200">{LANDING_HERO_CONTENT.oauthTag}</span>
+                <span class="rounded-none border border-cyan-400/30 bg-cyan-500/12 px-3 py-1 font-medium text-cyan-200">Up to {formatDelayMinutesLong(FREE_FEED_DELAY_MINUTES)} delay + capped feed on free tier</span>
+                <span class="rounded-none border border-sky-400/30 bg-sky-500/12 px-3 py-1 font-medium text-sky-200">{LANDING_HERO_CONTENT.premiumTag}</span>
               </div>
             </div>
 
             <aside class="rounded-3xl border border-white/10 bg-gradient-to-b from-zinc-950 to-zinc-900 p-5 text-white shadow-[0_20px_48px_rgba(0,0,0,0.42)] md:p-6">
               <div class="mb-4 flex items-center justify-between text-xs uppercase tracking-[0.16em] text-zinc-500">
                 <span>{LANDING_OPS_SNAPSHOT.heading}</span>
-                <span class="rounded-full bg-emerald-500/20 px-2 py-1 text-[10px] font-semibold text-emerald-300">{LANDING_OPS_SNAPSHOT.liveBadge}</span>
+                <span class="rounded-none bg-amber-500/20 px-2 py-1 text-[10px] font-semibold text-amber-300">{LANDING_OPS_SNAPSHOT.liveBadge}</span>
               </div>
               <div class="grid grid-cols-3 gap-2">
                 <For each={LANDING_OPS_SNAPSHOT.metrics}>
                   {(item) => (
-                    <div class="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <div class="rounded-sm border border-white/10 bg-white/5 p-3">
                       <p class="text-lg font-bold">{item.value}</p>
                       <p class="mt-1 text-[11px] text-zinc-500">{item.label}</p>
                     </div>
                   )}
                 </For>
               </div>
-              <div class="mt-4 space-y-2 rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-6 text-zinc-300">
+              <div class="mt-4 space-y-2 rounded-sm border border-white/10 bg-white/5 p-4 text-xs leading-6 text-zinc-300">
                 <For each={LANDING_OPS_SNAPSHOT.logs}>
-                  {(item, index) => <p classList={{ "text-emerald-300": index() === LANDING_OPS_SNAPSHOT.logs.length - 1 }}>{item}</p>}
+                  {(item, index) => <p classList={{ "text-amber-300": index() === LANDING_OPS_SNAPSHOT.logs.length - 1 }}>{item}</p>}
                 </For>
               </div>
             </aside>
@@ -104,7 +104,7 @@ export default function LandingRoute() {
             </p>
             <div class="mt-5 grid gap-3 md:grid-cols-3">
               {LANDING_CAPABILITIES.map((item) => (
-                <article class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <article class="rounded-sm border border-white/10 bg-white/[0.03] p-4">
                   <h3 class="text-base font-semibold text-white">{item.title}</h3>
                   <p class="mt-2 text-sm leading-6 text-zinc-400">{item.copy}</p>
                 </article>
@@ -116,7 +116,7 @@ export default function LandingRoute() {
             <h2 class="text-2xl font-bold tracking-tight text-white md:text-3xl">{LANDING_TESTIMONIALS_SECTION.heading}</h2>
             <div class="mt-4 grid gap-3 md:grid-cols-3">
               {LANDING_TESTIMONIALS.map((item) => (
-                <blockquote class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <blockquote class="rounded-sm border border-white/10 bg-white/[0.03] p-4">
                   <p class="text-sm leading-6 text-zinc-300">"{item.quote}"</p>
                   <footer class="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">{item.byline}</footer>
                 </blockquote>
@@ -136,17 +136,17 @@ export default function LandingRoute() {
             </div>
 
             <div class="mt-5 grid gap-3 md:grid-cols-2">
-              <article class="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+              <article class="rounded-sm border border-white/10 bg-white/[0.03] p-5">
                 <h3 class="text-lg font-semibold text-white">{LANDING_PRICING_COPY.freePlanName}</h3>
                 <p class="mt-1 text-sm text-zinc-400">{LANDING_PRICING_COPY.freePriceLabel}</p>
                 <ul class="mt-3 space-y-2 text-sm text-zinc-300">
                   <For each={LANDING_PRICING_COPY.freeFeatures}>{(feature) => <li>- {feature}</li>}</For>
                 </ul>
               </article>
-              <article class="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-5">
-                <h3 class="text-lg font-semibold text-emerald-100">{LANDING_PRICING_COPY.premiumPlanName}</h3>
-                <p class="mt-1 text-sm text-emerald-200">{LANDING_PRICING_COPY.premiumPriceLabel}</p>
-                <ul class="mt-3 space-y-2 text-sm text-emerald-100">
+              <article class="rounded-sm border border-amber-400/30 bg-amber-500/10 p-5">
+                <h3 class="text-lg font-semibold text-amber-100">{LANDING_PRICING_COPY.premiumPlanName}</h3>
+                <p class="mt-1 text-sm text-amber-200">{LANDING_PRICING_COPY.premiumPriceLabel}</p>
+                <ul class="mt-3 space-y-2 text-sm text-amber-100">
                   <For each={LANDING_PRICING_COPY.premiumFeatures}>{(feature) => <li>- {feature}</li>}</For>
                 </ul>
               </article>

@@ -37,6 +37,7 @@ export interface TelegramCanonicalEventSource {
   acquisition_method?: "telegram_public";
   domain_tags?: string[];
   subscriber_value_score?: number;
+  ingest_authority?: "scraper" | "mtproto";
   message_id: string;
   link: string;
   datetime: string;
@@ -81,6 +82,7 @@ export interface TelegramCanonicalEvent {
   source_type?: "official" | "milblog" | "osint" | "analysis" | "journalism";
   acquisition_method?: "telegram_public";
   subscriber_value_score?: number;
+  ingest_authority?: "scraper" | "mtproto";
   signal_profile_id?: string;
   signal_score?: number;
   signal_grade?: "A" | "B" | "C" | "D";

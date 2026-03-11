@@ -15,7 +15,7 @@ export default function FeedAccessNotice(props: { surface: string }) {
 
   return (
     <Show when={!entitlementView().entitled}>
-      <section class="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-emerald-500/10 px-4 py-3">
+      <section class="rounded-sm border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-amber-500/10 px-4 py-3">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-300">
@@ -28,7 +28,7 @@ export default function FeedAccessNotice(props: { surface: string }) {
           <div class="flex items-center gap-2">
             <A
               href="/billing"
-              class="inline-flex min-h-10 items-center justify-center rounded-xl border border-emerald-400/50 bg-emerald-500/15 px-3 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/25"
+              class="inline-flex min-h-10 items-center justify-center rounded-sm border border-amber-400/50 bg-amber-500/15 px-3 text-xs font-semibold text-amber-200 transition hover:bg-amber-500/25"
             >
               {UPGRADE_INSTANT_FEED_LABEL}
             </A>

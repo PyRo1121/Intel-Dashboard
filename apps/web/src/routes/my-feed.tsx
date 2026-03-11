@@ -120,25 +120,25 @@ export default function MyFeedPage() {
               <div class="space-y-3 text-sm">
                 <label class="block">
                   <span class="mb-1 block text-zinc-400">Favorite Telegram channels</span>
-                  <input value={favoriteChannelsInput()} onInput={(event) => setFavoriteChannelsInput(event.currentTarget.value)} class="w-full rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-white" />
+                  <input value={favoriteChannelsInput()} onInput={(event) => setFavoriteChannelsInput(event.currentTarget.value)} class="w-full rounded-sm border border-white/[0.08] bg-black/20 px-3 py-2 text-white" />
                 </label>
                 <label class="block">
                   <span class="mb-1 block text-zinc-400">Favorite OSINT providers</span>
-                  <input value={favoriteSourcesInput()} onInput={(event) => setFavoriteSourcesInput(event.currentTarget.value)} class="w-full rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-white" />
+                  <input value={favoriteSourcesInput()} onInput={(event) => setFavoriteSourcesInput(event.currentTarget.value)} class="w-full rounded-sm border border-white/[0.08] bg-black/20 px-3 py-2 text-white" />
                 </label>
                 <label class="block">
                   <span class="mb-1 block text-zinc-400">Watched regions</span>
-                  <input value={watchRegionsInput()} onInput={(event) => setWatchRegionsInput(event.currentTarget.value)} class="w-full rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-white" />
+                  <input value={watchRegionsInput()} onInput={(event) => setWatchRegionsInput(event.currentTarget.value)} class="w-full rounded-sm border border-white/[0.08] bg-black/20 px-3 py-2 text-white" />
                 </label>
                 <label class="block">
                   <span class="mb-1 block text-zinc-400">Watched tags</span>
-                  <input value={watchTagsInput()} onInput={(event) => setWatchTagsInput(event.currentTarget.value)} class="w-full rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-white" />
+                  <input value={watchTagsInput()} onInput={(event) => setWatchTagsInput(event.currentTarget.value)} class="w-full rounded-sm border border-white/[0.08] bg-black/20 px-3 py-2 text-white" />
                 </label>
                 <label class="block">
                   <span class="mb-1 block text-zinc-400">Watched categories</span>
-                  <input value={watchCategoriesInput()} onInput={(event) => setWatchCategoriesInput(event.currentTarget.value)} class="w-full rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-white" />
+                  <input value={watchCategoriesInput()} onInput={(event) => setWatchCategoriesInput(event.currentTarget.value)} class="w-full rounded-sm border border-white/[0.08] bg-black/20 px-3 py-2 text-white" />
                 </label>
-                <button type="button" disabled={saving()} onClick={() => void persistPreferences()} class="rounded-xl border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-sm font-medium text-violet-200">
+                <button type="button" disabled={saving()} onClick={() => void persistPreferences()} class="rounded-sm border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-sm font-medium text-violet-200">
                   {saving() ? "Saving..." : "Save preferences"}
                 </button>
                 <Show when={saved()}>
@@ -155,7 +155,7 @@ export default function MyFeedPage() {
                       type="button"
                       aria-pressed={scope() === entryScope}
                       onClick={() => setScope(entryScope)}
-                      class={`rounded-xl border px-3 py-1.5 text-[12px] ${scope() === entryScope ? "border-blue-400/40 bg-blue-500/15 text-blue-200" : "border-white/[0.08] bg-black/20 text-zinc-500"}`}
+                      class={`rounded-sm border px-3 py-1.5 text-[12px] ${scope() === entryScope ? "border-blue-400/40 bg-blue-500/15 text-blue-200" : "border-white/[0.08] bg-black/20 text-zinc-500"}`}
                     >
                       {entryScope}
                     </button>
@@ -169,20 +169,20 @@ export default function MyFeedPage() {
                     {(item) => (
                       <a href={item.link} target="_blank" rel="noopener noreferrer" class="block surface-card p-4 no-underline">
                         <div class="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
-                          <span class="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5">
+                          <span class="rounded-none border border-white/[0.08] bg-black/20 px-2 py-0.5">
                             {item.sourceSurface === "telegram" ? <MessageSquare size={12} class="mr-1 inline" /> : <Radio size={12} class="mr-1 inline" />}
                             {item.sourceSurface}
                           </span>
                           <Show when={item.signalGrade}>
-                            <span class="rounded-full border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-violet-200">
+                            <span class="rounded-none border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-violet-200">
                               {item.signalGrade} · {item.signalScore}
                             </span>
                           </Show>
                           <Show when={item.favoriteMatch}>
-                            <span class="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">Favorite match</span>
+                            <span class="rounded-none border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-amber-200">Favorite match</span>
                           </Show>
                           <Show when={item.watchMatch}>
-                            <span class="rounded-full border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-amber-200">Watched</span>
+                            <span class="rounded-none border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-amber-200">Watched</span>
                           </Show>
                           <span class="text-zinc-500"><Clock size={12} class="mr-1 inline" />{formatRelativeTimeAt(item.timestamp, nowMs())}</span>
                         </div>

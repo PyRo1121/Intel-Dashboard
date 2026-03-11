@@ -126,27 +126,27 @@ export default function Sidebar() {
       <A
         href={item.href}
         aria-label={item.label}
-        class={`group relative flex items-center gap-3 rounded-2xl transition-all duration-300 ease-out ${
+        class={`group relative flex items-center gap-3 rounded-sm transition-all duration-300 ease-out ${
           compact
             ? "justify-center px-3 py-3"
             : "px-3.5 py-2.5"
         } ${
           active()
-            ? "bg-white/[0.08] text-white shadow-sm"
-            : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300"
+            ? "bg-white/[0.04] text-white shadow-none"
+            : "text-zinc-500 hover:bg-white/[0.02] hover:text-zinc-300"
         }`}
         style={`animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: ${index * 40}ms`}
       >
         {/* Active indicator bar */}
         <Show when={active()}>
-          <div class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-emerald-400 shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
+          <div class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-none bg-[var(--color-accent)] shadow-[0_0_8px_var(--color-accent-dim)]" />
         </Show>
 
         {/* Icon container */}
         <div
-          class={`relative flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-xl transition-all duration-300 ${
+          class={`relative flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-sm transition-all duration-300 ${
             active()
-              ? "bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(34,197,94,0.15)]"
+              ? "bg-[var(--color-accent-dim)] text-[var(--color-accent)] shadow-[0_0_12px_var(--color-accent-dim)]"
               : "text-zinc-500 group-hover:text-zinc-300 group-hover:bg-white/[0.04]"
           }`}
         >
@@ -165,7 +165,7 @@ export default function Sidebar() {
 
         {/* Collapsed tooltip */}
         <Show when={compact}>
-          <div aria-hidden="true" class="absolute left-full ml-3 px-3 py-1.5 bg-zinc-900/95 backdrop-blur-xl border border-white/10 text-zinc-200 text-xs font-medium rounded-xl opacity-0 pointer-events-none group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-50 shadow-2xl shadow-black/50">
+          <div aria-hidden="true" class="absolute left-full ml-3 px-3 py-1.5 bg-zinc-900/95 backdrop-blur-xl border border-white/10 text-zinc-200 text-xs font-medium rounded-sm opacity-0 pointer-events-none group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-50 shadow-2xl shadow-black/50">
             {item.label}
           </div>
         </Show>
@@ -186,17 +186,17 @@ export default function Sidebar() {
       >
         <A href={DASHBOARD_HOME_PATH} aria-label="Intel Dashboard home" class="flex items-center gap-3 group">
           <div class="relative">
-            <div class="w-10 h-10 rounded-2xl gradient-accent flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:shadow-emerald-500/30 transition-all duration-300 group-hover:scale-105">
+            <div class="w-10 h-10 rounded-sm bg-[var(--color-accent)] flex items-center justify-center shadow-none group-hover:shadow-[4px_4px_0px_rgba(255,59,0,0.5)] transition-all duration-300">
               <Shield size={18} class="text-white drop-shadow-sm" />
             </div>
-            <div class="absolute -inset-1 rounded-2xl bg-emerald-500/10 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10" />
+            <div class="absolute -inset-1 rounded-sm bg-[var(--color-accent-dim)] blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10" />
           </div>
           <Show when={!compact()}>
             <div class="flex flex-col">
-              <span class="text-[15px] font-bold text-white tracking-tight leading-none">
+              <span class="text-[16px] font-bold text-white tracking-widest uppercase font-['Chakra_Petch'] leading-none">
                 {SITE_NAME}
               </span>
-              <span class="text-[10px] font-medium text-zinc-600 tracking-widest uppercase mt-0.5">
+              <span class="text-[10px] font-medium text-[var(--color-accent)] tracking-[0.2em] uppercase mt-1 font-['Fira_Code']">
                 {SITE_OPERATIONS_LABEL}
               </span>
             </div>
@@ -210,7 +210,7 @@ export default function Sidebar() {
             aria-label="Collapse sidebar"
             aria-controls="desktop-navigation"
             aria-expanded={!collapsed()}
-            class="hidden md:flex items-center justify-center w-8 h-8 rounded-xl text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04] transition-all duration-200"
+            class="hidden md:flex items-center justify-center w-8 h-8 rounded-sm text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04] border border-transparent hover:border-white/[0.04] transition-all duration-200"
             title="Collapse sidebar (Ctrl+B)"
           >
             <PanelLeftClose size={16} />
@@ -230,7 +230,7 @@ export default function Sidebar() {
             aria-label="Expand sidebar"
             aria-controls="desktop-navigation"
             aria-expanded={!collapsed()}
-            class="flex items-center justify-center w-8 h-8 rounded-xl text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04] transition-all duration-200"
+            class="flex items-center justify-center w-8 h-8 rounded-sm text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04] transition-all duration-200"
             title="Expand sidebar (Ctrl+B)"
           >
             <PanelLeft size={16} />
@@ -251,7 +251,7 @@ export default function Sidebar() {
       </nav>
 
       {/* User + Status footer */}
-      <div class={`border-t border-white/[0.04] ${compact() ? "px-3 py-3" : "px-4 py-3"} space-y-3`}>
+      <div class={`border-t border-white/[0.04] ${compact() ? "px-3 py-3" : "px-4 py-3"} space-y-3 bg-[#0a0c10]`}>
         {/* User profile */}
         {(() => {
           try {
@@ -274,7 +274,7 @@ export default function Sidebar() {
                           <Show
                             when={userDisplay().avatarUrl.length > 0 && !avatarFailed()}
                             fallback={
-                              <div class="w-7 h-7 rounded-xl flex-shrink-0 ring-1 ring-white/[0.06] bg-zinc-800 text-zinc-300 flex items-center justify-center text-[11px] font-semibold uppercase">
+                              <div class="w-7 h-7 rounded-sm flex-shrink-0 ring-1 ring-white/[0.06] bg-zinc-800 text-zinc-300 flex items-center justify-center text-[11px] font-semibold uppercase">
                                 {userDisplay().avatarLetter}
                               </div>
                             }
@@ -282,20 +282,20 @@ export default function Sidebar() {
                             <img
                               src={userDisplay().avatarUrl}
                               alt={userDisplay().displayName}
-                              class="w-7 h-7 rounded-xl flex-shrink-0 ring-1 ring-white/[0.06]"
+                              class="w-7 h-7 rounded-sm flex-shrink-0 ring-1 ring-white/[0.06]"
                               referrerpolicy="no-referrer"
                               onError={() => setAvatarFailed(true)}
                             />
                           </Show>
                           <Show when={!compact()}>
                             <div class="flex-1 min-w-0">
-                              <p class="text-[12px] font-medium text-zinc-300 truncate leading-tight">
+                              <p class="text-[12px] font-medium text-zinc-300 truncate leading-tight font-['Chakra_Petch']">
                                 {userDisplay().displayName}
                               </p>
-                              <p class="text-[10px] text-zinc-600 truncate leading-tight">
+                              <p class="text-[10px] text-zinc-500 truncate leading-tight font-['Fira_Code']">
                                 {userDisplay().displayLogin}
                               </p>
-                              <p class={`text-[10px] truncate leading-tight ${planTone()}`}>
+                              <p class={`text-[10px] truncate leading-tight mt-0.5 font-['Fira_Code'] ${planTone()}`}>
                                 <span>{planLabel()}</span>
                                 <Show when={!entitled()}>
                                   <span>{` • ${formatDelayMinutesShortLabel(delayMinutes())} delay`}</span>
@@ -306,7 +306,7 @@ export default function Sidebar() {
                               type="button"
                               onClick={() => auth.logout()}
                               aria-label="Sign out"
-                              class="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-xl text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04] transition-all duration-200"
+                              class="flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-sm text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] transition-all duration-200 border border-transparent hover:border-white/[0.04]"
                               title="Sign out"
                             >
                               <LogOut size={14} />
@@ -327,16 +327,16 @@ export default function Sidebar() {
         {/* Status indicator */}
         <div class={`flex items-center gap-2.5 ${compact() ? "justify-center" : ""}`}>
           <div class="relative flex-shrink-0">
-            <div class="w-2 h-2 rounded-full bg-emerald-400 glow-emerald-dot" />
-            <div class="absolute inset-0 w-2 h-2 rounded-full bg-emerald-400 animate-ping opacity-20" />
+            <div class="w-2 h-2 rounded-none bg-[var(--color-accent)] shadow-[0_0_6px_var(--color-accent)]" />
+            <div class="absolute inset-0 w-2 h-2 rounded-none bg-[var(--color-accent)] animate-ping opacity-20" />
           </div>
           <Show when={!compact()}>
             <div class="flex items-center justify-between flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
-                <Activity size={12} class="text-emerald-500/60" />
-                <span class="text-[11px] text-zinc-500 font-medium glow-emerald-text">Live</span>
+                <Activity size={12} class="text-[var(--color-accent)] opacity-80" />
+                <span class="text-[11px] text-zinc-400 font-medium font-['Chakra_Petch'] uppercase tracking-widest text-shadow-[0_0_8px_var(--color-accent-dim)]">Live</span>
               </div>
-              <span class="text-[10px] text-zinc-700 font-mono-data">v0.2</span>
+              <span class="text-[10px] text-zinc-600 font-['Fira_Code']">v0.2</span>
             </div>
           </Show>
         </div>
@@ -348,7 +348,7 @@ export default function Sidebar() {
             return (
                               <A
                                 href="/billing"
-                                class="block w-full rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-center text-[11px] font-medium text-amber-200 hover:bg-amber-500/15 transition-colors"
+                                class="block w-full rounded-sm border border-[var(--color-accent)] bg-[var(--color-accent-dim)] px-3 py-2 text-center text-[10px] font-['Chakra_Petch'] uppercase tracking-widest font-semibold text-[var(--color-accent)] hover:bg-[var(--color-accent)] hover:text-white transition-colors"
                               >
                                 {UPGRADE_INSTANT_FEED_LABEL}
                               </A>
@@ -381,7 +381,7 @@ export default function Sidebar() {
         onClick={() => setMobileOpen(true)}
         aria-expanded={mobileOpen()}
         aria-controls="mobile-navigation"
-        class="md:hidden fixed top-4 left-4 z-50 flex items-center justify-center w-11 h-11 rounded-2xl surface-card border border-white/[0.06] text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-all duration-200 shadow-2xl shadow-black/40"
+        class="md:hidden fixed top-4 left-4 z-50 flex items-center justify-center w-11 h-11 rounded-sm surface-card border border-white/[0.06] text-zinc-400 hover:text-white hover:bg-white/[0.06] transition-all duration-200 shadow-2xl shadow-black/40"
         aria-label="Open navigation"
       >
         <Menu size={20} />
@@ -409,7 +409,7 @@ export default function Sidebar() {
           type="button"
           onClick={() => setMobileOpen(false)}
           aria-controls="mobile-navigation"
-          class="absolute top-5 right-4 flex items-center justify-center w-8 h-8 rounded-xl text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.06] transition-all duration-200"
+          class="absolute top-5 right-4 flex items-center justify-center w-8 h-8 rounded-sm text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.06] transition-all duration-200"
           aria-label="Close navigation"
         >
           <X size={16} />

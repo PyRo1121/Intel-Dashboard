@@ -159,7 +159,7 @@ function LoadingScreen() {
   return (
     <div class="fixed inset-0 flex items-center justify-center" style="background: radial-gradient(ellipse at 50% 30%, rgba(16,185,129,0.08) 0%, rgba(9,9,11,1) 70%);">
       <div class="flex flex-col items-center gap-4">
-        <div class="w-12 h-12 rounded-2xl gradient-accent flex items-center justify-center shadow-lg shadow-emerald-500/20 animate-pulse">
+        <div class="w-12 h-12 rounded-sm gradient-accent flex items-center justify-center shadow-lg shadow-amber-500/20 animate-pulse">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white" aria-hidden="true">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
           </svg>
@@ -194,11 +194,11 @@ function LoginScreen() {
     >
       {/* Ambient glow orbs */}
       <div
-        class="absolute w-[500px] h-[500px] rounded-full opacity-[0.03] pointer-events-none"
+        class="absolute w-[500px] h-[500px] rounded-none opacity-[0.03] pointer-events-none"
         style="background: radial-gradient(circle, #10b981 0%, transparent 70%); top: 10%; left: 30%; filter: blur(80px);"
       />
       <div
-        class="absolute w-[400px] h-[400px] rounded-full opacity-[0.02] pointer-events-none"
+        class="absolute w-[400px] h-[400px] rounded-none opacity-[0.02] pointer-events-none"
         style="background: radial-gradient(circle, #6366f1 0%, transparent 70%); bottom: 20%; right: 20%; filter: blur(80px);"
       />
 
@@ -210,12 +210,12 @@ function LoginScreen() {
         {/* Shield logo */}
         <div class="flex justify-center mb-6">
           <div class="relative">
-            <div class="w-16 h-16 rounded-[1.25rem] gradient-accent flex items-center justify-center shadow-lg shadow-emerald-500/25">
+            <div class="w-16 h-16 rounded-[1.25rem] gradient-accent flex items-center justify-center shadow-lg shadow-amber-500/25">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white drop-shadow-sm" aria-hidden="true">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
               </svg>
             </div>
-            <div class="absolute -inset-2 rounded-[1.5rem] bg-emerald-500/10 blur-xl -z-10" />
+            <div class="absolute -inset-2 rounded-[1.5rem] bg-amber-500/10 blur-xl -z-10" />
           </div>
         </div>
 
@@ -240,7 +240,7 @@ function LoginScreen() {
           <a
             href={buildAuthProviderHref("github", "login", nextPath)}
             onClick={(event) => navigateTo(event, buildAuthProviderHref("github", "login", nextPath))}
-            class="group relative flex items-center justify-center gap-3 w-full py-3.5 px-6 rounded-2xl font-semibold text-[14px] text-white transition-all duration-300 ease-out hover:bg-white/[0.12] hover:border-white/[0.12] hover:shadow-[0_8px_24px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.06)_inset]"
+            class="group relative flex items-center justify-center gap-3 w-full py-3.5 px-6 rounded-sm font-semibold text-[14px] text-white transition-all duration-300 ease-out hover:bg-white/[0.12] hover:border-white/[0.12] hover:shadow-[0_8px_24px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.06)_inset]"
             style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 4px 12px rgba(0,0,0,0.2);"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" class="flex-shrink-0" aria-hidden="true">
@@ -259,7 +259,7 @@ function LoginScreen() {
           <a
             href={buildAuthProviderHref("x", "login", nextPath)}
             onClick={(event) => navigateTo(event, buildAuthProviderHref("x", "login", nextPath))}
-            class="group relative flex items-center justify-center gap-3 w-full py-3.5 px-6 rounded-2xl font-semibold text-[14px] text-white transition-all duration-300 ease-out hover:bg-white/[0.12] hover:border-white/[0.12] hover:shadow-[0_8px_24px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.06)_inset]"
+            class="group relative flex items-center justify-center gap-3 w-full py-3.5 px-6 rounded-sm font-semibold text-[14px] text-white transition-all duration-300 ease-out hover:bg-white/[0.12] hover:border-white/[0.12] hover:shadow-[0_8px_24px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.06)_inset]"
             style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 4px 12px rgba(0,0,0,0.2);"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" class="flex-shrink-0" aria-hidden="true">
@@ -314,14 +314,14 @@ function SessionUnavailableScreen(props: { onRetry: () => void; loginHref: strin
           <button
             type="button"
             onClick={props.onRetry}
-            class="w-full py-3.5 px-6 rounded-2xl font-semibold text-[14px] text-white transition-all duration-300 ease-out hover:bg-white/[0.12] hover:border-white/[0.12]"
+            class="w-full py-3.5 px-6 rounded-sm font-semibold text-[14px] text-white transition-all duration-300 ease-out hover:bg-white/[0.12] hover:border-white/[0.12]"
             style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.06); box-shadow: 0 4px 12px rgba(0,0,0,0.2);"
           >
             Retry Session Check
           </button>
           <a
             href={props.loginHref}
-            class="block w-full py-3.5 px-6 rounded-2xl font-semibold text-[14px] text-zinc-300 transition-all duration-300 ease-out hover:bg-white/[0.08] hover:text-white"
+            class="block w-full py-3.5 px-6 rounded-sm font-semibold text-[14px] text-zinc-300 transition-all duration-300 ease-out hover:bg-white/[0.08] hover:text-white"
             style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);"
           >
             Open Login

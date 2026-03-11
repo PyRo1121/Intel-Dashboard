@@ -84,13 +84,18 @@ export function computeTelegramSourcePerformanceScore(args: {
   const followOnRate = followOnReports / observedReports;
   const corroborationRate = corroboratedReports / observedReports;
   const singleSourceRate = singleSourceReports / observedReports;
+  const highVolumeFactor = clamp((observedReports - 12) / 36, 0, 1);
+  const lowYieldFactor = clamp((0.5 - leadRate) / 0.5, 0, 1);
+  const corroborationDeficitFactor = clamp((0.5 - corroborationRate) / 0.5, 0, 1);
+  const chatterPenalty = highVolumeFactor * (lowYieldFactor * 10 + corroborationDeficitFactor * 6);
 
   const rawScore =
     clamp(args.baseSubscriberValue, 0, 100) * 0.55 +
     leadRate * 26 +
     corroborationRate * 10 -
     followOnRate * 18 -
-    singleSourceRate * 4 +
+    singleSourceRate * 4 -
+    chatterPenalty +
     trustBoost(args.trustTier) +
     latencyBoost(args.latencyTier) +
     recentLeadBoost(args.nowMs, args.lastLeadAtMs);

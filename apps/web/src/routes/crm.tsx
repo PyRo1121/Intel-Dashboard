@@ -264,7 +264,7 @@ export default function CrmRoute() {
             </p>
           </div>
           <div class="flex items-center gap-2">
-            <span class={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${qualityBadgeTone()}`}>
+            <span class={`inline-flex rounded-none border px-3 py-1 text-xs font-semibold ${qualityBadgeTone()}`}>
               Data Quality
             </span>
             <button
@@ -278,25 +278,25 @@ export default function CrmRoute() {
         </header>
 
         <Show when={!isOwner()}>
-          <div class="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          <div class="rounded-sm border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
             Owner access required.
           </div>
         </Show>
 
         <Show when={isOwner()}>
           <Show when={!crm.loading} fallback={
-            <div class="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+            <div class="rounded-sm border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
               Loading owner CRM data...
             </div>
           }>
             <Show when={crm()?.ok !== false} fallback={
-              <div class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              <div class="rounded-sm border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
                 {crmError() || "Unable to load CRM data."}
               </div>
             }>
               <Show when={crmDegradedMessage()}>
                 {(message) => (
-                  <div class={`mb-4 rounded-2xl border px-4 py-3 text-sm ${crmDegradedTone()}`} data-testid="crm-summary-warning">
+                  <div class={`mb-4 rounded-sm border px-4 py-3 text-sm ${crmDegradedTone()}`} data-testid="crm-summary-warning">
                     {message()}
                   </div>
                 )}
@@ -316,7 +316,7 @@ export default function CrmRoute() {
                 </article>
                 <article class="intel-panel px-4 py-3" data-testid="crm-summary-trial-paid-7d">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Trial→Paid 7d</p>
-                  <p class="mt-1 text-2xl font-semibold text-emerald-300">{formatPercent(crmCommandCenter()?.funnel?.trialToPaidRate7dPct)}</p>
+                  <p class="mt-1 text-2xl font-semibold text-amber-300">{formatPercent(crmCommandCenter()?.funnel?.trialToPaidRate7dPct)}</p>
                 </article>
                 <article class="intel-panel px-4 py-3" data-testid="crm-summary-churn-30d">
                   <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Churn 30d</p>
@@ -351,27 +351,27 @@ export default function CrmRoute() {
                 <article class="intel-panel p-4">
                   <h2 class="text-base font-semibold text-zinc-100">Revenue Command Center</h2>
                   <div class="mt-3 grid gap-3 md:grid-cols-2">
-                    <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
+                    <div class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-2">
                       <p class="text-[11px] text-zinc-500">ARR</p>
                       <p class="text-lg font-semibold text-zinc-100">{formatUsd(getCrmArrActiveUsd(crmResult()))}</p>
                     </div>
-                    <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
+                    <div class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-2">
                       <p class="text-[11px] text-zinc-500">ARPU Active</p>
                       <p class="text-lg font-semibold text-zinc-100">{formatUsd(crmCommandCenter()?.revenue?.arpuActiveUsd)}</p>
                     </div>
-                    <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
+                    <div class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-2">
                       <p class="text-[11px] text-zinc-500">Subscriber Penetration</p>
                       <p class="text-lg font-semibold text-zinc-100">{formatPercent(crmCommandCenter()?.funnel?.subscriberPenetrationPct)}</p>
                     </div>
-                    <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
+                    <div class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-2">
                       <p class="text-[11px] text-zinc-500">Trialing Share</p>
                       <p class="text-lg font-semibold text-zinc-100">{formatPercent(crmCommandCenter()?.funnel?.trialingSharePct)}</p>
                     </div>
-                    <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
+                    <div class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-2">
                       <p class="text-[11px] text-zinc-500">Net Subscriber Delta 7d</p>
                       <p class="text-lg font-semibold text-zinc-100">{formatNumber(crmCommandCenter()?.risk?.netSubscriberDelta7d)}</p>
                     </div>
-                    <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
+                    <div class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-2">
                       <p class="text-[11px] text-zinc-500">Cancellations 7d</p>
                       <p class="text-lg font-semibold text-zinc-100">{formatNumber(getCrmCancellations7d(crmResult()))}</p>
                     </div>
@@ -383,7 +383,7 @@ export default function CrmRoute() {
                   <div class="mt-3 space-y-2 text-sm">
                     <For each={getCrmDataQualityRows(crmDataQuality())}>
                       {(item) => (
-                        <div class="flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+                        <div class="flex items-center justify-between rounded-sm border border-white/10 bg-white/[0.02] px-3 py-2">
                           <span class="text-zinc-400">{item.label}</span>
                           <span class="font-semibold text-zinc-100">{item.value}</span>
                         </div>
@@ -408,7 +408,7 @@ export default function CrmRoute() {
                           onClick={() => setAiWindow(window)}
                           data-testid={`crm-ai-window-${window}`}
                           aria-pressed={aiWindow() === window}
-                          class={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                          class={`rounded-none border px-3 py-1.5 text-xs font-medium transition ${
                             aiWindow() === window
                               ? "border-cyan-400/60 bg-cyan-500/12 text-cyan-200"
                               : "border-white/10 bg-white/[0.03] text-zinc-400 hover:border-cyan-400/40 hover:text-cyan-200"
@@ -430,62 +430,62 @@ export default function CrmRoute() {
                 </div>
 
                 <Show when={!aiTelemetry.loading} fallback={
-                  <div class="mt-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 text-sm text-zinc-400" data-testid="crm-ai-surface-loading">
+                  <div class="mt-3 rounded-sm border border-white/10 bg-white/[0.02] px-3 py-3 text-sm text-zinc-400" data-testid="crm-ai-surface-loading">
                     Loading AI telemetry...
                   </div>
                 }>
                   <Show when={aiTelemetry() && aiTelemetry()?.ok !== false} fallback={
-                    <div class="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" data-testid="crm-ai-surface-unavailable">
+                    <div class="mt-3 rounded-sm border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" data-testid="crm-ai-surface-unavailable">
                       {aiError() || "Unable to load AI telemetry."}
                     </div>
                   }>
                     <section class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6" data-testid="crm-ai-surface-configured">
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                      <article class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Calls</p>
                         <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiResult()?.summary?.calls)}</p>
                       </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                      <article class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Prompt Tokens</p>
                         <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiResult()?.summary?.promptTokens)}</p>
                       </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                      <article class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Completion Tokens</p>
                         <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiResult()?.summary?.completionTokens)}</p>
                       </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                      <article class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Output/Input</p>
                         <p class="mt-1 text-2xl font-semibold text-cyan-300">{formatPercent((aiResult()?.summary?.outputInputRatio ?? 0) * 100)}</p>
                       </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                      <article class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Avg Latency</p>
                         <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiResult()?.summary?.avgDurationMs)}ms</p>
                       </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                      <article class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">P95 Latency</p>
                         <p class="mt-1 text-2xl font-semibold text-zinc-100">{formatNumber(aiResult()?.summary?.p95DurationMs)}ms</p>
                       </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
+                      <article class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Cache Hit Rate</p>
-                        <p class="mt-1 text-2xl font-semibold text-emerald-300">{formatPercent(aiCacheHitPct())}</p>
+                        <p class="mt-1 text-2xl font-semibold text-amber-300">{formatPercent(aiCacheHitPct())}</p>
                       </article>
                     </section>
 
                     <section class="mt-4 grid gap-3 xl:grid-cols-3">
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                      <article class="rounded-sm border border-white/10 bg-white/[0.02] px-4 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Failure Hotspot</p>
                         <p class="mt-1 text-sm font-semibold text-zinc-100">{getAiTelemetryLabel(aiWorstFailureLane()?.label)}</p>
                         <p class="mt-2 text-xs text-zinc-400">
                           {formatNumber(aiWorstFailureLane()?.failures)} failures across {formatNumber(aiWorstFailureLane()?.calls)} calls
                         </p>
                       </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                      <article class="rounded-sm border border-white/10 bg-white/[0.02] px-4 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Slowest Lane (P95)</p>
                         <p class="mt-1 text-sm font-semibold text-zinc-100">{getAiTelemetryLabel(aiSlowestLane()?.label)}</p>
                         <p class="mt-2 text-xs text-zinc-400">
                           {formatNumber(aiSlowestLane()?.p95DurationMs)}ms p95 latency
                         </p>
                       </article>
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                      <article class="rounded-sm border border-white/10 bg-white/[0.02] px-4 py-3">
                         <p class="text-[11px] uppercase tracking-[0.12em] text-zinc-500">Most Output-Heavy Lane</p>
                         <p class="mt-1 text-sm font-semibold text-zinc-100">{getAiTelemetryLabel(aiHungriestLane()?.label)}</p>
                         <p class="mt-2 text-xs text-zinc-400">
@@ -495,7 +495,7 @@ export default function CrmRoute() {
                     </section>
 
                     <section class="mt-4 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-                      <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                      <article class="rounded-sm border border-white/10 bg-white/[0.02] p-3">
                         <div class="flex items-center justify-between">
                           <h3 class="text-sm font-semibold text-zinc-100">Lane Spend</h3>
                           <span class="text-[11px] text-zinc-500">top lanes by total tokens</span>
@@ -505,13 +505,13 @@ export default function CrmRoute() {
                             {(item) => {
                               const width = `${Math.max(8, ((item.totalTokens ?? 0) / aiLaneMaxTokens()) * 100)}%`;
                               return (
-                                <div class="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                                <div class="rounded-sm border border-white/10 bg-black/20 px-3 py-2">
                                   <div class="flex items-center justify-between gap-3">
                                     <span class="text-sm font-medium text-zinc-100">{getAiTelemetryLabel(item.label)}</span>
                                     <span class="text-xs text-zinc-400">{formatNumber(item.totalTokens)} tokens</span>
                                   </div>
-                                  <div class="mt-2 h-2 overflow-hidden rounded-full bg-white/5">
-                                    <div class="h-full rounded-full bg-gradient-to-r from-cyan-400 via-sky-400 to-emerald-400" style={{ width }} />
+                                  <div class="mt-2 h-2 overflow-hidden rounded-none bg-white/5">
+                                    <div class="h-full rounded-none bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-400" style={{ width }} />
                                   </div>
                                   <div class="mt-2 flex flex-wrap gap-3 text-[11px] text-zinc-500">
                                     <span>{formatNumber(item.calls)} calls</span>
@@ -529,12 +529,12 @@ export default function CrmRoute() {
                       </article>
 
                       <div class="grid gap-4">
-                        <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                        <article class="rounded-sm border border-white/10 bg-white/[0.02] p-3">
                           <h3 class="text-sm font-semibold text-zinc-100">Model Spend</h3>
                           <div class="mt-3 space-y-2">
                             <For each={readAiTelemetryItems(aiResult()?.models)}>
                               {(item) => (
-                                <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                                <div class="flex items-center justify-between rounded-sm border border-white/10 bg-black/20 px-3 py-2 text-xs">
                                   <span class="text-zinc-300">{getAiTelemetryLabel(item.label)}</span>
                                   <span class="font-medium text-zinc-100">{formatNumber(item.totalTokens)} tokens</span>
                                 </div>
@@ -543,12 +543,12 @@ export default function CrmRoute() {
                           </div>
                         </article>
 
-                        <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                        <article class="rounded-sm border border-white/10 bg-white/[0.02] p-3">
                           <h3 class="text-sm font-semibold text-zinc-100">Cache + Outcomes</h3>
                           <div class="mt-3 grid gap-2">
                             <For each={readAiTelemetryItems(aiResult()?.cacheStatuses)}>
                               {(item) => (
-                                <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                                <div class="flex items-center justify-between rounded-sm border border-white/10 bg-black/20 px-3 py-2 text-xs">
                                   <span class="text-zinc-300">{getAiTelemetryLabel(item.label)}</span>
                                   <span class="font-medium text-zinc-100">{formatNumber(item.calls)}</span>
                                 </div>
@@ -556,7 +556,7 @@ export default function CrmRoute() {
                             </For>
                             <For each={readAiTelemetryItems(aiResult()?.outcomes)}>
                               {(item) => (
-                                <div class="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                                <div class="flex items-center justify-between rounded-sm border border-white/10 bg-black/20 px-3 py-2 text-xs">
                                   <span class="text-zinc-300">{getAiTelemetryLabel(item.label)}</span>
                                   <span class="font-medium text-zinc-100">{formatNumber(item.calls)}</span>
                                 </div>
@@ -567,7 +567,7 @@ export default function CrmRoute() {
                       </div>
                     </section>
 
-                    <section class="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                    <section class="mt-4 rounded-sm border border-white/10 bg-white/[0.02] p-3">
                       <div class="flex items-center justify-between">
                         <h3 class="text-sm font-semibold text-zinc-100">Recent Series</h3>
                         <span class="text-[11px] text-zinc-500">generated {formatTime(getCrmGeneratedAtMs(aiResult()))}</span>
@@ -579,8 +579,8 @@ export default function CrmRoute() {
                             return (
                               <div class="grid gap-1 md:grid-cols-[160px_1fr_auto_auto] md:items-center">
                                 <span class="text-[11px] text-zinc-500">{point.bucket || "—"}</span>
-                                <div class="h-2 overflow-hidden rounded-full bg-white/5">
-                                  <div class="h-full rounded-full bg-gradient-to-r from-fuchsia-400 via-cyan-400 to-emerald-400" style={{ width }} />
+                                <div class="h-2 overflow-hidden rounded-none bg-white/5">
+                                  <div class="h-full rounded-none bg-gradient-to-r from-fuchsia-400 via-cyan-400 to-amber-400" style={{ width }} />
                                 </div>
                                 <span class="text-[11px] text-zinc-400">{formatNumber(point.calls)} calls</span>
                                 <span class="text-[11px] text-zinc-400">{formatNumber(point.totalTokens)} tokens</span>
@@ -608,14 +608,14 @@ export default function CrmRoute() {
                     value={searchTerm()}
                     onInput={(event) => setSearchTerm(event.currentTarget.value)}
                     placeholder="Search name, login, email, provider"
-                    class="h-10 rounded-xl border border-white/10 bg-white/[0.02] px-3 text-sm text-zinc-100 outline-none transition focus:border-sky-400/60"
+                    class="h-10 rounded-sm border border-white/10 bg-white/[0.02] px-3 text-sm text-zinc-100 outline-none transition focus:border-sky-400/60"
                   />
                   <select
                     aria-label="CRM status filter"
                     data-testid="crm-status-filter"
                     value={statusFilter()}
                     onChange={(event) => setStatusFilter(event.currentTarget.value as "all" | "active" | "trialing" | "canceled" | "expired" | "none")}
-                    class="h-10 rounded-xl border border-white/10 bg-white/[0.02] px-3 text-sm text-zinc-100 outline-none transition focus:border-sky-400/60"
+                    class="h-10 rounded-sm border border-white/10 bg-white/[0.02] px-3 text-sm text-zinc-100 outline-none transition focus:border-sky-400/60"
                   >
                     <option value="all">All statuses</option>
                     <option value="active">Active</option>
@@ -673,7 +673,7 @@ export default function CrmRoute() {
                                 type="button"
                                 aria-label={`Manage ${entry.name}`}
                                 onClick={() => void loadCustomerOps(entry.id)}
-                                class={`rounded-lg border px-2 py-1 text-xs transition ${
+                                class={`rounded-sm border px-2 py-1 text-xs transition ${
                                   selectedUserId() === entry.id
                                     ? "border-cyan-400/50 bg-cyan-500/10 text-cyan-200"
                                     : "border-white/15 bg-white/[0.03] text-zinc-200 hover:border-cyan-400/40 hover:text-cyan-200"
@@ -711,31 +711,31 @@ export default function CrmRoute() {
                 </div>
 
                 <Show when={selectedUser()} fallback={
-                  <div class="mt-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 text-sm text-zinc-400" data-testid="crm-no-selected-user">
+                  <div class="mt-3 rounded-sm border border-white/10 bg-white/[0.02] px-3 py-3 text-sm text-zinc-400" data-testid="crm-no-selected-user">
                     Select a user from Customer 360 and click <span class="font-semibold text-zinc-200">Manage</span> to unlock Stripe operations.
                   </div>
                 }>
                   <div class="mt-3 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-                    <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3" data-testid="crm-selected-user-panel">
+                    <article class="rounded-sm border border-white/10 bg-white/[0.02] p-3" data-testid="crm-selected-user-panel">
                       <p class="text-xs uppercase tracking-[0.11em] text-zinc-500">Selected User</p>
                       <p class="mt-1 text-sm font-semibold text-zinc-100">
                         {selectedUserDisplayName()} <span class="text-zinc-400">({selectedUserSecondaryLabel()})</span>
                       </p>
                       <p class="text-xs text-zinc-400">{selectedUser()?.email}</p>
                       <div class="mt-3 grid gap-2 sm:grid-cols-2">
-                        <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
+                        <div class="rounded-sm border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Account Status</p>
                           <p class="text-sm font-medium text-zinc-100">{getCrmCustomerAccountStatusLabel(selectedCustomerResult())}</p>
                         </div>
-                        <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
+                        <div class="rounded-sm border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Stripe Customer</p>
                           <p class="truncate text-sm font-medium text-zinc-100">{getCrmCustomerStripeCustomerId(selectedCustomerResult())}</p>
                         </div>
-                        <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
+                        <div class="rounded-sm border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Stripe Subscription</p>
                           <p class="truncate text-sm font-medium text-zinc-100">{getCrmCustomerStripeSubscriptionId(selectedCustomerResult())}</p>
                         </div>
-                        <div class="rounded-lg border border-white/10 bg-white/[0.02] px-2 py-2">
+                        <div class="rounded-sm border border-white/10 bg-white/[0.02] px-2 py-2">
                           <p class="text-[11px] text-zinc-500">Current Period End</p>
                           <p class="text-sm font-medium text-zinc-100">{formatTime(getCrmCustomerCurrentPeriodEndMs(selectedCustomerResult()))}</p>
                         </div>
@@ -754,14 +754,14 @@ export default function CrmRoute() {
                       </Show>
                     </article>
 
-                    <article class="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                    <article class="rounded-sm border border-white/10 bg-white/[0.02] p-3">
                       <p class="text-xs uppercase tracking-[0.11em] text-zinc-500">Billing Actions</p>
                       <div class="mt-3 grid gap-2">
                         <button
                           type="button"
                           onClick={() => void runCancelSubscription(true)}
                           disabled={opsBusy()}
-                          class="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left text-sm font-medium text-amber-200 transition hover:border-amber-400/60 disabled:opacity-60"
+                          class="rounded-sm border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left text-sm font-medium text-amber-200 transition hover:border-amber-400/60 disabled:opacity-60"
                         >
                           Cancel At Period End
                         </button>
@@ -769,11 +769,11 @@ export default function CrmRoute() {
                           type="button"
                           onClick={() => void runCancelSubscription(false)}
                           disabled={opsBusy()}
-                          class="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-left text-sm font-medium text-rose-200 transition hover:border-rose-400/60 disabled:opacity-60"
+                          class="rounded-sm border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-left text-sm font-medium text-rose-200 transition hover:border-rose-400/60 disabled:opacity-60"
                         >
                           Cancel Immediately
                         </button>
-                        <div class="mt-1 rounded-lg border border-white/10 bg-white/[0.02] p-2">
+                        <div class="mt-1 rounded-sm border border-white/10 bg-white/[0.02] p-2">
                           <p class="text-[11px] text-zinc-500">Refund Controls</p>
                           <div class="mt-2 grid gap-2 sm:grid-cols-[140px_1fr_auto]">
                             <input
@@ -783,13 +783,13 @@ export default function CrmRoute() {
                               value={refundAmountUsd()}
                               onInput={(event) => setRefundAmountUsd(event.currentTarget.value)}
                               placeholder="Amount USD (blank=full)"
-                              class="h-9 rounded-lg border border-white/10 bg-black/20 px-2 text-xs text-zinc-100 outline-none transition focus:border-cyan-400/60"
+                              class="h-9 rounded-sm border border-white/10 bg-black/20 px-2 text-xs text-zinc-100 outline-none transition focus:border-cyan-400/60"
                             />
                             <select
                               aria-label="Refund reason"
                               value={refundReason()}
                               onChange={(event) => setRefundReason(event.currentTarget.value as "requested_by_customer" | "duplicate" | "fraudulent")}
-                              class="h-9 rounded-lg border border-white/10 bg-black/20 px-2 text-xs text-zinc-100 outline-none transition focus:border-cyan-400/60"
+                              class="h-9 rounded-sm border border-white/10 bg-black/20 px-2 text-xs text-zinc-100 outline-none transition focus:border-cyan-400/60"
                             >
                               <option value="requested_by_customer">Requested by customer</option>
                               <option value="duplicate">Duplicate</option>
@@ -799,7 +799,7 @@ export default function CrmRoute() {
                               type="button"
                               onClick={() => void runRefund()}
                               disabled={opsBusy()}
-                              class="h-9 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 text-xs font-medium text-cyan-200 transition hover:border-cyan-400/60 disabled:opacity-60"
+                              class="h-9 rounded-sm border border-cyan-500/40 bg-cyan-500/10 px-3 text-xs font-medium text-cyan-200 transition hover:border-cyan-400/60 disabled:opacity-60"
                             >
                               Refund Latest
                             </button>
@@ -813,18 +813,18 @@ export default function CrmRoute() {
                         <p class="mt-2 text-xs text-rose-300" data-testid="crm-ops-error">{opsError()}</p>
                       </Show>
                       <Show when={opsNotice()}>
-                        <p class="mt-2 text-xs text-emerald-300" data-testid="crm-ops-notice">{opsNotice()}</p>
+                        <p class="mt-2 text-xs text-amber-300" data-testid="crm-ops-notice">{opsNotice()}</p>
                       </Show>
                     </article>
                   </div>
 
                   <Show when={selectedCustomerCharges().length > 0}>
-                    <div class="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+                    <div class="mt-4 rounded-sm border border-white/10 bg-white/[0.02] p-3">
                       <p class="text-xs uppercase tracking-[0.11em] text-zinc-500">Recent Charges</p>
                       <div class="mt-2 space-y-2">
                         <For each={selectedCustomerCharges()}>
                           {(charge) => (
-                            <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                            <div class="flex flex-wrap items-center justify-between gap-2 rounded-sm border border-white/10 bg-black/20 px-3 py-2 text-xs">
                               <div>
                                 <p class="font-medium text-zinc-100">{charge.id} • {formatUsd(charge.amountUsd)}</p>
                                 <p class="text-zinc-400">{charge.status} • {formatTime(charge.createdAtMs)}</p>
@@ -833,7 +833,7 @@ export default function CrmRoute() {
                                 type="button"
                                 onClick={() => void runRefund(charge.id)}
                                 disabled={opsBusy() || charge.refunded === true}
-                                class="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-xs font-medium text-cyan-200 transition hover:border-cyan-400/60 disabled:opacity-60"
+                                class="rounded-sm border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-xs font-medium text-cyan-200 transition hover:border-cyan-400/60 disabled:opacity-60"
                               >
                                 {charge.refunded ? "Already Refunded" : "Refund This Charge"}
                               </button>
@@ -851,7 +851,7 @@ export default function CrmRoute() {
                 <div class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                   <For each={readCrmItems(crmTelemetry()?.topKinds7d)}>
                     {(item) => (
-                      <div class="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2">
+                      <div class="rounded-sm border border-white/10 bg-white/[0.02] px-3 py-2">
                         <p class="text-xs text-zinc-500">{formatEventLabel(item.kind)}</p>
                         <p class="text-lg font-semibold text-zinc-100">{formatNumber(item.count)}</p>
                       </div>

@@ -126,29 +126,29 @@ export default function TelegramMessageCard(props: {
               <p class="telegram-tweet-author-name">{channelName()}</p>
               <span class="telegram-tweet-time">· {formatRelativeTimeAt(props.entry.message.datetime, props.nowMs)}</span>
               <Show when={props.showCategory}>
-                <span class={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${style().bg} ${style().border} ${style().text}`}>
+                <span class={`inline-flex rounded-none border px-2 py-0.5 text-[10px] font-medium ${style().bg} ${style().border} ${style().text}`}>
                   {props.categoryLabel}
                 </span>
               </Show>
               <Show when={(props.entry.dedupe?.sourceCount ?? 1) > 1}>
                 <span
-                  class="inline-flex rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300"
+                  class="inline-flex rounded-none border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300"
                   title={getTelegramSourceLabelsTitle(props.entry)}
                 >
                   {props.entry.dedupe?.sourceCount} sources
                 </span>
               </Show>
-              <span class={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${trustBadgeClass(trustTier())}`}>
+              <span class={`inline-flex rounded-none border px-2 py-0.5 text-[10px] font-medium ${trustBadgeClass(trustTier())}`}>
                 Trust {trustTier()}
               </span>
-              <span class={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${freshnessBadgeClass(freshnessState())}`}>
+              <span class={`inline-flex rounded-none border px-2 py-0.5 text-[10px] font-medium ${freshnessBadgeClass(freshnessState())}`}>
                 {freshnessState()}
               </span>
             </div>
           </header>
 
           <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
-            <span class="inline-flex rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-zinc-300">
+            <span class="inline-flex rounded-none border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-zinc-300">
               {verificationLabelForSignals({
                 verificationState: props.entry.dedupe?.verificationState,
                 sourceCount: props.entry.dedupe?.sourceCount,
@@ -157,12 +157,12 @@ export default function TelegramMessageCard(props: {
               })}
             </span>
             <Show when={entryMediaCount(props.entry) > 0}>
-              <span class="inline-flex rounded-full border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-amber-200">
+              <span class="inline-flex rounded-none border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-amber-200">
                 {entryMediaCount(props.entry)} media
               </span>
             </Show>
             <Show when={props.entry.dedupe?.signalGrade}>
-              <span class="inline-flex rounded-full border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-violet-200">
+              <span class="inline-flex rounded-none border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-violet-200">
                 Grade {props.entry.dedupe?.signalGrade}
                 <Show when={typeof props.entry.dedupe?.signalScore === "number"}>
                   <span class="ml-1 opacity-75">{props.entry.dedupe?.signalScore}</span>
@@ -173,14 +173,14 @@ export default function TelegramMessageCard(props: {
               <Show
                 when={props.entry.dedupe?.firstReporterChannel}
                 fallback={
-                  <span class="inline-flex rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-sky-200">
+                  <span class="inline-flex rounded-none border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-sky-200">
                     First Reporter {firstReporterLabel()}
                   </span>
                 }
               >
                 <A
                   href={`/telegram/source/${encodeURIComponent(props.entry.dedupe?.firstReporterChannel ?? "")}`}
-                  class="inline-flex rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-sky-200 no-underline hover:text-sky-100"
+                  class="inline-flex rounded-none border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-sky-200 no-underline hover:text-sky-100"
                 >
                   First Reporter {firstReporterLabel()}
                 </A>
@@ -188,7 +188,7 @@ export default function TelegramMessageCard(props: {
             </Show>
             <For each={rankReasons()}>
               {(reason) => (
-                <span class="inline-flex rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 uppercase tracking-[0.14em] text-zinc-400">
+                <span class="inline-flex rounded-none border border-white/[0.08] bg-black/20 px-2 py-0.5 uppercase tracking-[0.14em] text-zinc-400">
                   {reason}
                 </span>
               )}
@@ -231,7 +231,7 @@ export default function TelegramMessageCard(props: {
           </Show>
 
           <Show when={hasUsefulImageText(props.entry.message.image_text_en)}>
-            <div class="mt-2 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2">
+            <div class="mt-2 rounded-sm border border-white/[0.08] bg-white/[0.02] px-3 py-2">
               <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Image Translation</p>
               <p class="mt-1 whitespace-pre-wrap text-[12px] leading-relaxed text-zinc-300">{props.entry.message.image_text_en}</p>
             </div>
@@ -253,36 +253,36 @@ export default function TelegramMessageCard(props: {
           </footer>
 
           <Show when={sourceLabels().length > 0}>
-            <details class="mt-3 rounded-xl border border-white/[0.08] bg-black/20 p-3">
+            <details class="mt-3 rounded-sm border border-white/[0.08] bg-black/20 p-3">
               <summary class="cursor-pointer list-none text-[11px] font-medium text-zinc-300">
                 Source matrix
                 <span class="ml-2 text-zinc-500">{sourceLabels().length} labels</span>
               </summary>
               <div class="mt-2 flex flex-wrap gap-1.5 text-[10px]">
                 <Show when={props.entry.dedupe?.rankScore}>
-                  <span class="rounded-full border border-blue-400/20 bg-blue-500/10 px-2 py-0.5 text-blue-200">
+                  <span class="rounded-none border border-blue-400/20 bg-blue-500/10 px-2 py-0.5 text-blue-200">
                     Rank {props.entry.dedupe?.rankScore}
                   </span>
                 </Show>
                 <Show when={typeof props.entry.dedupe?.subscriberValueScore === "number"}>
-                  <span class="rounded-full border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-sky-200">
+                  <span class="rounded-none border border-sky-400/20 bg-sky-500/10 px-2 py-0.5 text-sky-200">
                     Signal {props.entry.dedupe?.subscriberValueScore}
                   </span>
                 </Show>
                 <Show when={props.entry.dedupe?.verificationState}>
-                  <span class="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
+                  <span class="rounded-none border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-amber-200">
                     {formatEventLabel(props.entry.dedupe?.verificationState)}
                   </span>
                 </Show>
                 <Show when={props.entry.dedupe?.latencyTier}>
-                  <span class="rounded-full border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-amber-200">
+                  <span class="rounded-none border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-amber-200">
                     {props.entry.dedupe?.latencyTier}
                   </span>
                 </Show>
                 <Show when={getTelegramDomainTags(props.entry).length > 0}>
                   <For each={getTelegramDomainTags(props.entry)}>
                     {(tag) => (
-                      <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-zinc-400">
+                      <span class="rounded-none border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-zinc-400">
                         {formatEventLabel(tag)}
                       </span>
                     )}
@@ -292,7 +292,7 @@ export default function TelegramMessageCard(props: {
               <div class="mt-2 flex flex-wrap gap-1.5">
                 <For each={getTelegramSourceLabels(props.entry, 18)}>
                   {(label) => (
-                    <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300">
+                    <span class="rounded-none border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] text-zinc-300">
                       {label}
                     </span>
                   )}
@@ -302,14 +302,14 @@ export default function TelegramMessageCard(props: {
                 <div class="mt-3 grid gap-2">
                   <For each={getTelegramSources(props.entry)}>
                     {(source) => (
-                      <div class="rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2 text-[10px] text-zinc-400">
+                      <div class="rounded-sm border border-white/[0.06] bg-white/[0.02] px-2.5 py-2 text-[10px] text-zinc-400">
                         <div class="flex flex-wrap items-center gap-1.5">
                           <span class="font-medium text-zinc-200">{source.label || source.channel}</span>
-                          <span class="rounded-full border border-white/[0.08] px-1.5 py-0.5 uppercase tracking-[0.14em] text-zinc-500">
+                          <span class="rounded-none border border-white/[0.08] px-1.5 py-0.5 uppercase tracking-[0.14em] text-zinc-500">
                             {source.category}
                           </span>
                           <Show when={source.trust_tier}>
-                            <span class="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-200">
+                            <span class="rounded-none border border-amber-400/20 bg-amber-500/10 px-1.5 py-0.5 text-amber-200">
                               {source.trust_tier}
                             </span>
                           </Show>
@@ -339,7 +339,7 @@ export default function TelegramMessageCard(props: {
                 onClick={() => props.onToggleMergeSelect?.(props.entry)}
                 class={`cursor-pointer rounded-md border px-2.5 py-1 text-[11px] font-medium transition ${
                   props.selectedForMerge
-                    ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-200"
+                    ? "border-amber-400/40 bg-amber-500/15 text-amber-200"
                     : "border-white/[0.12] bg-white/[0.04] text-zinc-300 hover:bg-white/[0.08]"
                 } disabled:cursor-not-allowed disabled:opacity-50`}
               >

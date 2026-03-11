@@ -105,7 +105,7 @@ export default function OsintFeed() {
       <header class="intel-page-header max-w-full">
         <div>
           <div class="intel-badge mb-2">
-            <div class="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.5)]" />
+            <div class="w-1.5 h-1.5 rounded-none bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.5)]" />
             Live Feed
           </div>
           <h1 class="intel-heading">OSINT Feed</h1>
@@ -114,12 +114,12 @@ export default function OsintFeed() {
           </p>
         </div>
         <div class="flex w-full xl:w-auto items-center justify-start xl:justify-end gap-2 flex-wrap xl:flex-nowrap">
-          <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+          <span class={`rounded-none border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
             Feed: {freshness.feedFreshness().label}
             <Show when={freshness.latestFeedAgeMs() !== null}> ({freshness.latestFeedAgeLabel()})</Show>
           </span>
           <Show when={items().length > 0}>
-            <div class="grid grid-cols-3 w-full min-w-0 sm:w-auto sm:min-w-[285px] overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.03]">
+            <div class="grid grid-cols-3 w-full min-w-0 sm:w-auto sm:min-w-[285px] overflow-hidden rounded-sm border border-white/[0.06] bg-white/[0.03]">
               <div class="px-3.5 py-2 text-center">
                 <p class="text-lg font-bold font-mono-data text-white">{items().length}</p>
                 <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Events</p>
@@ -140,7 +140,7 @@ export default function OsintFeed() {
       <Show when={freshness.freshnessNotice()}>
         {(notice) => (
           <section
-            class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
+            class={`freshness-transition-banner rounded-sm border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
             role="status"
             aria-live="polite"
           >
@@ -189,7 +189,7 @@ export default function OsintFeed() {
               {() => (
                 <div class="surface-card p-3">
                   <div class="flex items-center gap-2 mb-3">
-                    <div class="h-6 w-20 bg-white/[0.04] rounded-lg animate-shimmer" />
+                    <div class="h-6 w-20 bg-white/[0.04] rounded-sm animate-shimmer" />
                     <div class="h-4 w-16 bg-white/[0.04] rounded animate-shimmer" />
                   </div>
                   <div class="h-4 w-3/4 bg-white/[0.04] rounded mb-2 animate-shimmer" />
@@ -204,7 +204,7 @@ export default function OsintFeed() {
           when={filtered().length > 0}
           fallback={
             <div class="surface-card p-14 text-center">
-              <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-blue-500/10 flex items-center justify-center">
+              <div class="w-14 h-14 mx-auto mb-4 rounded-sm bg-blue-500/10 flex items-center justify-center">
                 <Radio size={28} class="text-blue-400/50" />
               </div>
               <h3 class="text-sm font-medium text-zinc-400 mb-1">

@@ -31,7 +31,7 @@ const entry = {
   },
   dedupe: {
     clusterKey: "cluster_1",
-    sourceCount: 2,
+    sourceCount: 6,
     sourceSignatures: [" sig-1 ", "", "sig-2"],
     sourceLabels: ["Alpha", "Beta"],
     subscriberValueScore: 88,
@@ -99,4 +99,15 @@ test("telegram entry meta helpers match groups by id, predicate, and category se
   assert.equal(doesTelegramGroupMatchEntry({ id: "naval", categories: ["naval"] }, entry), true);
   assert.equal(doesTelegramGroupMatchEntry({ id: "custom", predicate: (item: typeof entry) => item.channelUsername === "channel" }, entry), true);
   assert.equal(doesTelegramGroupMatchEntry({ id: "none", categories: ["cyber"] }, entry), false);
+});
+
+
+test("first reporter label is hidden until corroborated by at least six sources", () => {
+  assert.equal(
+    getTelegramFirstReporterLabel({
+      ...entry,
+      dedupe: { ...entry.dedupe, sourceCount: 5 },
+    }),
+    null,
+  );
 });

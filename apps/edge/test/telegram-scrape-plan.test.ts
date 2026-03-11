@@ -8,19 +8,19 @@ test('resolveTelegramScrapePlan keeps hot channels every cycle and rotates the r
     channels: CHANNELS.slice(0, 12),
     nowMs: 0,
     intervalMs: 10_000,
-    rotationWindowSeconds: 60,
+    rotationWindowSeconds: 30,
     hotChannelsPerCycle: 4,
   });
   const planB = resolveTelegramScrapePlan({
     channels: CHANNELS.slice(0, 12),
     nowMs: 10_000,
     intervalMs: 10_000,
-    rotationWindowSeconds: 60,
+    rotationWindowSeconds: 30,
     hotChannelsPerCycle: 4,
   });
 
-  assert.equal(planA.slots, 6);
-  assert.equal(planB.slots, 6);
+  assert.equal(planA.slots, 3);
+  assert.equal(planB.slots, 3);
   const hot = CHANNELS.slice(0, 12)
     .sort((a, b) => b.subscriberValueScore - a.subscriberValueScore)
     .slice(0, 4)
@@ -43,4 +43,26 @@ test('resolveTelegramScrapePlan collapses to one slot when rotation window is sm
   });
   assert.equal(plan.slots, 1);
   assert.equal(plan.channels.length, 5);
+});
+
+test('resolveTelegramScrapePlan excludes MTProto-authoritative channels from the hot set', () => {
+  const channels = CHANNELS.slice(0, 12);
+  const forcedMtproto = channels
+    .sort((a, b) => b.subscriberValueScore - a.subscriberValueScore)
+    .slice(0, 2)
+    .map((channel) => channel.username);
+
+  const plan = resolveTelegramScrapePlan({
+    channels,
+    nowMs: 0,
+    intervalMs: 10_000,
+    rotationWindowSeconds: 30,
+    hotChannelsPerCycle: 4,
+    mtprotoChannels: forcedMtproto,
+  });
+
+  const hotSlice = plan.channels.slice(0, 4).map((channel) => channel.username);
+  for (const username of forcedMtproto) {
+    assert.equal(hotSlice.includes(username), false);
+  }
 });

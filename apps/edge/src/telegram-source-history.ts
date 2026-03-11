@@ -1,3 +1,4 @@
+import { CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT } from "@intel-dashboard/shared/telegram-signal.ts";
 import type {
   TelegramSourceHistoryEvent,
   TelegramSourceHistoryOwnerDiagnostics,
@@ -131,11 +132,11 @@ export async function queryTelegramSourceHistory(args: {
       MAX(label) AS label,
       MAX(source_category) AS source_category,
       COUNT(*) AS source_count_seen,
-      SUM(CASE WHEN rank_in_event = 1 THEN 1 ELSE 0 END) AS lead_count,
+      SUM(CASE WHEN rank_in_event = 1 AND source_count >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT THEN 1 ELSE 0 END) AS lead_count,
       SUM(CASE WHEN rank_in_event > 1 THEN 1 ELSE 0 END) AS duplicate_count,
       AVG(COALESCE(signal_score, 0)) AS avg_signal_score,
       MAX(datetime) AS last_seen_at
-    FROM ranked_source_events`,
+    FROM ranked_source_events`.replaceAll("CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT", String(CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT)),
   ).bind(channel, cutoffIso).first<Record<string, unknown>>();
 
   if (!summaryRow || normalizeString(summaryRow.channel) !== channel) {

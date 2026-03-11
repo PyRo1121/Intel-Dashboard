@@ -53,7 +53,7 @@ const ENDPOINT_STALE_WINDOW_MS: Record<string, number> = {
   "/api/air-sea": 5 * 60_000,
 };
 const BACKGROUND_REFRESH_COOLDOWN_MS = 5_000;
-const STORAGE_CHUNK_SIZE = 900_000;
+const STORAGE_CHUNK_SIZE = 60_000; // Safe length under 128KB UTF-8 DO limit
 const WHALE_CACHE_KEY = "cache:/api/whales";
 const WHALE_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 const WHALE_STALE_WINDOW_MS = 30 * 60_000;
@@ -665,10 +665,13 @@ export class IntelCacheDO extends DurableObject<Env> {
     }
 
     const numChunks = Math.ceil(raw.length / STORAGE_CHUNK_SIZE);
-    await this.ctx.storage.put(`${key}:chunks`, numChunks);
+    const puts: Record<string, unknown> = {
+      [`${key}:chunks`]: numChunks,
+    };
     for (let i = 0; i < numChunks; i++) {
-      await this.ctx.storage.put(`${key}:${i}`, raw.slice(i * STORAGE_CHUNK_SIZE, (i + 1) * STORAGE_CHUNK_SIZE));
+      puts[`${key}:${i}`] = raw.slice(i * STORAGE_CHUNK_SIZE, (i + 1) * STORAGE_CHUNK_SIZE);
     }
+    await this.ctx.storage.put(puts);
     await this.ctx.storage.delete(key);
   }
 
@@ -684,9 +687,12 @@ export class IntelCacheDO extends DurableObject<Env> {
     let data: string;
 
     if (numChunks && numChunks > 0) {
+      const keysToLoad: string[] = [];
+      for (let i = 0; i < numChunks; i++) keysToLoad.push(`${key}:${i}`);
+      const chunksMap = await this.ctx.storage.get<string>(keysToLoad);
       const parts: string[] = [];
       for (let i = 0; i < numChunks; i++) {
-        const chunk = await this.ctx.storage.get<string>(`${key}:${i}`);
+        const chunk = chunksMap.get(`${key}:${i}`);
         if (!chunk) return null;
         parts.push(chunk);
       }

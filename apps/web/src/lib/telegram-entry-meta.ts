@@ -1,5 +1,6 @@
 import { getIntelCategoryStyle } from "./intel-category-style.ts";
 import { getInitialLetter } from "./utils.ts";
+import { hasConfirmedFirstReporter } from "@intel-dashboard/shared/telegram-signal.ts";
 
 export type TelegramEntryLike = {
   category: string;
@@ -46,7 +47,7 @@ const AVATAR_BG_BY_TEXT_CLASS: Record<string, string> = {
   "text-teal-300": "#5eead4",
   "text-rose-300": "#fda4af",
   "text-red-300": "#fca5a5",
-  "text-emerald-300": "#6ee7b7",
+  "text-amber-300": "#fcd34d",
   "text-lime-300": "#bef264",
   "text-orange-300": "#fdba74",
   "text-violet-300": "#c4b5fd",
@@ -55,11 +56,9 @@ const AVATAR_BG_BY_TEXT_CLASS: Record<string, string> = {
   "text-purple-300": "#d8b4fe",
   "text-stone-300": "#d6d3d1",
   "text-fuchsia-300": "#f0abfc",
-  "text-amber-300": "#fcd34d",
   "text-pink-300": "#f9a8d4",
   "text-slate-300": "#cbd5e1",
   "text-blue-200": "#bfdbfe",
-  "text-emerald-200": "#a7f3d0",
   "text-zinc-200": "#e4e4e7",
   "text-amber-200": "#fde68a",
   "text-yellow-200": "#fef08a",
@@ -121,6 +120,7 @@ export function getTelegramSourceLabelsTitle(entry: TelegramEntryLike): string {
 }
 
 export function getTelegramFirstReporterLabel(entry: TelegramEntryLike): string | null {
+  if (!hasConfirmedFirstReporter(entry.dedupe?.sourceCount)) return null;
   const label = entry.dedupe?.firstReporterLabel?.trim();
   if (label) {
     return label;

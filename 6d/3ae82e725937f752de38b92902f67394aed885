@@ -1,0 +1,23 @@
+apps/edge/wrangler.toml
+  fbdbb1d68cb02f36 57-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.10",
+  "base_commit_sha": "6d3ae82e725937f752de38b92902f67394aed885",
+  "prompts": {
+    "fbdbb1d68cb02f36": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd0d9-c76f-7c23-b348-713dec4ebf33",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 2,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}

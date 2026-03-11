@@ -1,0 +1,40 @@
+apps/web/src/routes/telegram/index.tsx
+  0e65710de4296aeb 314-315,321-322,333-335,367-370,372-373
+apps/edge/wrangler.toml
+  fbdbb1d68cb02f36 57-58,60-61
+apps/web/src/lib/telegram-reconcile.ts
+  0e65710de4296aeb 22,25,31-32,41-63,66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.10",
+  "base_commit_sha": "bffe5488be3ca584654d2fd415889952be827db2",
+  "prompts": {
+    "0e65710de4296aeb": {
+      "agent_id": {
+        "tool": "gemini",
+        "id": "a593c47a-6e5b-4f70-be98-74166862486a",
+        "model": "gemini-3.1-pro-preview"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 83,
+      "total_deletions": 49,
+      "accepted_lines": 41,
+      "overriden_lines": 0
+    },
+    "fbdbb1d68cb02f36": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd0d9-c76f-7c23-b348-713dec4ebf33",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 4,
+      "accepted_lines": 4,
+      "overriden_lines": 0
+    }
+  }
+}

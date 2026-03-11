@@ -1,0 +1,23 @@
+apps/web/src/components/layout/Sidebar.tsx
+  0e65710de4296aeb 287
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.10",
+  "base_commit_sha": "743298512362cbe6dc44db7e84fde774a5d5cd67",
+  "prompts": {
+    "0e65710de4296aeb": {
+      "agent_id": {
+        "tool": "gemini",
+        "id": "a593c47a-6e5b-4f70-be98-74166862486a",
+        "model": "gemini-3.1-pro-preview"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}

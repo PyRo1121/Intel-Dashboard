@@ -54,11 +54,11 @@ subrequests = 50000
 
 [vars]
 SCRAPE_INTERVAL_MS = "10000"
-SCRAPE_ROTATION_WINDOW_SECONDS = "30"
-HOT_CHANNELS_PER_CYCLE = "96"
+SCRAPE_ROTATION_WINDOW_SECONDS = "20"
+HOT_CHANNELS_PER_CYCLE = "128"
 SCRAPE_FETCH_TIMEOUT_MS = "8000"
-SCRAPE_WORKER_CONCURRENCY = "64"
-CHANNEL_BUILD_CONCURRENCY = "48"
+SCRAPE_WORKER_CONCURRENCY = "72"
+CHANNEL_BUILD_CONCURRENCY = "56"
 TELEGRAM_HOT_CHANNELS = "osirskiy|Oleksandr Syrskyi|conflict,AbuAliExpress|Abu Ali Express|conflict,CIG_telegram|Conflict Intelligence Group|conflict,sepahcybery|Sepah Cybery|cyber,Tsaplienko|Tsaplienko|conflict,farsna|Fars News|conflict,Irna_en|IRNA English|conflict,air_alert_ua|Air Alert UA|alerts,AFUStratCom|AFU Strategic Comms|ua_official,GeneralStaffZSU|UA General Staff|ua_official,kpszsu|UA Air Force Command|ua_official,ukraine_context|Ukraine Context|ua_official,DIUkraine|GUR Defense Intelligence|ua_intel,informnapalm|InformNapalm OSINT|ua_intel,Molfar_global|Molfar OSINT|ua_intel,SBUkr|SBU Security Service|ua_intel,azov_media|Azov Brigade|ua_frontline,DeepStateUA|DeepState Map|ua_osint,operativnoZSU|Operatyvnyi ZSU|ua_osint,Atesh_UA|ATESH Partisan Movement|ua_intel,dva_majors|Two Majors|ru_milblog,boris_rozhin|Colonelcassad|ru_milblog,ASTRApress|ASTRA Independent|ru_milblog,milinfolive|MilInfoLive|ru_milblog,anna_news|ANNA News|ru_milblog,ConflictChronicles|Chronicles of Conflict|ru_milblog,grey_zone|Grey Zone / Wagner|ru_milblog,mig41|MIG Russia|ru_milblog,infantmilitario|Militarist|ru_milblog,abbasdjuma|Abbas Djuma|ru_milblog,medvedev_telegram|Medvedev|ru_official,bomber_fighter|Fighterbomber|ru_milblog"
 
 [assets]

@@ -311,59 +311,66 @@ export default function TelegramPage() {
     return out;
   }, []);
 
+  const canonicalEntryCache = new WeakMap<TelegramCanonicalEvent, TelegramEntry>();
+
   const entries = createMemo<TelegramEntry[]>(() => {
     const snapshot = data();
     if (mergeDuplicates() && Array.isArray(snapshot?.canonical_events) && snapshot.canonical_events.length > 0) {
       const canonicalEntries: TelegramEntry[] = [];
       for (const event of snapshot.canonical_events) {
-        const message: TelegramMessage = {
-          text_original: event.text_original || event.text_en || "",
-          text_en: event.text_en || event.text_original || "",
-          image_text_en: event.image_text_en || "",
-          datetime: event.datetime,
-          link: event.sources?.[0]?.link || "",
-          views: event.sources?.[0]?.views || "",
-          media: Array.isArray(event.media) ? event.media : [],
-          has_video: Boolean(event.has_video),
-          has_photo: Boolean(event.has_photo),
-          language: event.language || "unknown",
-        };
-        if (!isTelegramMessageVisible({ message, ageWindow: ageWindow(), mediaOnly: mediaOnly(), nowMs: clockNow() })) continue;
-        canonicalEntries.push({
-          category: event.category,
-          channelLabel: event.source_labels?.[0] || event.sources?.[0]?.label || "Telegram source",
-          channelUsername: event.source_channels?.[0] || event.sources?.[0]?.channel || "",
-          message,
-          dedupe: {
-            clusterKey: event.event_key || event.event_id,
-            sourceCount: Math.max(1, Number(event.source_count) || 1),
-            duplicateCount: Math.max(0, Number(event.duplicate_count) || 0),
-            sourceLabels: Array.isArray(event.source_labels) ? event.source_labels : [],
-            categorySet: Array.isArray(event.categories) ? event.categories : [event.category],
-            domainTags: Array.isArray(event.domain_tags) ? event.domain_tags : [],
-            trustTier: event.trust_tier,
-            latencyTier: event.latency_tier,
-            sourceType: event.source_type,
-            acquisitionMethod: event.acquisition_method,
-            subscriberValueScore: typeof event.subscriber_value_score === "number" ? event.subscriber_value_score : undefined,
-            signalProfileId: event.signal_profile_id,
-            signalScore: typeof event.signal_score === "number" ? event.signal_score : undefined,
-            signalGrade: event.signal_grade,
-            signalReasons: Array.isArray(event.signal_reasons) ? event.signal_reasons : [],
-            freshnessTier: event.freshness_tier,
-            verificationState: event.verification_state,
-            rankScore: typeof event.rank_score === "number" ? event.rank_score : undefined,
-            firstReporterLabel: event.first_reporter_label,
-            firstReporterChannel: event.first_reporter_channel,
-            firstReportedAt: event.first_reported_at,
-            sources: Array.isArray(event.sources) ? event.sources : [],
-            sourceSignatures: Array.isArray(event.sources)
-              ? event.sources
-                .map((source) => source?.signature)
-                .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-              : [],
-          },
-        });
+        let entry = canonicalEntryCache.get(event);
+        if (!entry) {
+          const message: TelegramMessage = {
+            text_original: event.text_original || event.text_en || "",
+            text_en: event.text_en || event.text_original || "",
+            image_text_en: event.image_text_en || "",
+            datetime: event.datetime,
+            link: event.sources?.[0]?.link || "",
+            views: event.sources?.[0]?.views || "",
+            media: Array.isArray(event.media) ? event.media : [],
+            has_video: Boolean(event.has_video),
+            has_photo: Boolean(event.has_photo),
+            language: event.language || "unknown",
+          };
+          entry = {
+            category: event.category,
+            channelLabel: event.source_labels?.[0] || event.sources?.[0]?.label || "Telegram source",
+            channelUsername: event.source_channels?.[0] || event.sources?.[0]?.channel || "",
+            message,
+            dedupe: {
+              clusterKey: event.event_key || event.event_id,
+              sourceCount: Math.max(1, Number(event.source_count) || 1),
+              duplicateCount: Math.max(0, Number(event.duplicate_count) || 0),
+              sourceLabels: Array.isArray(event.source_labels) ? event.source_labels : [],
+              categorySet: Array.isArray(event.categories) ? event.categories : [event.category],
+              domainTags: Array.isArray(event.domain_tags) ? event.domain_tags : [],
+              trustTier: event.trust_tier,
+              latencyTier: event.latency_tier,
+              sourceType: event.source_type,
+              acquisitionMethod: event.acquisition_method,
+              subscriberValueScore: typeof event.subscriber_value_score === "number" ? event.subscriber_value_score : undefined,
+              signalProfileId: event.signal_profile_id,
+              signalScore: typeof event.signal_score === "number" ? event.signal_score : undefined,
+              signalGrade: event.signal_grade,
+              signalReasons: Array.isArray(event.signal_reasons) ? event.signal_reasons : [],
+              freshnessTier: event.freshness_tier,
+              verificationState: event.verification_state,
+              rankScore: typeof event.rank_score === "number" ? event.rank_score : undefined,
+              firstReporterLabel: event.first_reporter_label,
+              firstReporterChannel: event.first_reporter_channel,
+              firstReportedAt: event.first_reported_at,
+              sources: Array.isArray(event.sources) ? event.sources : [],
+              sourceSignatures: Array.isArray(event.sources)
+                ? event.sources
+                  .map((source) => source?.signature)
+                  .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+                : [],
+            },
+          };
+          canonicalEntryCache.set(event, entry);
+        }
+        if (!isTelegramMessageVisible({ message: entry.message, ageWindow: ageWindow(), mediaOnly: mediaOnly(), nowMs: clockNow() })) continue;
+        canonicalEntries.push(entry);
       }
       canonicalEntries.sort((left, right) => parseTs(right.message.datetime) - parseTs(left.message.datetime));
       return canonicalEntries;

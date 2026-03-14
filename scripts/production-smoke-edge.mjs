@@ -33,7 +33,7 @@ const collectorIngest = await fetch(`${baseUrl}/api/telegram/collector-ingest`, 
 assert(collectorIngest.status === 403, `/api/telegram/collector-ingest expected 403, got ${collectorIngest.status}`);
 const collector = await readJson(collectorIngest);
 assert(
-  collector.payload?.reason === "missing_headers" || collector.payload?.error === "Forbidden",
+  collector.payload?.reason === "missing_headers",
   `collector ingest should fail closed for unsigned requests: ${collector.text.slice(0, 200)}`,
 );
 

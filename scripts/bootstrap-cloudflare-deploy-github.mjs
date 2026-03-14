@@ -36,7 +36,15 @@ const cloudflareToken =
   trim(process.env.CLOUDFLARE_API_TOKEN) ||
   trim(process.env.CF_API_TOKEN);
 
-const whoami = run("npx", ["wrangler", "whoami"]);
+const wranglerEnv = cloudflareToken
+  ? {
+      ...process.env,
+      CLOUDFLARE_API_TOKEN: cloudflareToken,
+      CF_API_TOKEN: cloudflareToken,
+    }
+  : process.env;
+
+const whoami = run("npx", ["wrangler", "whoami"], { env: wranglerEnv });
 const accountId = parseAccountIdFromWhoAmI(whoami);
 
 if (!accountId) {

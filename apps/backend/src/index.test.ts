@@ -10,6 +10,7 @@ describe("intel-dashboard backend worker", () => {
     for (const id of DISABLED_OSINT_SOURCE_IDS) {
       expect(ids.has(id)).toBe(false);
     }
+    expect(ids.size).toBe(OSINT_SOURCE_CATALOG.length);
   });
 
   function expectSecurityHeaders(response: Response) {

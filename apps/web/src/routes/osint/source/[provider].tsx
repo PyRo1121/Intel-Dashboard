@@ -11,6 +11,7 @@ import { fetchOsintSourceProfile } from "~/lib/osint-source-client";
 import {
   matchesOsintSourcePreference,
   resolveOsintSourcePreferenceKey,
+  toggleOsintSourcePreference,
 } from "@intel-dashboard/shared/osint-source-profile.ts";
 import {
   cloneSubscriberFeedPreferences,
@@ -145,7 +146,10 @@ export default function OsintSourceProfilePage() {
                         type="button"
                         disabled={saving()}
                         onClick={() => void persistPreferences((next) => {
-                          next.favoriteSources = toggleSubscriberPreferenceValue(next.favoriteSources, sourcePreferenceKey());
+                          next.favoriteSources = toggleOsintSourcePreference(
+                            next.favoriteSources,
+                            profile()?.source ?? { slug: provider(), name: sourceName() },
+                          );
                         })}
                         class={`rounded-xl border px-3 py-2 text-sm ${favoriteSource() ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
                       >

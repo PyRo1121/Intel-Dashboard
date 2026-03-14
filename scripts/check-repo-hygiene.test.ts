@@ -33,12 +33,13 @@ test("collectSharedImportDrift flags relative imports into packages/shared", () 
   const originalCwd = process.cwd();
   try {
     const scriptsDir = join(root, "scripts");
+    const relativeSharedImport = '../packages' + '/shared/foo';
     mkdirSync(scriptsDir, { recursive: true });
     writeFileSync(join(scriptsDir, "ok.ts"), 'import x from "@intel-dashboard/shared";\n');
-    writeFileSync(join(scriptsDir, "bad.ts"), 'import x from "../packages/shared/foo";\n');
+    writeFileSync(join(scriptsDir, "bad.ts"), `import x from "${relativeSharedImport}";\n`);
     process.chdir(root);
     const drift = collectSharedImportDrift(["scripts"]);
-    assert.deepEqual(drift, ['scripts/bad.ts:1:import x from "../packages/shared/foo";']);
+    assert.deepEqual(drift, [`scripts/bad.ts:1:import x from "${relativeSharedImport}";`]);
   } finally {
     process.chdir(originalCwd);
     rmSync(root, { recursive: true, force: true });

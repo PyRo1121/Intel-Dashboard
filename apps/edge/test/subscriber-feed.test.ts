@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveOsintSourcePreferenceKey } from "@intel-dashboard/shared/osint-source-profile.ts";
+import { resolveOsintSourcePreferenceKey, toggleOsintSourcePreference } from "@intel-dashboard/shared/osint-source-profile.ts";
 import {
   createEmptySubscriberFeedPreferences,
   filterSubscriberFeedItems,
@@ -97,6 +97,20 @@ test("resolveOsintSourcePreferenceKey prefers slug over id and display name", ()
       name: "Krebs on Security",
     }),
     "krebs-on-security",
+  );
+});
+
+test("toggleOsintSourcePreference removes legacy aliases when unfavoriting", () => {
+  assert.deepEqual(
+    toggleOsintSourcePreference(
+      ["krebs on security"],
+      {
+        id: "krebs",
+        slug: "krebs-on-security",
+        name: "Krebs on Security",
+      },
+    ),
+    [],
   );
 });
 

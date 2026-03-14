@@ -100,3 +100,26 @@ export function matchesOsintSourcePreference(
   }
   return resolveOsintSourcePreferenceAliases(source).some((alias) => normalized.has(alias));
 }
+
+export function toggleOsintSourcePreference(
+  preferences: readonly string[] | null | undefined,
+  source: {
+    id?: string | null;
+    slug?: string | null;
+    name?: string | null;
+  },
+): string[] {
+  const aliases = new Set(resolveOsintSourcePreferenceAliases(source));
+  const canonical = resolveOsintSourcePreferenceKey(source);
+  const normalized = Array.from(
+    new Set((preferences ?? []).map((entry) => normalizeSourceKey(entry)).filter(Boolean)),
+  ).filter((entry) => !aliases.has(entry));
+
+  if (!matchesOsintSourcePreference(preferences, source)) {
+    if (canonical) {
+      normalized.push(canonical);
+    }
+  }
+
+  return normalized.sort((left, right) => left.localeCompare(right));
+}

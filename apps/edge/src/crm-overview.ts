@@ -21,7 +21,11 @@ export function buildOwnerCrmOverviewPayload(args: {
     typeof args.backendSummary.generatedAtMs === "number" && Number.isFinite(args.backendSummary.generatedAtMs)
       ? args.backendSummary.generatedAtMs
       : Date.now();
-  const trackedUsers = Math.max(0, Math.floor(args.backendSummary.billing?.trackedUsers ?? 0));
+  const trackedUsersRaw = args.backendSummary.billing?.trackedUsers;
+  const trackedUsers =
+    typeof trackedUsersRaw === "number" && Number.isFinite(trackedUsersRaw)
+      ? Math.max(0, Math.floor(trackedUsersRaw))
+      : 0;
   const qualitySummary = summarizeCrmDataQuality({
     users: args.directory.users,
     totalUsers: args.directory.totalUsers,

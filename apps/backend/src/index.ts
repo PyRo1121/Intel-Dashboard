@@ -1796,7 +1796,12 @@ async function loadRssSourceHealth(env: WorkerEnv, sourceId: string): Promise<Rs
   if (!kv || typeof kv.get !== "function") {
     return null;
   }
-  const raw = await kv.get(resolveRssSourceHealthKey(env, sourceId));
+  let raw: string | null;
+  try {
+    raw = await kv.get(resolveRssSourceHealthKey(env, sourceId));
+  } catch {
+    return null;
+  }
   if (!raw) {
     return null;
   }
@@ -3514,6 +3519,7 @@ async function ingestNewsFromSourceCatalog(env: WorkerEnv): Promise<{
     .map((batch) => batch.sourceId)
     .sort((left, right) => left.localeCompare(right));
   if (fetchedItems.length < 1) {
+    const failed = failingSourceIds.length > 0;
     return {
       selectedSources: selectedSources.length,
       fetchedItems: 0,
@@ -3521,7 +3527,8 @@ async function ingestNewsFromSourceCatalog(env: WorkerEnv): Promise<{
       failedSources: failingSourceIds.length,
       failingSourceIds,
       publishMode: "none",
-      publishOutcome: "skipped",
+      publishOutcome: failed ? "failed" : "skipped",
+      ...(failed ? { publishError: "No RSS items were fetched and at least one source failed." } : {}),
     };
   }
 

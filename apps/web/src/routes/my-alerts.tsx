@@ -33,6 +33,7 @@ export default function MyAlertsPage() {
   const [savingControls, setSavingControls] = createSignal(false);
   const [controlsSaved, setControlsSaved] = createSignal("");
   const [alertsError, setAlertsError] = createSignal("");
+  const [alertPreferencesError, setAlertPreferencesError] = createSignal("");
   const [firstReportRegionEnabled, setFirstReportRegionEnabled] = createSignal(true);
   const [highSignalRegionEnabled, setHighSignalRegionEnabled] = createSignal(true);
   const [firstReportChannelEnabled, setFirstReportChannelEnabled] = createSignal(true);
@@ -45,8 +46,10 @@ export default function MyAlertsPage() {
     async () => {
       const result = await fetchSubscriberAlertPreferences();
       if (!result.ok) {
+        setAlertPreferencesError(result.error || "Unable to load alert controls.");
         return null;
       }
+      setAlertPreferencesError("");
       return result.data;
     },
   );
@@ -118,6 +121,11 @@ export default function MyAlertsPage() {
   const saveControls = async () => {
     setSavingControls(true);
     setControlsSaved("");
+    if (alertPreferencesError()) {
+      setControlsSaved(alertPreferencesError());
+      setSavingControls(false);
+      return;
+    }
     const payload: SubscriberAlertPreferences = {
       firstReportRegionEnabled: firstReportRegionEnabled(),
       highSignalRegionEnabled: highSignalRegionEnabled(),
@@ -181,7 +189,7 @@ export default function MyAlertsPage() {
               </div>
               <button
                 type="button"
-                disabled={savingControls()}
+                disabled={savingControls() || Boolean(alertPreferencesError())}
                 onClick={() => void saveControls()}
                 class="rounded-xl border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-sm text-violet-200 disabled:opacity-50"
               >
@@ -220,6 +228,9 @@ export default function MyAlertsPage() {
             </div>
             <Show when={controlsSaved()}>
               <p class="text-xs text-zinc-400">{controlsSaved()}</p>
+            </Show>
+            <Show when={alertPreferencesError()}>
+              <p class="text-xs text-rose-300">{alertPreferencesError()}</p>
             </Show>
           </section>
 

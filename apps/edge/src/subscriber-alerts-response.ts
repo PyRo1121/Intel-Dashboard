@@ -14,6 +14,7 @@ export function buildSubscriberAlertsResponse(
   return {
     ...response,
     degraded: {
+      ...(response.degraded ?? {}),
       materializationFailed: true,
       message: ALERT_MATERIALIZATION_FAILURE_MESSAGE,
     },

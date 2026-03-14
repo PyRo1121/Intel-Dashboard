@@ -76,8 +76,11 @@ export function resolveOsintSourcePreferenceKey(source: {
   slug?: string | null;
   name?: string | null;
 }): string {
-  const aliases = resolveOsintSourcePreferenceAliases(source);
-  return aliases[1] ?? aliases[0] ?? "";
+  const slug = normalizeSourceKey(source.slug) || buildOsintSourceSlug(source.name ?? "");
+  if (slug) return slug;
+  const id = normalizeSourceKey(source.id);
+  if (id) return id;
+  return normalizeSourceKey(source.name);
 }
 
 export function matchesOsintSourcePreference(

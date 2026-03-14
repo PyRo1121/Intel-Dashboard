@@ -1168,8 +1168,9 @@ describe("intel-dashboard backend worker", () => {
           "SCHEDULED",
           "rssIngest",
           expect.stringContaining("failed:1"),
+          expect.stringContaining("outcome:failed"),
         ]),
-        doubles: expect.arrayContaining([200, expect.any(Number), 1, 1, 0, 0]),
+        doubles: expect.arrayContaining([500, expect.any(Number), 1, 1, 0, 0]),
       }),
     );
   });

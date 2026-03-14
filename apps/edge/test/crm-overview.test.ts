@@ -131,3 +131,37 @@ test("buildOwnerCrmOverviewPayload keeps edge-derived directory and data quality
   assert.equal(result.directory.orphanTrackedUsers, 0);
   assert.equal(result.dataQuality.billingCoveragePct, 50);
 });
+
+test("buildOwnerCrmOverviewPayload guards non-finite trackedUsers from backend summary", () => {
+  const payload = buildOwnerCrmOverviewPayload({
+    directory: {
+      totalUsers: 1,
+      activeSessions: 0,
+      newUsers24h: 0,
+      newUsers7d: 0,
+      users: [
+        {
+          id: "u-1",
+          login: "owner",
+          name: "Owner",
+          email: "owner@example.com",
+          avatarUrl: "",
+          providers: ["github"],
+          createdAtMs: 10,
+          updatedAtMs: 20,
+        },
+      ],
+    },
+    backendSummary: {
+      generatedAtMs: 789,
+      billing: {
+        trackedUsers: Number.NaN,
+      },
+    },
+  });
+
+  if (!payload.ok) {
+    throw new Error("expected CRM overview payload to be ok");
+  }
+  assert.equal(payload.result.dataQuality?.billingCoveragePct, 0);
+});

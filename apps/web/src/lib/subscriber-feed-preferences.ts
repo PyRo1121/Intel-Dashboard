@@ -73,5 +73,12 @@ export function includesSubscriberPreferenceValue(values: string[], rawValue: st
 }
 
 export function cloneSubscriberFeedPreferences(preferences: SubscriberFeedPreferences | null | undefined): SubscriberFeedPreferences {
-  return normalizeSubscriberFeedPreferences(preferences);
+  return {
+    favoriteChannels: [...(preferences?.favoriteChannels ?? [])],
+    favoriteSources: [...(preferences?.favoriteSources ?? [])],
+    watchRegions: [...(preferences?.watchRegions ?? [])],
+    watchTags: [...(preferences?.watchTags ?? [])],
+    watchCategories: [...(preferences?.watchCategories ?? [])],
+    ...(preferences?.updatedAt ? { updatedAt: preferences.updatedAt } : {}),
+  };
 }

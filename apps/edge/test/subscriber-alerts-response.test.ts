@@ -35,3 +35,26 @@ test("buildSubscriberAlertsResponse marks the payload degraded when materializat
     },
   });
 });
+
+test("buildSubscriberAlertsResponse preserves existing degraded metadata", () => {
+  const response = buildSubscriberAlertsResponse(
+    {
+      unreadCount: 1,
+      items: [],
+      degraded: {
+        materializationFailed: false,
+        message: "Older degraded state",
+      },
+    },
+    new Error("db unavailable"),
+  );
+
+  assert.deepEqual(response, {
+    unreadCount: 1,
+    items: [],
+    degraded: {
+      materializationFailed: true,
+      message: getSubscriberAlertsMaterializationFailureMessage(),
+    },
+  });
+});

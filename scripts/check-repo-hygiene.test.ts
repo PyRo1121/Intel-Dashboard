@@ -29,15 +29,18 @@ test("collectWorkflowPackageManagerDrift scans every workflow file", () => {
 });
 
 test("collectSharedImportDrift flags relative imports into packages/shared", () => {
+  const root = mkdtempSync(join(tmpdir(), "repo-hygiene-"));
   const originalCwd = process.cwd();
-  const originalArgv = process.argv[1];
   try {
-    process.chdir("/home/pyro1121/Documents/intel-dashboard-worktrees/quality-sweep-2");
-    process.argv[1] = "/home/pyro1121/Documents/intel-dashboard-worktrees/quality-sweep-2/scripts/check-repo-hygiene.test.ts";
+    const scriptsDir = join(root, "scripts");
+    mkdirSync(scriptsDir, { recursive: true });
+    writeFileSync(join(scriptsDir, "ok.ts"), 'import x from "@intel-dashboard/shared";\n');
+    writeFileSync(join(scriptsDir, "bad.ts"), 'import x from "../packages/shared/foo";\n');
+    process.chdir(root);
     const drift = collectSharedImportDrift(["scripts"]);
-    assert.deepEqual(drift, []);
+    assert.deepEqual(drift, ['scripts/bad.ts:1:import x from "../packages/shared/foo";']);
   } finally {
     process.chdir(originalCwd);
-    process.argv[1] = originalArgv;
+    rmSync(root, { recursive: true, force: true });
   }
 });

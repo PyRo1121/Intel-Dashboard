@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { resolveOsintSourcePreferenceKey } from "@intel-dashboard/shared/osint-source-profile.ts";
 import {
   createEmptySubscriberFeedPreferences,
   filterSubscriberFeedItems,
@@ -86,6 +87,17 @@ test("osint favorite matching accepts provider slug keys", () => {
   );
 
   assert.equal(osint.favoriteMatch, true);
+});
+
+test("resolveOsintSourcePreferenceKey prefers slug over id and display name", () => {
+  assert.equal(
+    resolveOsintSourcePreferenceKey({
+      id: "krebs",
+      slug: "krebs-on-security",
+      name: "Krebs on Security",
+    }),
+    "krebs-on-security",
+  );
 });
 
 test("normalize feed preferences ignores non-string watch values", () => {

@@ -82,9 +82,18 @@ function scheduleFlush() {
 
 async function flushBuffer() {
   if (!state.configured || buffer.length === 0) return;
-  const batchMessages = buffer.splice(0, buffer.length);
-  state.bufferSize = 0;
-  await forwardBatchMessages(batchMessages);
+  const batchMessages = buffer.slice(0, buffer.length);
+  const result = await forwardBatchMessages(batchMessages);
+  if (!result.ok) {
+    state.bufferSize = buffer.length;
+    scheduleFlush();
+    return;
+  }
+  buffer.splice(0, batchMessages.length);
+  state.bufferSize = buffer.length;
+  if (buffer.length > 0) {
+    scheduleFlush();
+  }
 }
 
 async function forwardBatchMessages(batchMessages) {
@@ -106,7 +115,6 @@ async function forwardBatchMessages(batchMessages) {
     });
     if (!response.ok) {
       state.lastError = `collector_forward_failed:${response.status}`;
-      state.droppedMessages += batchMessages.length;
       return { ok: false, applied: 0, status: response.status };
     }
     const payload = await response.json().catch(() => null);
@@ -122,7 +130,6 @@ async function forwardBatchMessages(batchMessages) {
     };
   } catch (error) {
     state.lastError = error instanceof Error ? error.message : String(error);
-    state.droppedMessages += batchMessages.length;
     return { ok: false, applied: 0 };
   }
 }

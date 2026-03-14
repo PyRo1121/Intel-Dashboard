@@ -43,6 +43,7 @@ import {
 import { resolveTelegramScrapePlan } from "./telegram-scrape-plan";
 import { CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT } from "@intel-dashboard/shared/telegram-signal.ts";
 import { shouldPersistLatestTelegramStateLocally } from "./telegram-state-cache";
+import { mergeLatestChannelStates } from "./telegram-state-merge";
 
 // ============================================================================
 // Types
@@ -2485,13 +2486,15 @@ export class TelegramScraperDO extends DurableObject<Env> {
 
       // ---- 6. Assemble final state ----
       debugRuntimeLog(this.runtimeEnv, "[TelegramScraper] Phase 6: Assembling final state...");
-      const byUsername = new Map<string, ChannelState>();
-      for (const channelState of unchangedChannels) {
-        byUsername.set(channelState.username, channelState);
-      }
-      for (const channelState of newChannelStates) {
-        byUsername.set(channelState.username, channelState);
-      }
+      const latestState = await this.loadPreviousState();
+      const cycleChannelSet = new Set(cycleChannels.map((config) => config.username));
+      const byUsername = mergeLatestChannelStates<ChannelState>({
+        latestChannels: latestState?.channels,
+        fallbackChannels: prevState?.channels,
+        scopedFallbackChannels: unchangedChannels,
+        scopedUsernames: cycleChannelSet,
+        updatedChannels: newChannelStates,
+      });
       for (const config of CHANNELS) {
         if (!byUsername.has(config.username)) {
           byUsername.set(config.username, this.makeEmptyChannelState(config));
@@ -2899,7 +2902,15 @@ export class TelegramScraperDO extends DurableObject<Env> {
       });
     }
 
-    const allChannels = CHANNELS.map((config) => byUsername.get(config.username) ?? this.makeEmptyChannelState(config));
+    const latestState = await this.loadPreviousState();
+    const mergedByUsername = mergeLatestChannelStates<ChannelState>({
+      latestChannels: latestState?.channels,
+      fallbackChannels: prevState?.channels,
+      updatedChannels: Array.from(touchedChannels, (username) => byUsername.get(username)).filter(
+        (channel): channel is ChannelState => Boolean(channel),
+      ),
+    });
+    const allChannels = CHANNELS.map((config) => mergedByUsername.get(config.username) ?? this.makeEmptyChannelState(config));
     const canonical = await this.buildCanonicalEvents(allChannels);
     const totalMessages = allChannels.reduce((sum, channel) => sum + channel.message_count, 0);
     const stateTimestamp = batch.collectedAt || new Date().toISOString();

@@ -165,7 +165,7 @@ export default function Sidebar() {
 
         {/* Collapsed tooltip */}
         <Show when={compact}>
-          <div aria-hidden="true" class="absolute left-full ml-3 px-3 py-1.5 bg-zinc-900/95 backdrop-blur-xl border border-white/10 text-zinc-200 text-xs font-medium rounded-sm opacity-0 pointer-events-none group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-50 shadow-2xl shadow-black/50">
+          <div aria-hidden="true" class="absolute left-full ml-3 px-3 py-1.5 bg-zinc-900/95 backdrop-blur-xl border border-white/10 text-zinc-200 text-xs font-medium rounded-sm opacity-0 pointer-events-none group-hover:opacity-100 group-focus:opacity-100 transition-all duration-200 whitespace-nowrap z-50 shadow-2xl shadow-black/50">
             {item.label}
           </div>
         </Show>

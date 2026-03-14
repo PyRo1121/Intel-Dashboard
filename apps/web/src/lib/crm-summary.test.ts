@@ -95,11 +95,11 @@ test("CRM data quality badge tone reflects whether tracked issues are present", 
   );
   assert.equal(
     getCrmQualityBadgeTone({ missingAvatarUsers: 0, placeholderNameUsers: 0, syntheticLoginUsers: 0, orphanTrackedUsers: 0 }),
-    "text-amber-300 border-amber-500/40 bg-amber-500/10",
+    "text-emerald-300 border-emerald-500/40 bg-emerald-500/10",
   );
   assert.equal(
     getCrmQualityBadgeTone(undefined),
-    "text-amber-300 border-amber-500/40 bg-amber-500/10",
+    "text-emerald-300 border-emerald-500/40 bg-emerald-500/10",
   );
 });
 

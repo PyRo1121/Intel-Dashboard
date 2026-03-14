@@ -6,16 +6,11 @@ interface StatCardProps {
   label: string;
   value: string | number;
   trend?: { value: number; label: string };
-  accentColor?: "emerald" | "amber" | "red" | "blue" | "purple";
+  accentColor?: "amber" | "red" | "blue";
   delay?: number;
 }
 
 const ACCENT_MAP = {
-  emerald: {
-    iconBg: "bg-amber-500/10",
-    iconText: "text-amber-400",
-    glow: "shadow-amber-500/5",
-  },
   amber: {
     iconBg: "bg-amber-500/10",
     iconText: "text-amber-400",
@@ -30,11 +25,6 @@ const ACCENT_MAP = {
     iconBg: "bg-blue-500/10",
     iconText: "text-blue-400",
     glow: "shadow-blue-500/5",
-  },
-  purple: {
-    iconBg: "bg-cyan-500/10",
-    iconText: "text-cyan-400",
-    glow: "shadow-cyan-500/5",
   },
 };
 

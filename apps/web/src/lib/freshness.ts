@@ -100,13 +100,13 @@ export function buildFreshnessStatusAt(
 }
 
 export function freshnessPillTone(state: FreshnessState): string {
-  if (state === "live") return "border-amber-400/25 bg-amber-500/10 text-amber-200";
+  if (state === "live") return "border-orange-400/35 bg-orange-500/12 text-orange-100";
   if (state === "delayed") return "border-amber-400/25 bg-amber-500/10 text-amber-200";
   return "border-red-400/25 bg-red-500/10 text-red-200";
 }
 
 export function freshnessBannerTone(state: FreshnessState): string {
-  if (state === "live") return "border-amber-400/20 bg-amber-500/[0.08] text-amber-100";
+  if (state === "live") return "border-orange-400/25 bg-orange-500/[0.10] text-orange-100";
   if (state === "delayed") return "border-amber-400/20 bg-amber-500/[0.08] text-amber-100";
   return "border-red-400/20 bg-red-500/[0.08] text-red-100";
 }

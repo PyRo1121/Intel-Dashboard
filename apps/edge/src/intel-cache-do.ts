@@ -9,6 +9,7 @@ import {
   buildCacheBustRefreshEndpoints,
   isCurrentCacheGeneration,
 } from "./intel-cache-refresh";
+import { evaluateIntelCacheHealth } from "./intel-cache-health";
 import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
 import { chunkEntries, collectStaleChunkKeys, MAX_DO_STORAGE_BATCH_ENTRIES } from "./storage-batches";
@@ -187,9 +188,10 @@ export class IntelCacheDO extends DurableObject<Env> {
     // Health / status endpoint
     if (path === "/api/health") {
       // Ensure alarm is running
-      const currentAlarm = await this.ctx.storage.getAlarm();
-      if (!currentAlarm) {
-        await this.ctx.storage.setAlarm(Date.now() + REFRESH_INTERVAL_MS);
+      let nextAlarm = await this.ctx.storage.getAlarm();
+      if (!nextAlarm) {
+        nextAlarm = Date.now() + REFRESH_INTERVAL_MS;
+        await this.ctx.storage.setAlarm(nextAlarm);
       }
 
       const cacheInfo: Record<string, unknown> = {};
@@ -202,11 +204,34 @@ export class IntelCacheDO extends DurableObject<Env> {
         };
       }
 
+      const defaultChatHistoryEndpoint = buildChatHistoryCacheKeyFromLimits(
+        CHAT_DEFAULT_SESSION_LIMIT,
+        CHAT_DEFAULT_MESSAGE_LIMIT,
+      );
+      const health = evaluateIntelCacheHealth({
+        cache: this.cache,
+        nowMs: Date.now(),
+        staleWindowByEndpoint: {
+          "/api/intel": ENDPOINT_STALE_WINDOW_MS["/api/intel"],
+          "/api/briefings": ENDPOINT_STALE_WINDOW_MS["/api/briefings"],
+          "/api/air-sea": ENDPOINT_STALE_WINDOW_MS["/api/air-sea"],
+          "/api/whales": WHALE_STALE_WINDOW_MS,
+          [defaultChatHistoryEndpoint]: CHAT_HISTORY_STALE_WINDOW_MS,
+        },
+        requiredEndpoints: [
+          ...ENDPOINTS,
+          "/api/whales",
+          defaultChatHistoryEndpoint,
+        ],
+      });
+
       return jsonResponse({
-        status: "ok",
+        status: health.status,
         cached: cacheInfo,
-        nextAlarm: currentAlarm
-          ? new Date(currentAlarm).toISOString()
+        missingEndpoints: health.missingEndpoints,
+        staleEndpoints: health.staleEndpoints,
+        nextAlarm: nextAlarm
+          ? new Date(nextAlarm).toISOString()
           : null,
         refreshing: this.refreshing,
       });

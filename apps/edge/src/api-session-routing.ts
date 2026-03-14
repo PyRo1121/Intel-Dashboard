@@ -3,6 +3,10 @@ export function requiresSessionForApiPath(path: string): boolean {
     return false;
   }
 
+  if (path.startsWith("/api/intel-dashboard/")) {
+    return false;
+  }
+
   switch (path) {
     case "/api/telegram/collector-ingest":
       return false;

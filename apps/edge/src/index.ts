@@ -2198,11 +2198,34 @@ async function requireOwnerEntitlement(params: {
     };
   }
   const userId = resolveUserId(params.user);
-  const entitlement = await fetchFeedEntitlement({
+  const loginPrincipal = (params.user.login ?? "").trim();
+  let actingUserId = userId;
+  const primaryEntitlement = await fetchFeedEntitlement({
     env: params.env,
     userId,
-    userLogin: params.user.login,
   });
+  let entitlement = primaryEntitlement;
+  if (
+    loginPrincipal.length > 0 &&
+    loginPrincipal !== userId &&
+    !isOwnerRole(primaryEntitlement.role)
+  ) {
+    const loginEntitlement = await fetchFeedEntitlement({
+      env: params.env,
+      userId: loginPrincipal,
+    });
+    if (isOwnerRole(loginEntitlement.role)) {
+      entitlement = loginEntitlement;
+      actingUserId = loginPrincipal;
+    }
+  }
+  if (!isOwnerRole(entitlement.role)) {
+    entitlement = await fetchFeedEntitlement({
+      env: params.env,
+      userId,
+      userLogin: params.user.login,
+    });
+  }
   if (!isOwnerRole(entitlement.role)) {
     return {
       ok: false,
@@ -2212,7 +2235,7 @@ async function requireOwnerEntitlement(params: {
   return {
     ok: true,
     entitlement,
-    userId,
+    userId: actingUserId,
   };
 }
 
@@ -2794,13 +2817,14 @@ async function loadCrmDirectorySnapshot(env: Env): Promise<{
 
 async function fetchOwnerCrmBackendSummary(params: {
   env: Env;
-  user: VerifiedSession;
+  userId: string;
+  userLogin: string;
 }): Promise<{ ok: true; payload: CrmOverviewResult } | { ok: false; status: number; error: string }> {
   return postOwnerBackendJson<CrmOverviewResult>({
     backendToken: resolveBackendApiToken(params.env),
     url: resolveBackendEndpointUrl(params.env, "/api/intel-dashboard/admin/crm/summary"),
-    userId: resolveUserId(params.user),
-    userLogin: params.user.login,
+    userId: params.userId,
+    userLogin: params.userLogin,
     errorPrefix: "Backend CRM summary",
     fetchImpl: resolveBackendFetch(params.env),
   });
@@ -2808,14 +2832,15 @@ async function fetchOwnerCrmBackendSummary(params: {
 
 async function fetchOwnerCrmAiTelemetry(params: {
   env: Env;
-  user: VerifiedSession;
+  userId: string;
+  userLogin: string;
   window: string;
 }): Promise<import("./owner-backend-json").BackendJsonResult<CrmAiTelemetryResult>> {
   return postOwnerBackendJson<CrmAiTelemetryResult>({
     backendToken: resolveBackendApiToken(params.env),
     url: resolveBackendEndpointUrl(params.env, "/api/intel-dashboard/admin/crm/ai-telemetry"),
-    userId: resolveUserId(params.user),
-    userLogin: params.user.login,
+    userId: params.userId,
+    userLogin: params.userLogin,
     extraBody: { window: params.window },
     errorPrefix: "Backend AI telemetry",
     fetchImpl: resolveBackendFetch(params.env),
@@ -2853,6 +2878,7 @@ async function proxySessionBillingRoute(params: {
   user: VerifiedSession;
   backendPath: string;
   allowMethods: ReadonlyArray<string>;
+  actingUserId?: string;
 }): Promise<Response> {
   if (!params.allowMethods.includes(params.request.method)) {
     return privateApiJson(
@@ -2886,7 +2912,7 @@ async function proxySessionBillingRoute(params: {
       },
       body: JSON.stringify({
         ...payload,
-        userId: resolveUserId(params.user),
+        userId: params.actingUserId ?? resolveUserId(params.user),
         userLogin: params.user.login,
       }),
       redirect: "manual",
@@ -5262,6 +5288,76 @@ export default {
       });
     }
 
+    if (path.startsWith("/api/intel-dashboard/")) {
+      let backendUrl: URL;
+      try {
+        backendUrl = new URL(resolveBackendEndpointUrl(env, path));
+        backendUrl.search = url.search;
+      } catch (error) {
+        return privateApiJson(origin, 503, {
+          error: "Backend binding unavailable",
+          detail: error instanceof Error ? error.message : "unknown_error",
+        });
+      }
+
+      const useServiceBinding = usesBackendServiceBinding(env);
+
+      const backendHeaders = new Headers(request.headers);
+      if (useServiceBinding) {
+        backendHeaders.delete("Host");
+      } else {
+        const backendOrigin = new URL(backendUrl.origin);
+        backendHeaders.set("Host", backendOrigin.hostname);
+      }
+      const canRetry = request.method === "GET" || request.method === "HEAD";
+      const maxAttempts = canRetry ? 2 : 1;
+      let backendRes: Response | null = null;
+      let lastErr: unknown = null;
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          const proxyRequestInit: RequestInit = {
+            method: request.method,
+            headers: backendHeaders,
+            redirect: "manual",
+            signal: AbortSignal.timeout(30_000),
+          };
+          if (request.method !== "GET" && request.method !== "HEAD") {
+            proxyRequestInit.body = request.body;
+          }
+
+          const backendRequest = new Request(backendUrl.toString(), proxyRequestInit);
+          backendRes = useServiceBinding
+            ? await env.INTEL_BACKEND.fetch(backendRequest)
+            : await fetch(backendRequest);
+          if (!canRetry || backendRes.status < 500 || attempt === maxAttempts - 1) {
+            break;
+          }
+        } catch (err) {
+          lastErr = err;
+          if (attempt === maxAttempts - 1) {
+            return privateApiJson(origin, 502, {
+              error: "Backend unavailable",
+              detail: err instanceof Error ? err.message : "unknown_error",
+            });
+          }
+        }
+      }
+
+      if (!backendRes) {
+        return privateApiJson(origin, 502, {
+          error: "Backend unavailable",
+          detail: lastErr instanceof Error ? lastErr.message : "unknown_error",
+        });
+      }
+      const response = new Response(backendRes.body, {
+        status: backendRes.status,
+        headers: backendRes.headers,
+      });
+      applyCorsHeaders(response.headers, origin);
+      return withSensitiveNoStore(response);
+    }
+
     const requiresSession = requiresSessionForApiPath(path);
     const authSecret = env.AUTH_SECRET?.trim() ?? "";
     if (requiresSession && !authSecret) {
@@ -5627,7 +5723,8 @@ export default {
 
       const backendSummary = await fetchOwnerCrmBackendSummary({
         env,
-        user: sessionUser,
+        userId: ownerGate.userId,
+        userLogin: sessionUser.login,
       });
       if (!backendSummary.ok) {
         return privateApiJson(origin, backendSummary.status, { error: backendSummary.error });
@@ -5659,7 +5756,8 @@ export default {
       }
       const backendTelemetry = await fetchOwnerCrmAiTelemetry({
         env,
-        user: sessionUser,
+        userId: ownerGate.userId,
+        userLogin: sessionUser.login,
         window,
       });
       if (!backendTelemetry.ok) {
@@ -5670,6 +5768,10 @@ export default {
     }
 
     if (path === "/api/admin/crm/customer") {
+      const ownerGate = await requireOwnerEntitlement({ env, user: sessionUser, origin });
+      if (!ownerGate.ok) {
+        return ownerGate.response;
+      }
       return proxySessionBillingRoute({
         request,
         env,
@@ -5677,10 +5779,15 @@ export default {
         user: sessionUser,
         backendPath: "/api/intel-dashboard/admin/crm/customer",
         allowMethods: ["POST"],
+        actingUserId: ownerGate.userId,
       });
     }
 
     if (path === "/api/admin/crm/cancel-subscription") {
+      const ownerGate = await requireOwnerEntitlement({ env, user: sessionUser, origin });
+      if (!ownerGate.ok) {
+        return ownerGate.response;
+      }
       return proxySessionBillingRoute({
         request,
         env,
@@ -5688,10 +5795,15 @@ export default {
         user: sessionUser,
         backendPath: "/api/intel-dashboard/admin/crm/cancel-subscription",
         allowMethods: ["POST"],
+        actingUserId: ownerGate.userId,
       });
     }
 
     if (path === "/api/admin/crm/refund") {
+      const ownerGate = await requireOwnerEntitlement({ env, user: sessionUser, origin });
+      if (!ownerGate.ok) {
+        return ownerGate.response;
+      }
       return proxySessionBillingRoute({
         request,
         env,
@@ -5699,6 +5811,7 @@ export default {
         user: sessionUser,
         backendPath: "/api/intel-dashboard/admin/crm/refund",
         allowMethods: ["POST"],
+        actingUserId: ownerGate.userId,
       });
     }
 
@@ -5793,6 +5906,11 @@ export default {
     // ----------------------------------------------------------------
 
     if (path === "/api/status") {
+      const ownerGate = await requireOwnerEntitlement({ env, user: sessionUser, origin });
+      if (!ownerGate.ok) {
+        return ownerGate.response;
+      }
+
       const cacheId = env.INTEL_CACHE.idFromName("main");
       const cacheStub = env.INTEL_CACHE.get(cacheId);
       const cacheRes = await cacheStub.fetch(
@@ -6236,76 +6354,6 @@ export default {
       const response = new Response(responseBody, {
         status: doRes.status,
         headers: responseHeaders,
-      });
-      applyCorsHeaders(response.headers, origin);
-      return withSensitiveNoStore(response);
-    }
-
-    if (path.startsWith("/api/intel-dashboard/")) {
-      let backendUrl: URL;
-      try {
-        backendUrl = new URL(resolveBackendEndpointUrl(env, path));
-        backendUrl.search = url.search;
-      } catch (error) {
-        return privateApiJson(origin, 503, {
-          error: "Backend binding unavailable",
-          detail: error instanceof Error ? error.message : "unknown_error",
-        });
-      }
-
-      const useServiceBinding = usesBackendServiceBinding(env);
-
-      const backendHeaders = new Headers(request.headers);
-      if (useServiceBinding) {
-        backendHeaders.delete("Host");
-      } else {
-        const backendOrigin = new URL(backendUrl.origin);
-        backendHeaders.set("Host", backendOrigin.hostname);
-      }
-      const canRetry = request.method === "GET" || request.method === "HEAD";
-      const maxAttempts = canRetry ? 2 : 1;
-      let backendRes: Response | null = null;
-      let lastErr: unknown = null;
-
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        try {
-          const proxyRequestInit: RequestInit = {
-            method: request.method,
-            headers: backendHeaders,
-            redirect: "manual",
-            signal: AbortSignal.timeout(30_000),
-          };
-          if (request.method !== "GET" && request.method !== "HEAD") {
-            proxyRequestInit.body = request.body;
-          }
-
-          const backendRequest = new Request(backendUrl.toString(), proxyRequestInit);
-          backendRes = useServiceBinding
-            ? await env.INTEL_BACKEND.fetch(backendRequest)
-            : await fetch(backendRequest);
-          if (!canRetry || backendRes.status < 500 || attempt === maxAttempts - 1) {
-            break;
-          }
-        } catch (err) {
-          lastErr = err;
-          if (attempt === maxAttempts - 1) {
-            return privateApiJson(origin, 502, {
-              error: "Backend unavailable",
-              detail: err instanceof Error ? err.message : "unknown_error",
-            });
-          }
-        }
-      }
-
-      if (!backendRes) {
-        return privateApiJson(origin, 502, {
-          error: "Backend unavailable",
-          detail: lastErr instanceof Error ? lastErr.message : "unknown_error",
-        });
-      }
-      const response = new Response(backendRes.body, {
-        status: backendRes.status,
-        headers: backendRes.headers,
       });
       applyCorsHeaders(response.headers, origin);
       return withSensitiveNoStore(response);

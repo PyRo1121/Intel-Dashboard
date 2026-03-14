@@ -260,6 +260,10 @@ type NonceGuardNamespace = {
   get(id: unknown): { fetch(request: Request): Promise<Response> };
 };
 
+function normalizeRetryAfterMs(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
 export async function verifySignedAdminRequestWithNonceGuard(params: {
   method: string;
   path: string;
@@ -304,12 +308,16 @@ export async function verifySignedAdminRequestWithNonceGuard(params: {
     }),
   }));
   if (!guardRes.ok) {
-    const payload = await guardRes.clone().json().catch(() => null) as { retryAfterMs?: unknown } | null;
+    const payload = guardRes.status === 429
+      ? await guardRes.clone().json().catch(() => null) as { retryAfterMs?: unknown } | null
+      : null;
     return {
       ok: false,
       reason: guardRes.status === 409 ? "nonce_reused" : "nonce_guard_rejected",
       status: guardRes.status,
-      ...(typeof payload?.retryAfterMs === "number" ? { retryAfterMs: payload.retryAfterMs } : {}),
+      ...(normalizeRetryAfterMs(payload?.retryAfterMs) !== undefined
+        ? { retryAfterMs: normalizeRetryAfterMs(payload?.retryAfterMs) }
+        : {}),
     };
   }
 

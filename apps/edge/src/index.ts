@@ -2943,14 +2943,18 @@ async function authorizePrivilegedRoute(params: {
         params.origin,
         signed.status,
         { error: "Forbidden", reason: signed.reason },
-        signed.status === 429 && typeof signed.retryAfterMs === "number"
-          ? { "Retry-After": String(Math.max(1, Math.ceil(signed.retryAfterMs / 1000))) }
-          : undefined,
+        buildRetryAfterHeaders(signed),
       ),
     };
   }
 
   return { ok: true };
+}
+
+function buildRetryAfterHeaders(result: { status: number; retryAfterMs?: number }): HeadersInit | undefined {
+  return result.status === 429 && typeof result.retryAfterMs === "number"
+    ? { "Retry-After": String(Math.max(1, Math.ceil(result.retryAfterMs / 1000))) }
+    : undefined;
 }
 
 async function handleStripeWebhook(params: {
@@ -5748,9 +5752,7 @@ export default {
           origin,
           signed.status,
           { error: "Forbidden", reason: signed.reason },
-          signed.status === 429 && typeof signed.retryAfterMs === "number"
-            ? { "Retry-After": String(Math.max(1, Math.ceil(signed.retryAfterMs / 1000))) }
-            : undefined,
+          buildRetryAfterHeaders(signed),
         );
       }
 

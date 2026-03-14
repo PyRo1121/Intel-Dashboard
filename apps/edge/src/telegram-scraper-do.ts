@@ -28,6 +28,7 @@ import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
 import {
   isLeadTelegramSource,
+  normalizeTelegramSourcePerformanceRows,
   updateTelegramSourcePerformanceStats,
   type TelegramSourcePerformanceStats,
 } from "./telegram-source-performance";
@@ -214,19 +215,6 @@ interface CanonicalSourceRecord {
   tokenSet: Set<string>;
   simhash: bigint;
   mediaSignature: string;
-}
-
-interface TelegramSourcePerformanceRow {
-  channel: string;
-  total_events: number;
-  lead_reports: number;
-  follow_on_reports: number;
-  corroborated_reports: number;
-  single_source_reports: number;
-  score: number;
-  last_lead_at: number | null;
-  last_seen_at: number | null;
-  updated_at: number | null;
 }
 
 interface TelegramSignalProfileRow {
@@ -1031,13 +1019,15 @@ export class TelegramScraperDO extends DurableObject<Env> {
   }
 
   private loadSourcePerformanceStats(): Map<string, TelegramSourcePerformanceStats> {
-    const rows = this.ctx.storage.sql
-      .exec(
-        `SELECT channel, total_events, lead_reports, follow_on_reports, corroborated_reports,
-          single_source_reports, score, last_lead_at, last_seen_at, updated_at
-         FROM telegram_source_performance`,
-      )
-      .toArray() as unknown as TelegramSourcePerformanceRow[];
+    const rows = normalizeTelegramSourcePerformanceRows(
+      this.ctx.storage.sql
+        .exec(
+          `SELECT channel, total_events, lead_reports, follow_on_reports, corroborated_reports,
+            single_source_reports, score, last_lead_at, last_seen_at, updated_at
+           FROM telegram_source_performance`,
+        )
+        .toArray(),
+    );
     const map = new Map<string, TelegramSourcePerformanceStats>();
     for (const row of rows) {
       const channel = (row.channel || "").trim();

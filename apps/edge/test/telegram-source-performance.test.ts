@@ -5,6 +5,7 @@ import {
   computeTelegramSourcePerformanceScore,
   createEmptyTelegramSourcePerformanceStats,
   isLeadTelegramSource,
+  normalizeTelegramSourcePerformanceRows,
   updateTelegramSourcePerformanceStats,
 } from "../src/telegram-source-performance.ts";
 
@@ -120,6 +121,59 @@ test("applyTelegramSourcePerformanceContribution preserves a neutral seed state"
   assert.equal(next.followOnReports, 1);
   assert.equal(next.corroboratedReports, 1);
   assert.equal(next.lastSeenAtMs, Date.UTC(2026, 2, 9, 12, 0, 0));
+});
+
+test("normalizeTelegramSourcePerformanceRows returns empty array for non-array input", () => {
+  assert.deepEqual(normalizeTelegramSourcePerformanceRows(undefined), []);
+  assert.deepEqual(normalizeTelegramSourcePerformanceRows(null), []);
+  assert.deepEqual(normalizeTelegramSourcePerformanceRows({}), []);
+  assert.deepEqual(normalizeTelegramSourcePerformanceRows(42), []);
+  assert.deepEqual(normalizeTelegramSourcePerformanceRows("not-an-array"), []);
+});
+
+test("normalizeTelegramSourcePerformanceRows filters malformed entries and normalizes row fields", () => {
+  const rows = normalizeTelegramSourcePerformanceRows([
+    null,
+    {
+      channel: "alpha",
+      total_events: 10,
+      lead_reports: 2,
+      follow_on_reports: 4,
+      corroborated_reports: 1,
+      single_source_reports: 0,
+      score: 77,
+      last_lead_at: 100,
+      last_seen_at: 200,
+      updated_at: 300,
+    },
+    {
+      channel: 42,
+      total_events: "bad",
+      lead_reports: Number.NaN,
+      follow_on_reports: 1,
+      corroborated_reports: undefined,
+      single_source_reports: 2,
+      score: Infinity,
+      last_lead_at: "bad",
+      last_seen_at: 400,
+      updated_at: null,
+    },
+  ]);
+
+  assert.deepEqual(rows, [
+    {
+      channel: "alpha",
+      total_events: 10,
+      lead_reports: 2,
+      follow_on_reports: 4,
+      corroborated_reports: 1,
+      single_source_reports: 0,
+      score: 77,
+      last_lead_at: 100,
+      last_seen_at: 200,
+      updated_at: 300,
+    },
+  ]);
 });
 
 

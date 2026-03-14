@@ -14,7 +14,9 @@ export function collectStaleChunkKeys(
   previousChunkCount: number | null | undefined,
   nextChunkCount = 0,
 ): string[] {
-  const previous = Number.isFinite(previousChunkCount) ? Math.max(0, Math.floor(previousChunkCount as number)) : 0;
+  const previous = typeof previousChunkCount === "number" && Number.isFinite(previousChunkCount)
+    ? Math.max(0, Math.floor(previousChunkCount))
+    : 0;
   const next = Math.max(0, Math.floor(nextChunkCount));
   const keys: string[] = [];
   for (let index = next; index < previous; index += 1) {

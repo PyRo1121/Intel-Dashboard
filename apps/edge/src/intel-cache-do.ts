@@ -7,7 +7,9 @@ import {
   collectPersistedChatHistoryEndpoints,
 } from "./intel-cache-chat-history";
 import {
+  buildCacheBustRefreshBatches,
   buildCacheBustRefreshEndpoints,
+  formatCacheBustRefreshFailure,
   isCurrentCacheGeneration,
 } from "./intel-cache-refresh";
 import { evaluateIntelCacheHealth } from "./intel-cache-health";
@@ -80,6 +82,7 @@ const ADMIN_NONCE_TTL_SECONDS = 10 * 60;
 const ADMIN_RATE_WINDOW_MS = 60_000;
 const ADMIN_RATE_LIMIT_PER_WINDOW = 8;
 const WEBHOOK_EVENT_TTL_SECONDS = 7 * 24 * 60 * 60;
+const CACHE_BUST_MAX_PARALLEL_REFRESHES = 3;
 
 function normalizeWhaleAlertApiKey(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -141,7 +144,7 @@ export class IntelCacheDO extends DurableObject<Env> {
 
     // Force cache bust — wipe all cached data and refresh immediately
     if (path === "/api/cache-bust") {
-      return this.ctx.blockConcurrencyWhile(async () => {
+      const refreshTargets = await this.ctx.blockConcurrencyWhile(async () => {
         debugRuntimeLog(this.runtimeEnv, "[IntelCacheDO] Cache bust requested — wiping all cached data");
         this.cacheGeneration += 1;
         this.cache.clear();
@@ -154,36 +157,17 @@ export class IntelCacheDO extends DurableObject<Env> {
         }
         await this.deleteChunked("/api/whales");
 
-        const errors: string[] = [];
-        const refreshTargets = buildCacheBustRefreshEndpoints(ENDPOINTS, deletedChatHistoryEndpoints);
-        for (const endpoint of refreshTargets) {
-          try {
-            if (endpoint === "/api/whales") {
-              await this.fetchWhalesDedup();
-            } else {
-              await this.fetchEndpointDedup(endpoint, 0);
-            }
-          } catch (err) {
-            const detail = err instanceof Error ? err.message : String(err);
-            errors.push(`${endpoint}: ${detail}`);
-          }
-        }
+        return buildCacheBustRefreshEndpoints(ENDPOINTS, deletedChatHistoryEndpoints);
+      });
 
-        const cacheInfo: Record<string, unknown> = {};
-        for (const [k, v] of this.cache.entries()) {
-          cacheInfo[k] = {
-            timestamp: new Date(v.timestamp).toISOString(),
-            sizeBytes: v.data.length,
-            status: v.status,
-          };
-        }
+      const errors = await this.rewarmCacheBustTargets(refreshTargets);
+      const cacheInfo = this.buildCacheInfo();
 
-        return jsonResponse({
-          status: "cache_busted",
-          refreshed: cacheInfo,
-          errors: errors.length ? errors : undefined,
-          cacheKeys: [...this.cache.keys()],
-        });
+      return jsonResponse({
+        status: "cache_busted",
+        refreshed: cacheInfo,
+        errors: errors.length ? errors : undefined,
+        cacheKeys: [...this.cache.keys()],
       });
     }
 
@@ -289,6 +273,18 @@ export class IntelCacheDO extends DurableObject<Env> {
       status: statusOverride ?? cached.status,
       headers,
     });
+  }
+
+  private buildCacheInfo(): Record<string, unknown> {
+    const cacheInfo: Record<string, unknown> = {};
+    for (const [k, v] of this.cache.entries()) {
+      cacheInfo[k] = {
+        timestamp: new Date(v.timestamp).toISOString(),
+        sizeBytes: v.data.length,
+        status: v.status,
+      };
+    }
+    return cacheInfo;
   }
 
   private async handleAdminGuard(request: Request): Promise<Response> {
@@ -678,6 +674,36 @@ export class IntelCacheDO extends DurableObject<Env> {
       console.error("[IntelCacheDO] WhaleAlert fetch failed:", err);
       return null;
     }
+  }
+
+  private async rewarmCacheBustTargets(refreshTargets: readonly string[]): Promise<string[]> {
+    const errors: string[] = [];
+    const refreshBatches = buildCacheBustRefreshBatches(refreshTargets, CACHE_BUST_MAX_PARALLEL_REFRESHES);
+
+    for (const batch of refreshBatches) {
+      const results = await Promise.all(
+        batch.map(async (endpoint) => {
+          try {
+            const refreshed = endpoint === "/api/whales"
+              ? await this.fetchWhalesDedup()
+              : await this.fetchEndpointDedup(endpoint, 0);
+            return refreshed
+              ? null
+              : formatCacheBustRefreshFailure(endpoint, null);
+          } catch (error) {
+            return formatCacheBustRefreshFailure(endpoint, error);
+          }
+        }),
+      );
+
+      for (const result of results) {
+        if (result) {
+          errors.push(result);
+        }
+      }
+    }
+
+    return errors;
   }
 
   private fetchWhalesDedup(): Promise<CachedResponse | null> {

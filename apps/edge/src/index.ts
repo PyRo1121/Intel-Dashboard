@@ -2939,7 +2939,14 @@ async function authorizePrivilegedRoute(params: {
   if (!signed.ok) {
     return {
       ok: false,
-      response: corsJson(params.origin, signed.status, { error: "Forbidden", reason: signed.reason }),
+      response: corsJson(
+        params.origin,
+        signed.status,
+        { error: "Forbidden", reason: signed.reason },
+        signed.status === 429 && typeof signed.retryAfterMs === "number"
+          ? { "Retry-After": String(Math.max(1, Math.ceil(signed.retryAfterMs / 1000))) }
+          : undefined,
+      ),
     };
   }
 
@@ -5737,7 +5744,14 @@ export default {
         clientIp: request.headers.get("CF-Connecting-IP") ?? "unknown",
       });
       if (!signed.ok) {
-        return corsJson(origin, signed.status, { error: "Forbidden", reason: signed.reason });
+        return corsJson(
+          origin,
+          signed.status,
+          { error: "Forbidden", reason: signed.reason },
+          signed.status === 429 && typeof signed.retryAfterMs === "number"
+            ? { "Retry-After": String(Math.max(1, Math.ceil(signed.retryAfterMs / 1000))) }
+            : undefined,
+        );
       }
 
       let payload: unknown;

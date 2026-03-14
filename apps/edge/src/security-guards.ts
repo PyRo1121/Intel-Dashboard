@@ -271,7 +271,7 @@ export async function verifySignedAdminRequestWithNonceGuard(params: {
   maxSkewMs?: number;
 }): Promise<
   | { ok: true; nonce: string; timestampMs: number }
-  | { ok: false; reason: string; status: number }
+  | { ok: false; reason: string; status: number; retryAfterMs?: number }
 > {
   const signed = await verifySignedAdminRequest({
     method: params.method,
@@ -304,10 +304,12 @@ export async function verifySignedAdminRequestWithNonceGuard(params: {
     }),
   }));
   if (!guardRes.ok) {
+    const payload = await guardRes.clone().json().catch(() => null) as { retryAfterMs?: unknown } | null;
     return {
       ok: false,
       reason: guardRes.status === 409 ? "nonce_reused" : "nonce_guard_rejected",
       status: guardRes.status,
+      ...(typeof payload?.retryAfterMs === "number" ? { retryAfterMs: payload.retryAfterMs } : {}),
     };
   }
 

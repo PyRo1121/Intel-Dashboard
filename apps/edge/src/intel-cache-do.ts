@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { resolveBackendEndpointUrl, usesBackendServiceBinding } from "./backend-origin";
+import { resolveStartupAlarmAt } from "./intel-cache-alarms";
 import { enforceIntelAdminGuard, enforceWebhookDedupe } from "./intel-cache-guards";
 import {
   buildChatHistoryCacheKeyFromLimits,
@@ -119,8 +120,9 @@ export class IntelCacheDO extends DurableObject<Env> {
       }
 
       const currentAlarm = await this.ctx.storage.getAlarm();
-      if (!currentAlarm || currentAlarm > Date.now() + REFRESH_INTERVAL_MS * 2) {
-        await this.ctx.storage.setAlarm(Date.now() + 5_000);
+      const startupAlarm = resolveStartupAlarmAt(currentAlarm, Date.now(), 5_000);
+      if (startupAlarm !== null && startupAlarm !== currentAlarm) {
+        await this.ctx.storage.setAlarm(startupAlarm);
       }
     });
   }

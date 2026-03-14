@@ -768,8 +768,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
         `SELECT channel FROM telegram_channel_authority WHERE effective_authority = 'mtproto'`
       ).all<{ channel: string }>();
       const rows = Array.isArray(result.results) ? result.results : [];
-      const channels = rows.map((row) => (row.channel || "").trim().toLowerCase()).filter(Boolean);
-      return channels.length > 0 ? channels : fallback;
+      return rows.map((row) => (row.channel || "").trim().toLowerCase()).filter(Boolean);
     } catch {
       return fallback;
     }

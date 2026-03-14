@@ -8,6 +8,14 @@ function normalizeId(value) {
   return raw || null;
 }
 
+function normalizeMessageDate(value) {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Date(value * 1000).toISOString();
+  }
+  return new Date().toISOString();
+}
+
 export function getEventChannelUsername(event) {
   return trim(event?.chat?.username).replace(/^@+/, "").toLowerCase() || null;
 }
@@ -53,7 +61,7 @@ export function normalizeTelegramEventMessage(event, channelMap, channelIdMap) {
     label: channel.label,
     category: channel.category,
     messageId: String(message.id),
-    datetime: message?.date instanceof Date ? message.date.toISOString() : new Date().toISOString(),
+    datetime: normalizeMessageDate(message?.date),
     link: `https://t.me/${channel.username}/${message.id}`,
     textOriginal,
     textEn: textOriginal || undefined,

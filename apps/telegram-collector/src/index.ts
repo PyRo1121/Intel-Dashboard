@@ -361,7 +361,6 @@ export default {
         await startCollectorInBackground(container);
         const response = await proxyCollectorRequest(container, new Request("https://container/status"));
         const payload = await response.clone().json().catch(() => null) as ControlStatusResponse | null;
-        const defaults = buildExpectedCollectorDefaults(env);
         if (payload && typeof payload === 'object' && isStoredCollectorControlState(payload, defaults)) {
           await writeControlState(env, normalizeCollectorControlUpdate(payload, defaults));
         }

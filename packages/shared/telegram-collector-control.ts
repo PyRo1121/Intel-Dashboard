@@ -92,9 +92,18 @@ export function normalizeCollectorControlUpdate(value: unknown, fallback: Collec
   const record = value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
-  const stringOr = (key: string, fallbackValue: string | null) => {
+  const stringOr = (key: string, fallbackValue: string) => {
     const raw = record[key];
     return typeof raw === "string" ? raw : fallbackValue;
+  };
+  const nullableStringOr = (key: string, fallbackValue: string | null) => {
+    const raw = record[key];
+    if (raw === null) return null;
+    return typeof raw === "string" ? raw : fallbackValue;
+  };
+  const accountIdOr = (fallbackValue: string) => {
+    const raw = record.accountId;
+    return typeof raw === "string" && raw.trim() ? raw.trim() : fallbackValue;
   };
   const numberOr = (key: string, fallbackValue: number) => {
     const raw = record[key];
@@ -113,7 +122,7 @@ export function normalizeCollectorControlUpdate(value: unknown, fallback: Collec
     return Array.isArray(raw) ? normalizeCollectorWatchedChannels(raw) : fallbackValue;
   };
   return {
-    accountId: stringOr("accountId", fallback.accountId) ?? fallback.accountId,
+    accountId: accountIdOr(fallback.accountId),
     configured: boolOr("configured", fallback.configured),
     missingConfig: stringListOr("missingConfig", fallback.missingConfig),
     connected: boolOr("connected", fallback.connected),
@@ -122,8 +131,8 @@ export function normalizeCollectorControlUpdate(value: unknown, fallback: Collec
     joinedChannels: normalizedChannelsOr("joinedChannels", fallback.joinedChannels),
     missingChannels: normalizedChannelsOr("missingChannels", fallback.missingChannels),
     mappedChannelIds: numberOr("mappedChannelIds", fallback.mappedChannelIds),
-    lastEventAt: stringOr("lastEventAt", fallback.lastEventAt),
-    lastForwardAt: stringOr("lastForwardAt", fallback.lastForwardAt),
+    lastEventAt: nullableStringOr("lastEventAt", fallback.lastEventAt),
+    lastForwardAt: nullableStringOr("lastForwardAt", fallback.lastForwardAt),
     receivedMessages: numberOr("receivedMessages", fallback.receivedMessages),
     matchedMessages: numberOr("matchedMessages", fallback.matchedMessages),
     forwardedMessages: numberOr("forwardedMessages", fallback.forwardedMessages),
@@ -133,14 +142,14 @@ export function normalizeCollectorControlUpdate(value: unknown, fallback: Collec
     lastUnmatchedEvent: record.lastUnmatchedEvent && typeof record.lastUnmatchedEvent === "object"
       ? record.lastUnmatchedEvent as Record<string, unknown>
       : fallback.lastUnmatchedEvent,
-    lastError: stringOr("lastError", fallback.lastError),
+    lastError: nullableStringOr("lastError", fallback.lastError),
     connectAttempts: numberOr("connectAttempts", fallback.connectAttempts),
-    lastConnectAttemptAt: stringOr("lastConnectAttemptAt", fallback.lastConnectAttemptAt),
-    lastConnectSuccessAt: stringOr("lastConnectSuccessAt", fallback.lastConnectSuccessAt),
+    lastConnectAttemptAt: nullableStringOr("lastConnectAttemptAt", fallback.lastConnectAttemptAt),
+    lastConnectSuccessAt: nullableStringOr("lastConnectSuccessAt", fallback.lastConnectSuccessAt),
     controlSyncAttempts: numberOr("controlSyncAttempts", fallback.controlSyncAttempts),
-    lastControlSyncAt: stringOr("lastControlSyncAt", fallback.lastControlSyncAt),
-    lastControlSyncError: stringOr("lastControlSyncError", fallback.lastControlSyncError),
-    joinBlockedUntil: stringOr("joinBlockedUntil", fallback.joinBlockedUntil),
+    lastControlSyncAt: nullableStringOr("lastControlSyncAt", fallback.lastControlSyncAt),
+    lastControlSyncError: nullableStringOr("lastControlSyncError", fallback.lastControlSyncError),
+    joinBlockedUntil: nullableStringOr("joinBlockedUntil", fallback.joinBlockedUntil),
     joinWaitSeconds: numberOr("joinWaitSeconds", fallback.joinWaitSeconds),
     updatedAt: typeof record.updatedAt === "string" && record.updatedAt.trim() ? record.updatedAt : new Date().toISOString(),
   };

@@ -67,6 +67,21 @@ test("normalizeTelegramEventMessage preserves zero views instead of dropping the
   assert.equal(normalized?.views, "0");
 });
 
+test("normalizeTelegramEventMessage converts numeric unix timestamps into ISO datetimes", () => {
+  const channelMap = new Map([
+    ["abualiexpress", { username: "abualiexpress", label: "Abu Ali Express", category: "conflict" }],
+  ]);
+  const normalized = normalizeTelegramEventMessage({
+    chat: { username: "@AbuAliExpress" },
+    message: {
+      id: 44,
+      message: "Unix timestamp post",
+      date: 1_741_685_200,
+    },
+  }, channelMap, new Map());
+  assert.equal(normalized?.datetime, new Date(1_741_685_200 * 1000).toISOString());
+});
+
 test("normalizeTelegramEventMessage drops media-only events until collector has usable media references", () => {
   const channelMap = new Map([
     ["abualiexpress", { username: "abualiexpress", label: "Abu Ali Express", category: "conflict" }],

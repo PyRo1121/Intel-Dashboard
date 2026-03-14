@@ -24,10 +24,7 @@ export function collectLockfiles(rootDir = ".") {
     }
   }
 
-  return results
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .sort();
+  return results.sort();
 }
 
 export function collectWorkflowFiles(rootDir = ".github/workflows") {

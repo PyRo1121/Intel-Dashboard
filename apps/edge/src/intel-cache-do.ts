@@ -13,9 +13,10 @@ import {
   isCurrentCacheGeneration,
 } from "./intel-cache-refresh";
 import { evaluateIntelCacheHealth } from "./intel-cache-health";
+import { buildChunkedCacheWritePlan } from "./intel-cache-storage";
 import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
-import { chunkEntries, collectStaleChunkKeys, MAX_DO_STORAGE_BATCH_ENTRIES } from "./storage-batches";
+import { chunkEntries, MAX_DO_STORAGE_BATCH_ENTRIES } from "./storage-batches";
 import { normalizeNumber, normalizeString } from "./value-normalization";
 import { buildWhalesUnavailableResponse } from "./whales-unavailable-response";
 
@@ -725,35 +726,26 @@ export class IntelCacheDO extends DurableObject<Env> {
   private async saveChunked(endpoint: string, cached: CachedResponse): Promise<void> {
     const key = `cache:${endpoint}`;
     const raw = cached.data;
-    const previousChunkCount = await this.ctx.storage.get<number>(`${key}:chunks`);
+    await this.ctx.storage.transaction(async (txn) => {
+      const previousChunkCount = await txn.get<number>(`${key}:chunks`);
+      const plan = buildChunkedCacheWritePlan(
+        key,
+        raw,
+        { timestamp: cached.timestamp, status: cached.status },
+        previousChunkCount,
+        STORAGE_CHUNK_SIZE,
+      );
 
-    await this.ctx.storage.put(`${key}:meta`, { timestamp: cached.timestamp, status: cached.status });
-
-    if (raw.length <= STORAGE_CHUNK_SIZE) {
-      await this.ctx.storage.put(key, raw);
-      await this.ctx.storage.delete(`${key}:chunks`);
-      const staleKeys = collectStaleChunkKeys(key, previousChunkCount, 0);
-      for (const batch of chunkEntries(staleKeys, MAX_DO_STORAGE_BATCH_ENTRIES)) {
-        await this.ctx.storage.delete(batch);
+      for (const batch of chunkEntries(Object.entries(plan.dataPuts), MAX_DO_STORAGE_BATCH_ENTRIES)) {
+        await txn.put(Object.fromEntries(batch));
       }
-      return;
-    }
 
-    const numChunks = Math.ceil(raw.length / STORAGE_CHUNK_SIZE);
-    const puts: Record<string, unknown> = {
-      [`${key}:chunks`]: numChunks,
-    };
-    for (let i = 0; i < numChunks; i++) {
-      puts[`${key}:${i}`] = raw.slice(i * STORAGE_CHUNK_SIZE, (i + 1) * STORAGE_CHUNK_SIZE);
-    }
-    for (const batch of chunkEntries(Object.entries(puts), MAX_DO_STORAGE_BATCH_ENTRIES)) {
-      await this.ctx.storage.put(Object.fromEntries(batch));
-    }
-    await this.ctx.storage.delete(key);
-    const staleKeys = collectStaleChunkKeys(key, previousChunkCount, numChunks);
-    for (const batch of chunkEntries(staleKeys, MAX_DO_STORAGE_BATCH_ENTRIES)) {
-      await this.ctx.storage.delete(batch);
-    }
+      for (const batch of chunkEntries(plan.deleteKeys, MAX_DO_STORAGE_BATCH_ENTRIES)) {
+        await txn.delete(batch);
+      }
+
+      await txn.put(plan.metaKey, plan.metaValue);
+    });
   }
 
   private async loadChunked(endpoint: string): Promise<CachedResponse | null> {

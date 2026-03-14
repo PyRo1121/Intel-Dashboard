@@ -50,7 +50,7 @@ export function normalizeTelegramEventMessage(event, channelMap, channelIdMap) {
   if (!channel || !message?.id) return null;
 
   const textOriginal = trim(message?.message);
-  const media = [];
+  const media = []; // TODO: Populate collector media references when transport support is added.
   if (!textOriginal && media.length === 0) return null;
   const datetime = normalizeMessageDate(message?.date);
   if (!datetime) return null;

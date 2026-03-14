@@ -91,7 +91,10 @@ Error: cannot use x (type string) as type int
 count := params.Get("count")
 // To
 countStr := params.Get("count")
-count, _ := strconv.Atoi(countStr)
+count, err := strconv.Atoi(countStr)
+if err != nil {
+    return fmt.Errorf("invalid count %q: %w", countStr, err)
+}
 ```
 
 ```bash

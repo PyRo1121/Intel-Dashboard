@@ -189,6 +189,12 @@ const userSchema = z.object({
 
 type UserInput = z.infer<typeof userSchema>
 
+const input = {
+  name: "Alice",
+  email: "alice@example.com",
+  age: 32,
+}
+
 const validated: UserInput = userSchema.parse(input)
 ```
 

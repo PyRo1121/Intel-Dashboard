@@ -207,9 +207,14 @@ function buildExpectedCollectorDefaults(env: Env) {
 }
 
 async function readControlState(env: Env): Promise<ControlStatusResponse | null> {
-  const response = await getCollectorControlStub(env).fetch(new Request("https://do/status"));
-  if (!response.ok) return null;
-  return await response.json().catch(() => null) as ControlStatusResponse | null;
+  try {
+    const response = await getCollectorControlStub(env).fetch(new Request("https://do/status"));
+    if (!response.ok) return null;
+    const payload = await response.json().catch(() => null);
+    return payload && typeof payload === "object" ? payload as ControlStatusResponse : null;
+  } catch {
+    return null;
+  }
 }
 
 function isControlStateFresh(payload: ControlStatusResponse | null, defaults: ReturnType<typeof buildExpectedCollectorDefaults>): boolean {
@@ -354,8 +359,12 @@ export default {
       const controlPayload = await readControlState(env);
       const joinedCount = controlPayload?.joinedChannels.length ?? 0;
       const controlStateSource = controlPayload?.stateSource ?? null;
-      if (controlStateSource === "stored" && isControlStateFresh(controlPayload, defaults) && joinedCount > 0) {
-        return json({ ...controlPayload, runtime: "collector-control-do" });
+      if (controlPayload && controlStateSource === "stored" && isControlStateFresh(controlPayload, defaults) && joinedCount > 0) {
+        return json({
+          ...controlPayload,
+          ok: controlPayload.configured && controlPayload.connected,
+          runtime: "collector-control-do",
+        });
       }
       try {
         await startCollectorInBackground(container);
@@ -369,7 +378,11 @@ export default {
         return next;
       } catch (error) {
         if (controlStateSource === "stored" && controlPayload) {
-          return json({ ...(controlPayload || {}), error: error instanceof Error ? error.message : "collector unavailable" }, 200);
+          return json({
+            ...controlPayload,
+            ok: controlPayload.configured && controlPayload.connected,
+            error: error instanceof Error ? error.message : "collector unavailable",
+          }, 200);
         }
         return json({
           ...(controlPayload || {}),

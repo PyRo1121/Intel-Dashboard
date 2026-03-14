@@ -8,9 +8,9 @@ export function getSubscriberAlertsMaterializationFailureMessage(): string {
 
 export function buildSubscriberAlertsResponse(
   value: { unreadCount: number; items: SubscriberAlertItem[] },
-  materializationError?: unknown,
+  materializationFailed = false,
 ): SubscriberAlertsResponse {
-  if (!materializationError) {
+  if (!materializationFailed) {
     return value;
   }
   return {

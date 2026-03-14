@@ -114,7 +114,7 @@ export function normalizeAuthSessionUser(value: unknown): AuthSessionUser | null
   const id = value.id;
   const normalizedId = typeof id === "string"
     ? id.trim()
-    : typeof id === "number" && Number.isFinite(id)
+    : typeof id === "number" && Number.isSafeInteger(id)
       ? id
       : null;
   if (!login || !name || normalizedId === null || normalizedId === "") {

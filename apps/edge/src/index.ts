@@ -6075,18 +6075,18 @@ export default {
       }
 
       const preferences = await loadSubscriberFeedPreferences(env, gate.userId);
-      let materializationError: unknown;
+      let materializationFailed = false;
       try {
         await materializeSubscriberAlerts(env, gate.userId, preferences);
       } catch (error) {
-        materializationError = error;
+        materializationFailed = true;
         console.error("[subscriber-alerts] materialization failed", error instanceof Error ? error.message : error);
       }
       const state = normalizeSubscriberAlertState(url.searchParams.get("state"));
       const limitRaw = normalizeNumber(url.searchParams.get("limit"));
       const limit = limitRaw === null ? 50 : Math.min(Math.max(1, Math.floor(limitRaw)), 200);
       const response = await loadSubscriberAlerts(env, gate.userId, state, limit);
-      return privateApiJson(origin, 200, buildSubscriberAlertsResponse(response, materializationError));
+      return privateApiJson(origin, 200, buildSubscriberAlertsResponse(response, materializationFailed));
     }
 
     if (path === "/api/subscriber/alert-preferences") {

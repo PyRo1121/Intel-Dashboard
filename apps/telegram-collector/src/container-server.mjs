@@ -125,7 +125,9 @@ function scheduleJoinRetry() {
   if (joinRetryTimer || !state.configured || !state.connected || state.missingChannels.length === 0) return;
   const blockedUntilMs = state.joinBlockedUntil ? Date.parse(state.joinBlockedUntil) : Number.NaN;
   const nowMs = Date.now();
-  const delay = Number.isFinite(blockedUntilMs) && blockedUntilMs > nowMs ? Math.max(blockedUntilMs - nowMs, JOIN_RETRY_MS) : JOIN_RETRY_MS;
+  const delay = Number.isFinite(blockedUntilMs) && blockedUntilMs > nowMs
+    ? Math.max(0, blockedUntilMs - nowMs)
+    : JOIN_RETRY_MS;
   joinRetryTimer = setTimeout(() => {
     joinRetryTimer = null;
     void joinMissingChannels();
@@ -453,6 +455,14 @@ const server = http.createServer(async (req, res) => {
         joined.push(channel.username);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        const waitSeconds = extractJoinWaitSeconds(message);
+        if (waitSeconds && Number.isFinite(waitSeconds) && waitSeconds > 0) {
+          state.joinWaitSeconds = waitSeconds;
+          state.joinBlockedUntil = new Date(Date.now() + waitSeconds * 1000).toISOString();
+          state.lastError = message;
+          failed.push({ channel: channel.username, reason: message });
+          break;
+        }
         if (/already participant|USER_ALREADY_PARTICIPANT|CHANNELS_TOO_MUCH/i.test(message)) {
           skipped.push({ channel: channel.username, reason: message });
         } else {
@@ -468,23 +478,6 @@ const server = http.createServer(async (req, res) => {
       joined,
       skipped,
       failed,
-      joinedChannels: state.joinedChannels,
-      missingChannels: state.missingChannels,
-      mappedChannelIds: state.mappedChannelIds,
-    }));
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/control/refresh-availability") {
-    if (!client) {
-      res.writeHead(503, { "content-type": "application/json" });
-      res.end(JSON.stringify({ error: "Collector client unavailable" }));
-      return;
-    }
-    await refreshChannelAvailability();
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({
-      ok: true,
       joinedChannels: state.joinedChannels,
       missingChannels: state.missingChannels,
       mappedChannelIds: state.mappedChannelIds,

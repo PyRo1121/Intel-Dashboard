@@ -72,6 +72,9 @@ export async function enforceControlNonceGuard(params: {
   rateLimitPerWindow: number;
   nowMs?: number;
 }): Promise<ControlNonceGuardResult> {
+  if (params.rateWindowMs <= 0) {
+    return { ok: false, status: 500, reason: "invalid_rate_window" };
+  }
   const now = params.nowMs ?? Date.now();
   if (Math.abs(now - params.timestampMs) > params.maxSkewMs) {
     return { ok: false, status: 409, reason: "timestamp_out_of_window" };
@@ -117,7 +120,7 @@ export async function enforceControlNonceGuard(params: {
 
   nextRateLog[String(window)] = hits + 1;
   nextNonceLog[params.nonce] = now;
-  await params.storage.put(rateKey, nextRateLog);
   await params.storage.put(nonceKey, nextNonceLog);
+  await params.storage.put(rateKey, nextRateLog);
   return { ok: true };
 }

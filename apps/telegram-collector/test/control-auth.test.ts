@@ -3,6 +3,19 @@ import test from "node:test";
 import { createHmac } from "node:crypto";
 import { enforceControlNonceGuard, verifySignedControlRequest } from "../src/control-auth.ts";
 
+async function loadSignCollectorRequest(): Promise<{
+  signCollectorRequest: (args: {
+    method: string;
+    path: string;
+    secret: string;
+    nonce?: string;
+    timestampMs?: number;
+  }) => Record<string, string>;
+}> {
+  // @ts-ignore runtime ESM helper has no local .d.ts
+  return await import("../src/edge-client.mjs");
+}
+
 class MemoryStorage {
   private readonly store = new Map<string, unknown>();
 
@@ -63,6 +76,34 @@ test("verifySignedControlRequest accepts valid signed requests and rejects tampe
       nowMs,
     }),
     false,
+  );
+});
+
+test("verifySignedControlRequest accepts headers signed by signCollectorRequest", async () => {
+  const nowMs = Date.now();
+  const secret = "shared-secret";
+  const path = "/control/state-update";
+  const { signCollectorRequest } = await loadSignCollectorRequest();
+  const headers = signCollectorRequest({
+    method: "POST",
+    path,
+    secret,
+    nonce: "nonce-wire-format",
+    timestampMs: nowMs,
+  });
+  const request = new Request(`https://collector.example${path}`, {
+    method: "POST",
+    headers,
+  });
+
+  assert.equal(
+    verifySignedControlRequest({
+      request,
+      secret,
+      maxSkewMs: 5 * 60 * 1000,
+      nowMs,
+    }),
+    true,
   );
 });
 
@@ -303,5 +344,27 @@ test("enforceControlNonceGuard rejects replay for special object-key nonces", as
     ok: false,
     status: 409,
     reason: "replay_detected",
+  });
+});
+
+test("enforceControlNonceGuard rejects invalid rate window configuration", async () => {
+  const storage = new MemoryStorage();
+  const result = await enforceControlNonceGuard({
+    storage,
+    scope: "/control/state-update",
+    nonce: "nonce-invalid-window",
+    timestampMs: 5_000,
+    clientIp: "127.0.0.1",
+    maxSkewMs: 10_000,
+    nonceTtlMs: 10_000,
+    rateWindowMs: 0,
+    rateLimitPerWindow: 8,
+    nowMs: 5_000,
+  });
+
+  assert.deepEqual(result, {
+    ok: false,
+    status: 500,
+    reason: "invalid_rate_window",
   });
 });

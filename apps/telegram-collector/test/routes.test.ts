@@ -112,9 +112,3 @@ test("control DO only treats matching watched sets as stored state", () => {
   const source = readSource("index.ts");
   assert.match(source, /const hasStoredState = isStoredCollectorControlState\(state, defaults\)/);
 });
-
-
-test("collector worker exposes refresh availability control route shape", () => {
-  const routePath = "/control/refresh-availability";
-  assert.equal(routePath.startsWith("/control/"), true);
-});

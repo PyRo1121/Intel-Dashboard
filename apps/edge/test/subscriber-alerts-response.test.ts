@@ -42,7 +42,7 @@ test("buildSubscriberAlertsResponse marks the payload degraded when materializat
       unreadCount: 2,
       items,
     },
-    new Error("collector unavailable"),
+    true,
   );
   assert.equal(payload.unreadCount, 2);
   assert.deepEqual(payload.items, items);

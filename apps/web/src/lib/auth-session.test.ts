@@ -45,6 +45,8 @@ test("normalizeAuthSessionPayload rejects malformed or unauthenticated payloads"
   assert.equal(normalizeAuthSessionPayload({ authenticated: true, user: { login: "x", name: "X", id: null } }), null);
   assert.equal(normalizeAuthSessionPayload({ authenticated: true, user: { login: "x", name: "X", id: "   " } }), null);
   assert.equal(normalizeAuthSessionPayload({ authenticated: true, user: { login: "x", name: "X", id: Number.NaN } }), null);
+  assert.equal(normalizeAuthSessionPayload({ authenticated: true, user: { login: "x", name: "X", id: 1.5 } }), null);
+  assert.equal(normalizeAuthSessionPayload({ authenticated: true, user: { login: "x", name: "X", id: Number.MAX_SAFE_INTEGER + 1 } }), null);
 });
 
 test("normalizeAuthSessionPayload preserves shared entitlement limits payloads", () => {

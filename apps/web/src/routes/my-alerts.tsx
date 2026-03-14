@@ -121,6 +121,11 @@ export default function MyAlertsPage() {
   const saveControls = async () => {
     setSavingControls(true);
     setControlsSaved("");
+    if (alertPreferences.loading) {
+      setControlsSaved("Controls still loading");
+      setSavingControls(false);
+      return;
+    }
     if (alertPreferencesError()) {
       setControlsSaved(alertPreferencesError());
       setSavingControls(false);
@@ -189,7 +194,7 @@ export default function MyAlertsPage() {
               </div>
               <button
                 type="button"
-                disabled={savingControls() || Boolean(alertPreferencesError())}
+                disabled={savingControls() || alertPreferences.loading || Boolean(alertPreferencesError())}
                 onClick={() => void saveControls()}
                 class="rounded-xl border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-sm text-violet-200 disabled:opacity-50"
               >

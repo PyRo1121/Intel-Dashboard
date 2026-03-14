@@ -73,7 +73,7 @@ export function resolveFeedSurfaceLimit(
   if (scope === "briefings") return limits?.briefingsMaxItems;
   if (scope === "air-sea") return limits?.airSeaMaxItems;
   if (INTEL_FEED_SURFACES.has(scope)) return limits?.intelMaxItems;
-  return undefined;
+  return limits?.intelMaxItems;
 }
 
 export function isEntitledRole(value: string | undefined): boolean {

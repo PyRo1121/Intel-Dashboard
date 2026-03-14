@@ -1,8 +1,9 @@
 import { betterAuth } from "better-auth";
 import { withCloudflare } from "better-auth-cloudflare";
 import type { DrizzleConfig } from "better-auth-cloudflare";
+import type { SecondaryStorage } from "better-auth/db";
 import { drizzle } from "drizzle-orm/d1";
-import type { IncomingRequestCfProperties, KVNamespace } from "@cloudflare/workers-types";
+import type { IncomingRequestCfProperties } from "@cloudflare/workers-types";
 import { authSchema } from "./auth-schema";
 import {
   isSyntheticXIdentity,
@@ -31,6 +32,7 @@ type AuthEnv = Cloudflare.Env & {
   AUTH_SECRET: string;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
+  TELEGRAM_STATE: Cloudflare.Env["TELEGRAM_STATE"];
   X_CLIENT_ID: string;
   X_CLIENT_SECRET: string;
 };
@@ -400,6 +402,21 @@ function createTwitterUserInfoResolver(db: D1Database) {
   };
 }
 
+function createCloudflareSecondaryStorage(kv: AuthEnv["TELEGRAM_STATE"]): SecondaryStorage {
+  return {
+    get: async (key) => kv.get(key),
+    set: async (key, value, ttl) => {
+      if (ttl !== undefined) {
+        const minTtl = 60;
+        const expirationTtl = ttl < minTtl ? minTtl : ttl;
+        return kv.put(key, value, { expirationTtl });
+      }
+      return kv.put(key, value);
+    },
+    delete: async (key) => kv.delete(key),
+  };
+}
+
 export function createEdgeAuth(env: AuthEnv, cf: IncomingRequestCfProperties | null | undefined) {
   const db = drizzle(env.INTEL_DB, { schema: authSchema });
   const getTwitterUserInfo = createTwitterUserInfoResolver(env.INTEL_DB);
@@ -429,7 +446,6 @@ export function createEdgeAuth(env: AuthEnv, cf: IncomingRequestCfProperties | n
         geolocationTracking: true,
         cf: cf ?? {},
         d1: d1Config,
-        kv: env.TELEGRAM_STATE as unknown as KVNamespace,
       },
       {
         socialProviders: {
@@ -459,5 +475,6 @@ export function createEdgeAuth(env: AuthEnv, cf: IncomingRequestCfProperties | n
         },
       },
     ),
+    secondaryStorage: createCloudflareSecondaryStorage(env.TELEGRAM_STATE),
   });
 }

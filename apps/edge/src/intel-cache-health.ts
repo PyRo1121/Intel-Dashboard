@@ -25,8 +25,9 @@ export function evaluateIntelCacheHealth(args: {
     }
     const staleWindowMs = args.staleWindowByEndpoint[endpoint];
     if (
+      !Number.isFinite(staleWindowMs) ||
       !Number.isFinite(cached.timestamp) ||
-      (Number.isFinite(staleWindowMs) && args.nowMs - cached.timestamp > staleWindowMs)
+      args.nowMs - cached.timestamp > staleWindowMs
     ) {
       staleEndpoints.push(endpoint);
     }

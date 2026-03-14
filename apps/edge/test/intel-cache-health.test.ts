@@ -60,3 +60,24 @@ test("evaluateIntelCacheHealth reports missing and stale endpoints", () => {
     },
   );
 });
+
+test("evaluateIntelCacheHealth treats missing stale-window config as degraded", () => {
+  const nowMs = 1_000;
+  const cache = new Map([
+    ["/api/intel", { timestamp: 900 }],
+  ]);
+
+  assert.deepEqual(
+    evaluateIntelCacheHealth({
+      cache,
+      nowMs,
+      staleWindowByEndpoint: {},
+      requiredEndpoints: ["/api/intel"],
+    }),
+    {
+      status: "degraded",
+      missingEndpoints: [],
+      staleEndpoints: ["/api/intel"],
+    },
+  );
+});

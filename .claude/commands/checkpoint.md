@@ -4,7 +4,7 @@ Create or verify a checkpoint in your workflow.
 
 ## Usage
 
-`/checkpoint [create|verify|list] [name]`
+`/checkpoint [create|verify|list|clear] [name]`
 
 ## Create Checkpoint
 

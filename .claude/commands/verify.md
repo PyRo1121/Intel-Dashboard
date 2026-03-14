@@ -23,11 +23,15 @@ Execute verification in this exact order:
    - Report pass/fail count
    - Report coverage percentage
 
-5. **Console.log Audit**
+5. **Secrets Scan**
+   - Search for likely credentials, tokens, and private keys in changed files
+   - Report any findings explicitly
+
+6. **Console.log Audit**
    - Search for console.log in source files
    - Report locations
 
-6. **Git Status**
+7. **Git Status**
    - Show uncommitted changes
    - Show files modified since last commit
 

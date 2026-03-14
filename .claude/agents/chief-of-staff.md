@@ -67,7 +67,7 @@ channels_list(channel_types: "im,mpim") → conversations_history(limit: "4h")
 
 ### Step 2: Classify
 
-Apply the 4-tier system to each message. Priority order: skip → info_only → meeting_info → action_required.
+Apply the 4-tier system to each message. Priority order: meeting_info → action_required → info_only → skip.
 
 ### Step 3: Execute
 
@@ -98,9 +98,9 @@ For each action_required message:
 4. **Pending responses** — Set follow-up deadlines, remove resolved items
 5. **Archive** — Remove processed message from inbox
 6. **Triage files** — Update LINE/Messenger draft status
-7. **Git commit & push** — Version-control all knowledge file changes
+7. **Git commit & push** — Only if the user explicitly wants local knowledge file changes version-controlled
 
-This checklist is enforced by a `PostToolUse` hook that blocks completion until all steps are done. The hook intercepts `gmail send` / `conversations_add_message` and injects the checklist as a system reminder.
+If this repo has supporting hooks, they may remind you about follow-through. Do not assume any hook is present or that it blocks completion.
 
 ## Briefing Output Format
 

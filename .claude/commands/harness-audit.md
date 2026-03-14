@@ -33,7 +33,7 @@ Return:
 ## Checklist
 
 - Inspect `hooks/hooks.json`, `scripts/hooks/`, and hook tests.
-- Inspect `skills/`, command coverage, and agent coverage.
+- Inspect `.claude/skills/`, command coverage, and agent coverage.
 - Verify cross-harness parity for `.cursor/`, `.opencode/`, `.codex/`.
 - Flag broken or stale references.
 
@@ -47,7 +47,7 @@ Harness Audit (repo): 52/70
 
 Top 3 Actions:
 1) Add cost tracking hook in scripts/hooks/cost-tracker.js
-2) Add pass@k docs and templates in skills/eval-harness/SKILL.md
+2) Add pass@k docs and templates in .claude/skills/eval-harness/SKILL.md
 3) Add command parity for /harness-audit in .opencode/commands/
 ```
 

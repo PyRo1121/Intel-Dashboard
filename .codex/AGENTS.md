@@ -13,7 +13,8 @@ This supplements the root `AGENTS.md` with Codex-specific guidance.
 
 ## Skills Discovery
 
-Skills are auto-loaded from `.agents/skills/`. Each skill contains:
+When the repository also vendors the shared ECC skill library, Codex can
+discover additional skills from `.agents/skills/`. Each skill contains:
 - `SKILL.md` — Detailed instructions and workflow
 - `agents/openai.yaml` — Codex interface metadata
 
@@ -66,7 +67,7 @@ Sample role configs in this repo:
 |---------|------------|-----------|
 | Hooks | 8+ event types | Not yet supported |
 | Context file | CLAUDE.md + AGENTS.md | AGENTS.md only |
-| Skills | Skills loaded via plugin | `.agents/skills/` directory |
+| Skills | Skills loaded via plugin | `.agents/skills/` directory when the shared library is present |
 | Commands | `/slash` commands | Instruction-based |
 | Agents | Subagent Task tool | Multi-agent via `/agent` and `[agents.<name>]` roles |
 | Security | Hook-based enforcement | Instruction + sandbox |
@@ -77,6 +78,6 @@ Sample role configs in this repo:
 Since Codex lacks hooks, security enforcement is instruction-based:
 1. Always validate inputs at system boundaries
 2. Never hardcode secrets — use environment variables
-3. Run `npm audit` / `pip audit` before committing
+3. Run `bun audit` / `pip audit` before committing
 4. Review `git diff` before every push
 5. Use `sandbox_mode = "workspace-write"` in config

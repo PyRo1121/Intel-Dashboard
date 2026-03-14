@@ -4,7 +4,7 @@ Manage eval-driven development workflow.
 
 ## Usage
 
-`/eval [define|check|report|list] [feature-name]`
+`/eval [define|check|report|list|clean] [feature-name]`
 
 ## Define Evals
 
@@ -109,6 +109,12 @@ feature-auth      [3/5 passing] IN PROGRESS
 feature-search    [5/5 passing] READY
 feature-export    [0/4 passing] NOT STARTED
 ```
+
+## Clean Eval Logs
+
+`/eval clean`
+
+Remove old eval logs while keeping the latest 10 runs per feature.
 
 ## Arguments
 

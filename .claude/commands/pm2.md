@@ -68,7 +68,7 @@ module.exports = {
       cwd: './packages/web',
       script: 'node_modules/vite/bin/vite.js',
       args: '--port 3000',
-      interpreter: 'C:/Program Files/nodejs/node.exe',
+      interpreter: 'node',
       env: { NODE_ENV: 'development' }
     },
     // Python
@@ -76,7 +76,7 @@ module.exports = {
       name: 'project-8000',
       cwd: './backend',
       script: 'start.cjs',
-      interpreter: 'C:/Program Files/nodejs/node.exe',
+      interpreter: 'node',
       env: { PYTHONUNBUFFERED: '1' }
     }
   ]
@@ -99,7 +99,7 @@ const { spawn } = require('child_process');
 const proc = spawn('python', ['-m', 'uvicorn', 'app.main:app', '--host', '0.0.0.0', '--port', '8000', '--reload'], {
   cwd: __dirname, stdio: 'inherit', windowsHide: true
 });
-proc.on('close', (code) => process.exit(code));
+proc.on('close', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
 ```
 
 ---
@@ -118,7 +118,7 @@ cd "{PROJECT_ROOT}" && pm2 start ecosystem.config.cjs && start wt.exe -d "{PROJE
 ````markdown
 Stop all services.
 ```bash
-cd "{PROJECT_ROOT}" && pm2 stop all
+cd "{PROJECT_ROOT}" && pm2 stop ecosystem.config.cjs
 ```
 ````
 
@@ -126,7 +126,7 @@ cd "{PROJECT_ROOT}" && pm2 stop all
 ````markdown
 Restart all services.
 ```bash
-cd "{PROJECT_ROOT}" && pm2 restart all
+cd "{PROJECT_ROOT}" && pm2 restart ecosystem.config.cjs
 ```
 ````
 

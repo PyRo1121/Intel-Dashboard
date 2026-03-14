@@ -10,17 +10,11 @@ Configure your preferred package manager for this project or globally.
 ## Usage
 
 ```bash
-# Detect current package manager
-node scripts/setup-package-manager.js --detect
+# Inspect the current project preference
+cat .claude/package-manager.json
 
-# Set global preference
-node scripts/setup-package-manager.js --global pnpm
-
-# Set project preference
-node scripts/setup-package-manager.js --project bun
-
-# List available package managers
-node scripts/setup-package-manager.js --list
+# Set the project preference manually
+printf '{\n  "packageManager": "bun"\n}\n' > .claude/package-manager.json
 ```
 
 ## Detection Priority
@@ -73,8 +67,8 @@ export CLAUDE_PACKAGE_MANAGER=pnpm
 
 ## Run the Detection
 
-To see current package manager detection results, run:
+To see the current project package-manager setting, run:
 
 ```bash
-node scripts/setup-package-manager.js --detect
+cat .claude/package-manager.json
 ```

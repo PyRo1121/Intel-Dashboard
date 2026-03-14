@@ -33,7 +33,7 @@ Analyze your repository's git history to extract coding patterns and generate SK
 git log --oneline -n ${COMMITS:-200} --name-only --pretty=format:"%H|%s|%ad" --date=short
 
 # Get commit frequency by file
-git log --oneline -n 200 --name-only | grep -v "^$" | grep -v "^[a-f0-9]" | sort | uniq -c | sort -rn | head -20
+git log -n 200 --name-only --pretty=format: | grep -v "^$" | sort | uniq -c | sort -rn | head -20
 
 # Get commit message patterns
 git log --oneline -n 200 | cut -d' ' -f2- | head -50

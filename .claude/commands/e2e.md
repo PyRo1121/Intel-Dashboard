@@ -325,7 +325,9 @@ For PMX, prioritize these E2E tests:
 **CRITICAL for PMX:**
 - E2E tests involving real money MUST run on testnet/staging only
 - Never run trading tests against production
-- Set `test.skip(process.env.NODE_ENV === 'production')` for financial tests
+- Fail closed using the target environment, not `NODE_ENV` alone:
+  - skip when the configured base URL points at production
+  - skip when an explicit env like `E2E_ENV=production` is set
 - Use test wallets with small test funds only
 
 ## Integration with Other Commands

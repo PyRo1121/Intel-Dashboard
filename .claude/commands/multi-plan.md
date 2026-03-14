@@ -124,7 +124,7 @@ mcp__ace-tool__search_context({
 
 **Parallel call** Codex and Gemini (`run_in_background: true`):
 
-Distribute **original requirement** (without preset opinions) to both models:
+Distribute the **enhanced requirement** from Phase 1 (or the original requirement only when enhancement was unavailable) to both models:
 
 1. **Codex Backend Analysis**:
    - ROLE_FILE: `~/.claude/.ccg/prompts/codex/analyzer.md`

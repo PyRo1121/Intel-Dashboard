@@ -2,7 +2,7 @@
 
 Comprehensive security and quality review of uncommitted changes:
 
-1. Get changed files: git diff --name-only HEAD
+1. Get changed files: `git diff --name-only HEAD && git ls-files --others --exclude-standard`
 
 2. For each changed file, check for:
 

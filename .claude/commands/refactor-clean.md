@@ -17,7 +17,8 @@ Run analysis tools based on project type:
 
 If no tool is available, use Grep to find exports with zero imports:
 ```
-# Find exports, then check if they're imported anywhere
+# Example: enumerate exports, then search for imports of each symbol before deleting
+rg "export (const|function|class|type|interface)" src
 ```
 
 ## Step 2: Categorize Findings
@@ -48,9 +49,9 @@ Before deleting CAUTION items:
 - Check if exported from a public package API
 - Verify no external consumers (check dependents if published)
 
-## Step 5: Consolidate Duplicates
+## Step 5: Optional Follow-Up (separate PR)
 
-After removing dead code, look for:
+After dead code cleanup lands, a separate follow-up PR can look for:
 - Near-duplicate functions (>80% similar) — merge into one
 - Redundant type definitions — consolidate
 - Wrapper functions that add no value — inline them

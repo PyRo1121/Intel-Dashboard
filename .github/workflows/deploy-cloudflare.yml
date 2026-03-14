@@ -97,6 +97,10 @@ jobs:
           BACKEND_DEPLOY_STARTED_AT: ${{ steps.backend_deploy_started.outputs.epoch }}
         run: node scripts/production-smoke-backend.mjs
 
+      - name: Build web assets for edge deploy
+        if: steps.freshness.outputs.proceed == 'true'
+        run: bun run build:web
+
       - name: Deploy edge
         if: steps.freshness.outputs.proceed == 'true'
         run: bun run deploy:edge

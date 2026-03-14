@@ -96,8 +96,6 @@ export class IntelCacheDO extends DurableObject<Env> {
     this.runtimeEnv = env;
 
     this.ctx.blockConcurrencyWhile(async () => {
-      const stored = await this.ctx.storage.list({ prefix: `cache:${CHAT_HISTORY_PATH}` });
-      const persistedChatEndpoints = collectPersistedChatHistoryEndpoints(stored.keys());
       const defaultChatHistoryEndpoint = buildChatHistoryCacheKeyFromLimits(
         CHAT_DEFAULT_SESSION_LIMIT,
         CHAT_DEFAULT_MESSAGE_LIMIT,
@@ -108,7 +106,6 @@ export class IntelCacheDO extends DurableObject<Env> {
         ...ENDPOINTS,
         "/api/whales",
         defaultChatHistoryEndpoint,
-        ...persistedChatEndpoints.filter((endpoint) => endpoint !== defaultChatHistoryEndpoint),
       ];
       const results = await Promise.allSettled(
         allEndpoints.map((ep) => this.loadChunked(ep)),

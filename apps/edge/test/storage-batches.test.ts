@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chunkEntries, MAX_DO_STORAGE_BATCH_ENTRIES } from "../src/storage-batches.ts";
+import { chunkEntries, collectStaleChunkKeys, MAX_DO_STORAGE_BATCH_ENTRIES } from "../src/storage-batches.ts";
 
 test("chunkEntries splits large collections into <=128-entry batches", () => {
   const values = Array.from({ length: 260 }, (_, index) => index);
@@ -15,4 +15,18 @@ test("chunkEntries splits large collections into <=128-entry batches", () => {
 
 test("chunkEntries clamps invalid batch sizes", () => {
   assert.deepEqual(chunkEntries([1, 2, 3], 0), [[1], [2], [3]]);
+});
+
+test("collectStaleChunkKeys returns only obsolete chunk keys", () => {
+  assert.deepEqual(collectStaleChunkKeys("cache:/api/intel", 4, 2), [
+    "cache:/api/intel:2",
+    "cache:/api/intel:3",
+  ]);
+  assert.deepEqual(collectStaleChunkKeys("cache:/api/intel", 3, 3), []);
+  assert.deepEqual(collectStaleChunkKeys("cache:/api/intel", 3, 0), [
+    "cache:/api/intel:0",
+    "cache:/api/intel:1",
+    "cache:/api/intel:2",
+  ]);
+  assert.deepEqual(collectStaleChunkKeys("cache:/api/intel", undefined, 0), []);
 });

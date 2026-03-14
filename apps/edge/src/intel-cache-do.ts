@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { resolveBackendEndpointUrl, usesBackendServiceBinding } from "./backend-origin";
 import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
-import { chunkEntries, MAX_DO_STORAGE_BATCH_ENTRIES } from "./storage-batches";
+import { chunkEntries, collectStaleChunkKeys, MAX_DO_STORAGE_BATCH_ENTRIES } from "./storage-batches";
 import { normalizeNumber, normalizeString } from "./value-normalization";
 import { buildWhalesUnavailableResponse } from "./whales-unavailable-response";
 
@@ -656,12 +656,17 @@ export class IntelCacheDO extends DurableObject<Env> {
   private async saveChunked(endpoint: string, cached: CachedResponse): Promise<void> {
     const key = `cache:${endpoint}`;
     const raw = cached.data;
+    const previousChunkCount = await this.ctx.storage.get<number>(`${key}:chunks`);
 
     await this.ctx.storage.put(`${key}:meta`, { timestamp: cached.timestamp, status: cached.status });
 
     if (raw.length <= STORAGE_CHUNK_SIZE) {
       await this.ctx.storage.put(key, raw);
       await this.ctx.storage.delete(`${key}:chunks`);
+      const staleKeys = collectStaleChunkKeys(key, previousChunkCount, 0);
+      for (const batch of chunkEntries(staleKeys, MAX_DO_STORAGE_BATCH_ENTRIES)) {
+        await this.ctx.storage.delete(batch);
+      }
       return;
     }
 
@@ -676,6 +681,10 @@ export class IntelCacheDO extends DurableObject<Env> {
       await this.ctx.storage.put(Object.fromEntries(batch));
     }
     await this.ctx.storage.delete(key);
+    const staleKeys = collectStaleChunkKeys(key, previousChunkCount, numChunks);
+    for (const batch of chunkEntries(staleKeys, MAX_DO_STORAGE_BATCH_ENTRIES)) {
+      await this.ctx.storage.delete(batch);
+    }
   }
 
   private async loadChunked(endpoint: string): Promise<CachedResponse | null> {

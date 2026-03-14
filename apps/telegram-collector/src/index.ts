@@ -1,4 +1,3 @@
-import { timingSafeEqual, createHmac } from "node:crypto";
 import { Container, getContainer } from "@cloudflare/containers";
 import { DurableObject } from "cloudflare:workers";
 import type { TelegramCollectorBatch } from "@intel-dashboard/shared/telegram-collector.ts";
@@ -7,6 +6,7 @@ import { isCollectorPushBatchPath } from "./routes";
 import { normalizeDebugCollectorBatch } from "./debug-batch";
 import { buildDefaultCollectorControlState, isStoredCollectorControlState, normalizeCollectorControlUpdate, normalizeWatchedChannels } from "./control-state";
 import type { CollectorControlState } from "@intel-dashboard/shared/telegram-collector-control.ts";
+import { enforceControlNonceGuard, verifySignedControlRequest } from "./control-auth";
 
 export interface Env {
   TELEGRAM_COLLECTOR: DurableObjectNamespace<TelegramCollectorContainer>;
@@ -80,33 +80,25 @@ export class TelegramCollectorControlDO extends DurableObject<Env> {
       }
 
       return this.ctx.blockConcurrencyWhile(async () => {
-        const now = Date.now();
-        if (Math.abs(now - timestampMs) > CONTROL_REQUEST_MAX_SKEW_MS) {
-          return json({ ok: false, reason: "timestamp_out_of_window" }, 409);
-        }
-
-        const nonceKey = `admin:nonce:${scope}:${nonce}`;
-        const replaySeen = await this.ctx.storage.get<number>(nonceKey);
-        if (typeof replaySeen === "number") {
-          if (now - replaySeen <= adminNonceTtlSeconds * 1000) {
-            return json({ ok: false, reason: "replay_detected" }, 409);
-          }
-          await this.ctx.storage.delete(nonceKey);
-        }
-
-        const window = Math.floor(now / adminRateWindowMs);
-        const rateKey = `admin:rl:${scope}:${clientIp}:${window}`;
-        const hits = (await this.ctx.storage.get<number>(rateKey)) ?? 0;
-        if (hits >= adminRateLimitPerWindow) {
+        const result = await enforceControlNonceGuard({
+          storage: this.ctx.storage,
+          scope,
+          nonce,
+          timestampMs,
+          clientIp,
+          maxSkewMs: CONTROL_REQUEST_MAX_SKEW_MS,
+          nonceTtlMs: adminNonceTtlSeconds * 1000,
+          rateWindowMs: adminRateWindowMs,
+          rateLimitPerWindow: adminRateLimitPerWindow,
+        });
+        if (!result.ok) {
           return json(
-            { ok: false, reason: "rate_limited", retryAfterMs: adminRateWindowMs - (now % adminRateWindowMs) },
-            429,
+            result.retryAfterMs === undefined
+              ? { ok: false, reason: result.reason }
+              : { ok: false, reason: result.reason, retryAfterMs: result.retryAfterMs },
+            result.status,
           );
         }
-
-        await this.ctx.storage.put(rateKey, hits + 1);
-        await this.ctx.storage.put(nonceKey, now);
-
         return json({ ok: true });
       });
     }
@@ -252,21 +244,11 @@ async function verifyControlRequestWithNonceGuard(request: Request, env: Env): P
 }
 
 function verifyControlRequest(request: Request, secret: string | undefined): boolean {
-  const cleanSecret = (secret || '').trim();
-  if (!cleanSecret) return false;
-  const timestamp = request.headers.get('X-Admin-Timestamp') || '';
-  const nonce = request.headers.get('X-Admin-Nonce') || '';
-  const signature = request.headers.get('X-Admin-Signature') || '';
-  if (!timestamp || !nonce || !signature) return false;
-  const timestampMs = Number.parseInt(timestamp, 10);
-  if (!Number.isFinite(timestampMs) || timestampMs <= 0) return false;
-  if (Math.abs(Date.now() - timestampMs) > CONTROL_REQUEST_MAX_SKEW_MS) return false;
-  const payload = [request.method.toUpperCase(), new URL(request.url).pathname, timestamp, nonce].join('\n');
-  if (!/^[a-f0-9]{64}$/i.test(signature)) return false;
-  const expected = createHmac('sha256', cleanSecret).update(payload).digest();
-  const provided = Buffer.from(signature, "hex");
-  if (provided.length !== expected.length) return false;
-  return timingSafeEqual(provided, expected);
+  return verifySignedControlRequest({
+    request,
+    secret,
+    maxSkewMs: CONTROL_REQUEST_MAX_SKEW_MS,
+  });
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | null {

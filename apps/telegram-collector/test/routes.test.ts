@@ -72,8 +72,10 @@ test("collector state-update route is signature-protected", () => {
 
 test("collector control signatures enforce a freshness window", () => {
   const source = fs.readFileSync(path.resolve("src/index.ts"), "utf8");
+  const authSource = fs.readFileSync(path.resolve("src/control-auth.ts"), "utf8");
   assert.match(source, /CONTROL_REQUEST_MAX_SKEW_MS/);
-  assert.match(source, /Math\.abs\(Date\.now\(\) - timestampMs\) > CONTROL_REQUEST_MAX_SKEW_MS/);
+  assert.match(source, /verifySignedControlRequest/);
+  assert.match(authSource, /Math\.abs\(nowMs - timestampMs\) > params\.maxSkewMs/);
 });
 
 
@@ -91,11 +93,13 @@ test("collector status validates stored state against current watched set", () =
 
 test("collector control routes enforce nonce-guarded control signatures", () => {
   const source = fs.readFileSync(path.resolve("src/index.ts"), "utf8");
+  const authSource = fs.readFileSync(path.resolve("src/control-auth.ts"), "utf8");
   assert.match(source, /verifyControlRequestWithNonceGuard/);
   assert.match(source, /url\.pathname === "\/admin\/guard"/);
-  assert.match(source, /replay_detected/);
   assert.match(source, /blockConcurrencyWhile/);
-  assert.match(source, /timingSafeEqual/);
+  assert.match(source, /verifySignedControlRequest/);
+  assert.match(source, /enforceControlNonceGuard/);
+  assert.match(authSource, /replay_detected/);
 });
 
 test("collector does not drop buffered messages before a successful forward", () => {

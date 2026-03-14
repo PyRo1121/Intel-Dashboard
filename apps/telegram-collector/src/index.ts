@@ -7,6 +7,7 @@ import { normalizeDebugCollectorBatch } from "./debug-batch";
 import { buildDefaultCollectorControlState, isStoredCollectorControlState, normalizeCollectorControlUpdate, normalizeWatchedChannels } from "./control-state";
 import type { CollectorControlState } from "@intel-dashboard/shared/telegram-collector-control.ts";
 import { enforceControlNonceGuard, verifySignedControlRequest } from "./control-auth";
+import { resolveCollectorWorkerFallbackConfig } from "./worker-config";
 
 export interface Env {
   TELEGRAM_COLLECTOR: DurableObjectNamespace<TelegramCollectorContainer>;
@@ -31,11 +32,12 @@ export class TelegramCollectorControlDO extends DurableObject<Env> {
     const key = "collector-state";
     const adminNonceTtlSeconds = 10 * 60;
     const adminRateWindowMs = 60_000;
+    const fallbackConfig = resolveCollectorWorkerFallbackConfig(this.env);
     const defaults = buildDefaultCollectorControlState({
-      configured: Boolean(this.env.TELEGRAM_API_ID && this.env.TELEGRAM_API_HASH && this.env.TELEGRAM_SESSION_STRING),
-      missingConfig: [],
-      watchedChannels: normalizeWatchedChannels((this.env.TELEGRAM_HOT_CHANNELS || "").split(/[\n,]+/).map((part) => part.split("|")[0])),
-      accountId: this.env.TELEGRAM_ACCOUNT_ID || 'primary',
+      configured: fallbackConfig.configured,
+      missingConfig: fallbackConfig.missingConfig,
+      watchedChannels: fallbackConfig.watchedChannels,
+      accountId: fallbackConfig.accountId,
     });
     if (request.method === "GET" && url.pathname === "/status") {
       const state = await this.ctx.storage.get(key) as Record<string, unknown> | undefined;
@@ -198,11 +200,12 @@ async function proxyCollectorRequest(container: CollectorContainerStub, request:
 }
 
 function buildExpectedCollectorDefaults(env: Env) {
+  const fallbackConfig = resolveCollectorWorkerFallbackConfig(env);
   return buildDefaultCollectorControlState({
-    configured: Boolean(env.TELEGRAM_API_ID && env.TELEGRAM_API_HASH && env.TELEGRAM_SESSION_STRING),
-    missingConfig: [],
-    watchedChannels: normalizeWatchedChannels((env.TELEGRAM_HOT_CHANNELS || "").split(/[\n,]+/).map((part) => part.split("|")[0])),
-    accountId: env.TELEGRAM_ACCOUNT_ID || 'primary',
+    configured: fallbackConfig.configured,
+    missingConfig: fallbackConfig.missingConfig,
+    watchedChannels: fallbackConfig.watchedChannels,
+    accountId: fallbackConfig.accountId,
   });
 }
 

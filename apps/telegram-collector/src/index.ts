@@ -1,3 +1,4 @@
+import { timingSafeEqual, createHmac } from "node:crypto";
 import { Container, getContainer } from "@cloudflare/containers";
 import { DurableObject } from "cloudflare:workers";
 import type { TelegramCollectorBatch } from "@intel-dashboard/shared/telegram-collector.ts";
@@ -78,34 +79,36 @@ export class TelegramCollectorControlDO extends DurableObject<Env> {
         return json({ ok: false, reason: "invalid_payload" }, 400);
       }
 
-      const now = Date.now();
-      if (Math.abs(now - timestampMs) > CONTROL_REQUEST_MAX_SKEW_MS) {
-        return json({ ok: false, reason: "timestamp_out_of_window" }, 409);
-      }
-
-      const nonceKey = `admin:nonce:${scope}:${nonce}`;
-      const replaySeen = await this.ctx.storage.get<number>(nonceKey);
-      if (typeof replaySeen === "number") {
-        if (now - replaySeen <= adminNonceTtlSeconds * 1000) {
-          return json({ ok: false, reason: "replay_detected" }, 409);
+      return this.ctx.blockConcurrencyWhile(async () => {
+        const now = Date.now();
+        if (Math.abs(now - timestampMs) > CONTROL_REQUEST_MAX_SKEW_MS) {
+          return json({ ok: false, reason: "timestamp_out_of_window" }, 409);
         }
-        await this.ctx.storage.delete(nonceKey);
-      }
 
-      const window = Math.floor(now / adminRateWindowMs);
-      const rateKey = `admin:rl:${scope}:${clientIp}:${window}`;
-      const hits = (await this.ctx.storage.get<number>(rateKey)) ?? 0;
-      if (hits >= adminRateLimitPerWindow) {
-        return json(
-          { ok: false, reason: "rate_limited", retryAfterMs: adminRateWindowMs - (now % adminRateWindowMs) },
-          429,
-        );
-      }
+        const nonceKey = `admin:nonce:${scope}:${nonce}`;
+        const replaySeen = await this.ctx.storage.get<number>(nonceKey);
+        if (typeof replaySeen === "number") {
+          if (now - replaySeen <= adminNonceTtlSeconds * 1000) {
+            return json({ ok: false, reason: "replay_detected" }, 409);
+          }
+          await this.ctx.storage.delete(nonceKey);
+        }
 
-      await this.ctx.storage.put(rateKey, hits + 1);
-      await this.ctx.storage.put(nonceKey, now);
+        const window = Math.floor(now / adminRateWindowMs);
+        const rateKey = `admin:rl:${scope}:${clientIp}:${window}`;
+        const hits = (await this.ctx.storage.get<number>(rateKey)) ?? 0;
+        if (hits >= adminRateLimitPerWindow) {
+          return json(
+            { ok: false, reason: "rate_limited", retryAfterMs: adminRateWindowMs - (now % adminRateWindowMs) },
+            429,
+          );
+        }
 
-      return json({ ok: true });
+        await this.ctx.storage.put(rateKey, hits + 1);
+        await this.ctx.storage.put(nonceKey, now);
+
+        return json({ ok: true });
+      });
     }
     return json({ error: 'Not Found' }, 404);
   }
@@ -259,9 +262,11 @@ function verifyControlRequest(request: Request, secret: string | undefined): boo
   if (!Number.isFinite(timestampMs) || timestampMs <= 0) return false;
   if (Math.abs(Date.now() - timestampMs) > CONTROL_REQUEST_MAX_SKEW_MS) return false;
   const payload = [request.method.toUpperCase(), new URL(request.url).pathname, timestamp, nonce].join('\n');
-  const crypto = require('node:crypto');
-  const expected = crypto.createHmac('sha256', cleanSecret).update(payload).digest('hex');
-  return signature === expected;
+  if (!/^[a-f0-9]{64}$/i.test(signature)) return false;
+  const expected = createHmac('sha256', cleanSecret).update(payload).digest();
+  const provided = Buffer.from(signature, "hex");
+  if (provided.length !== expected.length) return false;
+  return timingSafeEqual(provided, expected);
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | null {

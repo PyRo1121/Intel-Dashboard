@@ -94,6 +94,8 @@ test("collector control routes enforce nonce-guarded control signatures", () => 
   assert.match(source, /verifyControlRequestWithNonceGuard/);
   assert.match(source, /url\.pathname === "\/admin\/guard"/);
   assert.match(source, /replay_detected/);
+  assert.match(source, /blockConcurrencyWhile/);
+  assert.match(source, /timingSafeEqual/);
 });
 
 test("collector does not drop buffered messages before a successful forward", () => {

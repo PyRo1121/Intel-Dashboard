@@ -70,6 +70,42 @@ test("normalizeAuthSessionPayload preserves shared entitlement limits payloads",
   });
 });
 
+test("normalizeAuthSessionPayload normalizes nested entitlement fields", () => {
+  const result = normalizeAuthSessionPayload({
+    authenticated: true,
+    user: {
+      login: "PyRo1121",
+      name: "PyRo1121",
+      avatar_url: "",
+      id: "owner-1",
+    },
+    entitlement: {
+      tier: " owner ",
+      role: " owner ",
+      entitled: true,
+      delayMinutes: "15",
+      limits: {
+        intelMaxItems: "25",
+        briefingsMaxItems: null,
+        telegramChannelMessagesMax: " 50 ",
+        airSeaMaxItems: "not-a-number",
+      },
+    },
+  });
+
+  assert.deepEqual(result?.entitlement, {
+    tier: "owner",
+    role: "owner",
+    entitled: true,
+    delayMinutes: 15,
+    limits: {
+      intelMaxItems: 25,
+      briefingsMaxItems: null,
+      telegramChannelMessagesMax: 50,
+    },
+  });
+});
+
 test("buildAuthSessionRequestInit sets no-store, credentials, and timeout signal", async () => {
   const init = buildAuthSessionRequestInit(undefined, 5);
   assert.equal(init.credentials, "include");

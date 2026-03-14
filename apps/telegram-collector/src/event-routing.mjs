@@ -58,7 +58,7 @@ export function normalizeTelegramEventMessage(event, channelMap, channelIdMap) {
     textOriginal,
     textEn: textOriginal || undefined,
     language: "unknown",
-    views: message?.views ? String(message.views) : undefined,
+    views: message?.views === null || message?.views === undefined ? undefined : String(message.views),
     media,
     hasPhoto,
     hasVideo,

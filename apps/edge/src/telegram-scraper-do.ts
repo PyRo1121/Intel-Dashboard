@@ -9,7 +9,7 @@ import { CHANNELS, CATEGORIES, type ChannelConfig } from "./channels";
 import { parseChannelHtml, type ParsedMessage } from "./html-parser";
 import { normalizeTelegramCollectorBatch } from "./telegram-collector-intake";
 import {
-  getTelegramCollectorChannelSpecs,
+  parseTelegramCollectorChannelSpecs,
   type TelegramChannelAuthority,
   type TelegramChannelAuthorityRow,
   type TelegramIngestAuthority,
@@ -735,7 +735,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
   private async syncBootstrapChannelAuthority(): Promise<void> {
     if (!this.env.INTEL_DB) return;
     const nowIso = new Date().toISOString();
-    const configured = new Set(getTelegramCollectorChannelSpecs(this.env.TELEGRAM_HOT_CHANNELS).map((item) => item.username));
+    const configured = new Set(parseTelegramCollectorChannelSpecs(this.env.TELEGRAM_HOT_CHANNELS).map((item) => item.username));
     for (const channel of CHANNELS) {
       const desiredAuthority: TelegramChannelAuthority = configured.has(channel.username.toLowerCase()) ? "mtproto" : "scraper";
       const joinStatus = desiredAuthority === "mtproto" ? "pending" : "joined";
@@ -760,7 +760,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
   }
 
   private async loadMtprotoAuthorityChannels(): Promise<string[]> {
-    const fallback = getTelegramCollectorChannelSpecs(this.env.TELEGRAM_HOT_CHANNELS).map((item) => item.username);
+    const fallback = parseTelegramCollectorChannelSpecs(this.env.TELEGRAM_HOT_CHANNELS).map((item) => item.username);
     if (!this.env.INTEL_DB) return fallback;
     await this.ensureD1Schema();
     try {
@@ -824,7 +824,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
   }
 
   private makeEmptyChannelState(config: ChannelConfig): ChannelState {
-    const collectorChannels = getTelegramCollectorChannelSpecs(this.env.TELEGRAM_HOT_CHANNELS);
+    const collectorChannels = parseTelegramCollectorChannelSpecs(this.env.TELEGRAM_HOT_CHANNELS);
     const ingestAuthority: TelegramIngestAuthority = collectorChannels.some((item) => item.username === config.username.toLowerCase())
       ? "mtproto"
       : "scraper";
@@ -1761,17 +1761,19 @@ export class TelegramScraperDO extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const ensureSelfHeal = async (mode: "background" | "inline" = "background") => {
-      const alarm = await this.ctx.storage.getAlarm();
+      const currentAlarm = await this.ctx.storage.getAlarm();
       const state = await this.loadPreviousState();
       const shouldHeal = shouldSelfHealTelegramState({
         timestamp: state?.timestamp,
         nowMs: Date.now(),
         maxAgeMs: this.getScrapeIntervalMs() * TELEGRAM_STATE_STALE_MULTIPLIER,
         isRunning: this.isRunning,
-        alarmAt: alarm,
+        alarmAt: currentAlarm,
       });
-      if (!alarm || alarm < Date.now()) {
+      let nextAlarm = currentAlarm;
+      if (!currentAlarm || currentAlarm < Date.now()) {
         await this.ctx.storage.setAlarm(Date.now() + this.getScrapeIntervalMs());
+        nextAlarm = await this.ctx.storage.getAlarm();
       }
       if (shouldHeal) {
         if (mode === "inline") {
@@ -1781,7 +1783,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
         }
       }
       const nextState = shouldHeal && mode === "inline" ? await this.loadPreviousState() : state;
-      return { alarm, state: nextState };
+      return { alarm: nextAlarm, state: nextState };
     };
 
     if (url.pathname === "/health") {

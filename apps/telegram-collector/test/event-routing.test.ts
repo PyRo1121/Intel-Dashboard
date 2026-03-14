@@ -51,6 +51,22 @@ test("normalizeTelegramEventMessage filters to configured channels and preserves
   assert.equal(normalizeTelegramEventMessage({ chat: { username: "other" }, message: { id: 1 } }, channelMap, channelIdMap), null);
 });
 
+test("normalizeTelegramEventMessage preserves zero views instead of dropping them", () => {
+  const channelMap = new Map([
+    ["abualiexpress", { username: "abualiexpress", label: "Abu Ali Express", category: "conflict" }],
+  ]);
+  const normalized = normalizeTelegramEventMessage({
+    chat: { username: "@AbuAliExpress" },
+    message: {
+      id: 43,
+      message: "Zero view post",
+      date: new Date("2026-03-11T20:02:00.000Z"),
+      views: 0,
+    },
+  }, channelMap, new Map());
+  assert.equal(normalized?.views, "0");
+});
+
 test("normalizeTelegramEventMessage drops media-only events until collector has usable media references", () => {
   const channelMap = new Map([
     ["abualiexpress", { username: "abualiexpress", label: "Abu Ali Express", category: "conflict" }],

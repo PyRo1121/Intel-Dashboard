@@ -42,6 +42,7 @@ test("collector runtime auto-joins missing configured channels after connect", (
   const source = fs.readFileSync(path.resolve("src/container-server.mjs"), "utf8");
   assert.match(source, /async function joinMissingChannels/);
   assert.match(source, /await joinMissingChannels\(\)/);
+  assert.match(source, /new TelegramApi\.channels\.JoinChannel/);
 });
 
 
@@ -56,6 +57,7 @@ test("collector status exposes control sync telemetry", () => {
   assert.match(source, /lastControlSyncAt/);
   assert.match(source, /lastControlSyncError/);
   assert.match(source, /controlSyncAttempts/);
+  assert.match(source, /scheduleAvailabilityRefresh\(\);/);
 });
 
 
@@ -118,6 +120,6 @@ test("control DO only treats matching watched sets as stored state", () => {
 
 
 test("collector worker exposes refresh availability control route shape", () => {
-  const path = "/control/refresh-availability";
-  assert.equal(path.startsWith("/control/"), true);
+  const routePath = "/control/refresh-availability";
+  assert.equal(routePath.startsWith("/control/"), true);
 });

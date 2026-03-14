@@ -181,6 +181,7 @@ async function refreshChannelAvailability() {
   } catch (error) {
     state.lastError = error instanceof Error ? error.message : String(error);
     scheduleControlStatePush();
+    scheduleAvailabilityRefresh();
   }
 }
 
@@ -432,6 +433,10 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "Collector client unavailable" }));
       return;
     }
+    if (!TelegramApi) {
+      const telegramModule = await import("telegram");
+      TelegramApi = telegramModule.Api;
+    }
 
     const joined = [];
     const skipped = [];
@@ -439,7 +444,7 @@ const server = http.createServer(async (req, res) => {
 
     for (const channel of config.channels) {
       try {
-        await client.invoke(new Api.channels.JoinChannel({ channel: channel.username }));
+        await client.invoke(new TelegramApi.channels.JoinChannel({ channel: channel.username }));
         joined.push(channel.username);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

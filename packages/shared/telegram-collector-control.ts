@@ -148,6 +148,10 @@ export function normalizeCollectorControlUpdate(value: unknown, fallback: Collec
 
 export function isStoredCollectorControlState(value: unknown, fallback: CollectorControlState): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (typeof record.accountId !== "string" || !Array.isArray(record.watchedChannels)) {
+    return false;
+  }
   const normalized = normalizeCollectorControlUpdate(value, fallback);
   return normalized.accountId === fallback.accountId &&
     sameWatchedSet(normalized.watchedChannels, fallback.watchedChannels);

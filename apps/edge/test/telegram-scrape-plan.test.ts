@@ -117,6 +117,22 @@ test('resolveTelegramScrapePlan keeps must-hit channels stable while fast and sl
   assert.notDeepEqual(planA.channels.map((channel) => channel.username), planB.channels.map((channel) => channel.username));
 });
 
+test('resolveTelegramScrapePlan still returns a channel when tier rotation would otherwise produce an empty cycle', () => {
+  const channels = CHANNELS.slice(0, 2);
+  const plan = resolveTelegramScrapePlan({
+    channels,
+    nowMs: 20_000,
+    intervalMs: 10_000,
+    rotationWindowSeconds: 30,
+    hotChannelsPerCycle: 0,
+    mustHitChannelsPerCycle: 0,
+    fastRotateBandSize: 0,
+    slowRotationMultiplier: 4,
+  });
+
+  assert.equal(plan.channels.length > 0, true);
+});
+
 
 test('summarizeSlowFetches reports the slowest fetches above threshold', () => {
   const summary = summarizeSlowFetches([

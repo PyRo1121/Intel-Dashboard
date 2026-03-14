@@ -53,11 +53,14 @@ export function resolveTelegramScrapePlan(args: {
 
   const fastSelected = fastRotatePool.filter((_, index) => index % fastSlots === fastSlot);
   const slowSelected = slowRotatePool.filter((_, index) => index % slowSlots === slowSlot);
-  const channels = uniqueByUsername([
+  let channels = uniqueByUsername([
     ...mustHitChannels,
     ...fastSelected,
     ...slowSelected,
   ]);
+  if (channels.length === 0 && prioritized.length > 0) {
+    channels = [prioritized[0]];
+  }
 
   return {
     channels,

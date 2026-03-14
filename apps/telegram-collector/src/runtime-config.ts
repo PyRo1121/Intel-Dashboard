@@ -9,6 +9,7 @@ export type TelegramCollectorRuntimeConfig = {
   apiHash: string;
   sessionString: string;
   accountId: string;
+  selfUrl: string;
   edgeUrl: string;
   edgePath: string;
   sharedSecret: string;
@@ -60,6 +61,7 @@ export function readTelegramCollectorRuntimeConfig(env: NodeJS.ProcessEnv): Tele
     apiHash: trim(env.TELEGRAM_API_HASH),
     sessionString: trim(env.TELEGRAM_SESSION_STRING),
     accountId: trim(env.TELEGRAM_ACCOUNT_ID) || "primary",
+    selfUrl: trim(env.COLLECTOR_SELF_URL),
     edgeUrl: trim(env.COLLECTOR_EDGE_URL),
     edgePath: trim(env.COLLECTOR_EDGE_PATH) || "/api/telegram/collector-ingest",
     sharedSecret: trim(env.COLLECTOR_SHARED_SECRET),

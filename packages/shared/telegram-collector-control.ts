@@ -46,8 +46,23 @@ export function normalizeCollectorWatchedChannels(value: unknown): string[] {
   return entries;
 }
 
-function sameWatchedSet(left: string[], right: string[]): boolean {
+function sameStringArray(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function normalizeMissingConfig(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const entries: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const normalized = item.trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    entries.push(normalized);
+  }
+  entries.sort();
+  return entries;
 }
 
 export function buildDefaultCollectorControlState(args: {
@@ -59,7 +74,7 @@ export function buildDefaultCollectorControlState(args: {
   return {
     accountId: typeof args.accountId === "string" && args.accountId.trim() ? args.accountId.trim() : "primary",
     configured: args.configured,
-    missingConfig: [...args.missingConfig],
+    missingConfig: normalizeMissingConfig(args.missingConfig),
     connected: false,
     connecting: false,
     watchedChannels: normalizeCollectorWatchedChannels(args.watchedChannels),
@@ -124,7 +139,9 @@ export function normalizeCollectorControlUpdate(value: unknown, fallback: Collec
   return {
     accountId: accountIdOr(fallback.accountId),
     configured: boolOr("configured", fallback.configured),
-    missingConfig: stringListOr("missingConfig", fallback.missingConfig),
+    missingConfig: Array.isArray(record.missingConfig)
+      ? normalizeMissingConfig(record.missingConfig)
+      : normalizeMissingConfig(fallback.missingConfig),
     connected: boolOr("connected", fallback.connected),
     connecting: boolOr("connecting", fallback.connecting),
     watchedChannels: normalizedChannelsOr("watchedChannels", fallback.watchedChannels),
@@ -161,7 +178,12 @@ export function normalizeCollectorControlUpdate(value: unknown, fallback: Collec
 export function isStoredCollectorControlState(value: unknown, fallback: CollectorControlState): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
-  if (typeof record.accountId !== "string" || !Array.isArray(record.watchedChannels)) {
+  if (
+    typeof record.accountId !== "string" ||
+    !Array.isArray(record.watchedChannels) ||
+    typeof record.configured !== "boolean" ||
+    !Array.isArray(record.missingConfig)
+  ) {
     return false;
   }
   if (
@@ -173,5 +195,7 @@ export function isStoredCollectorControlState(value: unknown, fallback: Collecto
   }
   const normalized = normalizeCollectorControlUpdate(value, fallback);
   return normalized.accountId === fallback.accountId &&
-    sameWatchedSet(normalized.watchedChannels, fallback.watchedChannels);
+    normalized.configured === fallback.configured &&
+    sameStringArray(normalized.missingConfig, fallback.missingConfig) &&
+    sameStringArray(normalized.watchedChannels, fallback.watchedChannels);
 }

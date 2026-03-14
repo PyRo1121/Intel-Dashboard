@@ -112,14 +112,19 @@ export function normalizeAuthSessionUser(value: unknown): AuthSessionUser | null
   const name = trimString(value.name);
   const avatar_url = typeof value.avatar_url === "string" ? value.avatar_url : "";
   const id = value.id;
-  if (!login || !name || (typeof id !== "string" && typeof id !== "number")) {
+  const normalizedId = typeof id === "string"
+    ? id.trim()
+    : typeof id === "number" && Number.isFinite(id)
+      ? id
+      : null;
+  if (!login || !name || normalizedId === null || normalizedId === "") {
     return null;
   }
   return {
     login,
     name,
     avatar_url,
-    id,
+    id: normalizedId,
     provider: typeof value.provider === "string" ? value.provider : null,
   };
 }

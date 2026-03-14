@@ -102,7 +102,7 @@ test('resolveTelegramScrapePlan keeps must-hit channels stable while fast and sl
   });
   const planB = resolveTelegramScrapePlan({
     channels,
-    nowMs: 30_000,
+    nowMs: 10_000,
     intervalMs: 10_000,
     rotationWindowSeconds: 30,
     hotChannelsPerCycle: 12,

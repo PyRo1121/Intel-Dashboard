@@ -372,10 +372,10 @@ export default {
           return json({ ...(controlPayload || {}), error: error instanceof Error ? error.message : "collector unavailable" }, 200);
         }
         return json({
+          ...(controlPayload || {}),
           ok: false,
           runtime: "collector-control-do",
           stateSource: controlStateSource ?? "default",
-          ...(controlPayload || {}),
           error: error instanceof Error ? error.message : "collector unavailable",
         }, 503);
       }

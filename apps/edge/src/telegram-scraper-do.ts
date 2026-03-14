@@ -621,9 +621,9 @@ export class TelegramScraperDO extends DurableObject<Env> {
   private getMustHitChannelsPerCycle(): number {
     return normalizeBoundedInt(
       this.env.SCRAPE_MUST_HIT_CHANNELS_PER_CYCLE,
-      48,
+      this.getHotChannelsPerCycle(),
       0,
-      MAX_HOT_CHANNELS_PER_CYCLE,
+      this.getHotChannelsPerCycle(),
     );
   }
 

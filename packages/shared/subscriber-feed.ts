@@ -46,21 +46,27 @@ function normalizeString(value: unknown): string {
 }
 
 function normalizeStringList(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    if (typeof value === "string") {
-      const normalized = normalizeString(value).toLowerCase();
-      return normalized ? [normalized] : [];
+  const pushNormalized = (rawValue: unknown, seen: Set<string>, entries: string[]) => {
+    if (typeof rawValue !== "string") return;
+    for (const part of rawValue.split(/[\n,]+/)) {
+      const normalized = normalizeString(part).toLowerCase();
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      entries.push(normalized);
     }
-    return [];
+  };
+
+  if (!Array.isArray(value)) {
+    const seen = new Set<string>();
+    const entries: string[] = [];
+    pushNormalized(value, seen, entries);
+    return entries;
   }
 
   const seen = new Set<string>();
   const entries: string[] = [];
   for (const item of value) {
-    const normalized = normalizeString(item).toLowerCase();
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
-    entries.push(normalized);
+    pushNormalized(item, seen, entries);
   }
   return entries;
 }

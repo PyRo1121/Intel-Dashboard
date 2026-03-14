@@ -37,7 +37,7 @@ export function normalizeCollectorWatchedChannels(value: unknown): string[] {
   const entries: string[] = [];
   for (const item of value) {
     if (typeof item !== "string") continue;
-    const normalized = item.replace(/^@+/, "").trim().toLowerCase();
+    const normalized = item.trim().replace(/^@+/, "").trim().toLowerCase();
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
     entries.push(normalized);

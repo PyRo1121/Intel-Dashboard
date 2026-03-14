@@ -82,6 +82,19 @@ test("normalizeTelegramEventMessage converts numeric unix timestamps into ISO da
   assert.equal(normalized?.datetime, new Date(1_741_685_200 * 1000).toISOString());
 });
 
+test("normalizeTelegramEventMessage rejects events with invalid or missing dates", () => {
+  const channelMap = new Map([
+    ["abualiexpress", { username: "abualiexpress", label: "Abu Ali Express", category: "conflict" }],
+  ]);
+  assert.equal(
+    normalizeTelegramEventMessage({
+      chat: { username: "@AbuAliExpress" },
+      message: { id: 45, message: "No date" },
+    }, channelMap, new Map()),
+    null,
+  );
+});
+
 test("normalizeTelegramEventMessage drops media-only events until collector has usable media references", () => {
   const channelMap = new Map([
     ["abualiexpress", { username: "abualiexpress", label: "Abu Ali Express", category: "conflict" }],

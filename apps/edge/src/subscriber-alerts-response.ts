@@ -1,6 +1,6 @@
 import type { SubscriberAlertItem, SubscriberAlertsResponse } from "@intel-dashboard/shared/subscriber-alerts.ts";
 
-export const ALERT_MATERIALIZATION_FAILURE_MESSAGE = "subscriber_alert_materialization_failed";
+export const ALERT_MATERIALIZATION_FAILURE_MESSAGE = "Alert refresh failed. Showing the latest available inbox snapshot.";
 
 export function getSubscriberAlertsMaterializationFailureMessage(): string {
   return ALERT_MATERIALIZATION_FAILURE_MESSAGE;

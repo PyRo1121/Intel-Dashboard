@@ -10,19 +10,21 @@ export function normalizeTelegramEventMessage({ event, channelMap }) {
   if (!textOriginal && media.length === 0) return null;
 
   const normalizeMessageDate = (value) => {
-    if (value instanceof Date) return value.toISOString();
+    if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
     if (typeof value === "number" && Number.isFinite(value)) {
       return new Date(value * 1000).toISOString();
     }
-    return new Date().toISOString();
+    return null;
   };
+  const datetime = normalizeMessageDate(message?.date);
+  if (!datetime) return null;
 
   return {
     channel: channel.username,
     label: channel.label,
     category: channel.category,
     messageId: String(message.id),
-    datetime: normalizeMessageDate(message?.date),
+    datetime,
     link: `https://t.me/${channel.username}/${message.id}`,
     textOriginal,
     textEn: textOriginal || undefined,

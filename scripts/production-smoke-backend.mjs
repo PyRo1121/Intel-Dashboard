@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 function assert(condition, message) {
   if (!condition) {
@@ -25,6 +27,15 @@ function run(command, args, options = {}) {
   }
 }
 
+function resolveWranglerCommand(configPath) {
+  const packageDir = dirname(configPath);
+  const localWrangler = resolve(packageDir, "node_modules/.bin/wrangler");
+  if (existsSync(localWrangler)) {
+    return { command: localWrangler, args: [] };
+  }
+  return { command: "bunx", args: ["wrangler"] };
+}
+
 const configPath = (process.env.BACKEND_WRANGLER_CONFIG || "apps/backend/wrangler.jsonc").trim();
 const deployStartedAt = Number.parseInt(process.env.BACKEND_DEPLOY_STARTED_AT || "", 10);
 const maxClockSkewSeconds = Number.parseInt(process.env.BACKEND_DEPLOY_MAX_CLOCK_SKEW_SECONDS || "120", 10);
@@ -32,7 +43,8 @@ const maxClockSkewSeconds = Number.parseInt(process.env.BACKEND_DEPLOY_MAX_CLOCK
 assert(Number.isFinite(deployStartedAt) && deployStartedAt > 0, "BACKEND_DEPLOY_STARTED_AT must be set");
 assert(Number.isFinite(maxClockSkewSeconds) && maxClockSkewSeconds >= 0, "BACKEND_DEPLOY_MAX_CLOCK_SKEW_SECONDS must be a non-negative integer");
 
-const raw = run("npx", ["wrangler", "deployments", "list", "--config", configPath, "--json"], {
+const wrangler = resolveWranglerCommand(configPath);
+const raw = run(wrangler.command, [...wrangler.args, "deployments", "list", "--config", configPath, "--json"], {
   env: process.env,
 });
 const parsed = JSON.parse(raw);

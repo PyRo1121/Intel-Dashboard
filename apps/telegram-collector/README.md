@@ -36,7 +36,7 @@ TELEGRAM_PHONE_NUMBER=+15551234567
 ```
 
 The script will prompt for:
-- phone number if not pre-set
+- phone number if not preset
 - Telegram login code
 - 2FA password if enabled
 

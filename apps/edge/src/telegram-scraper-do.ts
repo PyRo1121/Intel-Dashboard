@@ -42,6 +42,7 @@ import {
 } from "./telegram-signal-grade";
 import { resolveTelegramScrapePlan } from "./telegram-scrape-plan";
 import { CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT } from "@intel-dashboard/shared/telegram-signal.ts";
+import { shouldPersistLatestTelegramStateLocally } from "./telegram-state-cache";
 
 // ============================================================================
 // Types
@@ -2625,11 +2626,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
 
       // ---- 8. Write canonical state to DO storage + mirror to KV hot cache ----
       debugRuntimeLog(this.runtimeEnv, "[TelegramScraper] Phase 8: Writing canonical state...");
-      if (stateJson.length <= 900_000) {
-        await this.ctx.storage.put(LATEST_TELEGRAM_STATE_DO_KEY, stateJson);
-      } else {
-        await this.ctx.storage.delete(LATEST_TELEGRAM_STATE_DO_KEY);
-      }
+      await this.writeLatestStateLocalCache(stateJson);
       await this.env.TELEGRAM_STATE.put(LATEST_TELEGRAM_STATE_KV_KEY, stateJson);
       debugRuntimeLog(this.runtimeEnv, "[TelegramScraper] Phase 8 done: state write complete ✅");
 
@@ -2926,11 +2923,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
       dedupe_stats: canonical.stats,
     };
     const stateJson = JSON.stringify(state);
-    if (stateJson.length <= 900_000) {
-      await this.ctx.storage.put(LATEST_TELEGRAM_STATE_DO_KEY, stateJson);
-    } else {
-      await this.ctx.storage.delete(LATEST_TELEGRAM_STATE_DO_KEY);
-    }
+    await this.writeLatestStateLocalCache(stateJson);
     await this.env.TELEGRAM_STATE.put(LATEST_TELEGRAM_STATE_KV_KEY, stateJson);
 
     const cycleId = `collector-${Date.now()}-${this.hashText(`${batch.accountId}:${stateTimestamp}:${accepted}`)}`;
@@ -3635,6 +3628,14 @@ export class TelegramScraperDO extends DurableObject<Env> {
   // KV state
   // ==========================================================================
 
+  private async writeLatestStateLocalCache(raw: string): Promise<void> {
+    if (shouldPersistLatestTelegramStateLocally(raw)) {
+      await this.ctx.storage.put(LATEST_TELEGRAM_STATE_DO_KEY, raw);
+      return;
+    }
+    await this.ctx.storage.delete(LATEST_TELEGRAM_STATE_DO_KEY);
+  }
+
   private async loadPreviousState(): Promise<TelegramState | null> {
     try {
       const localRaw = await this.ctx.storage.get<string>(LATEST_TELEGRAM_STATE_DO_KEY);
@@ -3650,9 +3651,9 @@ export class TelegramScraperDO extends DurableObject<Env> {
       if (!raw) return null;
       const parsed = JSON.parse(raw) as TelegramState;
       // Prime local canonical storage from KV once.
-      if (raw.length <= 900_000) {
+      if (shouldPersistLatestTelegramStateLocally(raw)) {
         try {
-          await this.ctx.storage.put(LATEST_TELEGRAM_STATE_DO_KEY, raw);
+          await this.writeLatestStateLocalCache(raw);
         } catch {
           // Ignore local cache write failures (for example SQLITE_TOOBIG); KV copy is authoritative.
         }

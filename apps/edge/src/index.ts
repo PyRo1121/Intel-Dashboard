@@ -3,7 +3,7 @@ import {
   applyDefaultSecurityHeaders,
   decodeAndValidateMediaKey,
   isTrustedRequestOrigin,
-  verifySignedAdminRequest,
+  verifySignedAdminRequestWithNonceGuard,
   verifyStripeWebhookSignature,
 } from "./security-guards";
 import { TelegramScraperDO } from "./telegram-scraper-do";
@@ -2927,45 +2927,18 @@ async function authorizePrivilegedRoute(params: {
     };
   }
 
-  const signed = await verifySignedAdminRequest({
+  const signed = await verifySignedAdminRequestWithNonceGuard({
     method: params.request.method,
     path: params.path,
     headers: params.request.headers,
     configuredSecret: params.env.CACHE_BUST_SECRET,
+    nonceGuardNamespace: params.env.INTEL_CACHE,
+    clientIp: params.request.headers.get("CF-Connecting-IP") ?? "unknown",
   });
   if (!signed.ok) {
     return {
       ok: false,
-      response: corsJson(params.origin, 403, { error: "Forbidden", reason: signed.reason }),
-    };
-  }
-
-  const guardId = params.env.INTEL_CACHE.idFromName("main");
-  const guardStub = params.env.INTEL_CACHE.get(guardId);
-  const guardRes = await guardStub.fetch(new Request("https://do/api/admin/guard", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      scope: params.path,
-      nonce: signed.nonce,
-      timestampMs: signed.timestampMs,
-      clientIp: params.request.headers.get("CF-Connecting-IP") ?? "unknown",
-    }),
-  }));
-
-  if (!guardRes.ok) {
-    const body = await guardRes.text();
-    return {
-      ok: false,
-      response: new Response(body || JSON.stringify({ error: "Forbidden" }), {
-        status: guardRes.status,
-        headers: {
-          "Content-Type": "application/json",
-          ...corsHeaders(params.origin),
-        },
-      }),
+      response: corsJson(params.origin, signed.status, { error: "Forbidden", reason: signed.reason }),
     };
   }
 
@@ -5752,14 +5725,16 @@ export default {
       if (request.method !== "POST") {
         return privateApiMethodNotAllowed(origin, "POST");
       }
-      const signed = await verifySignedAdminRequest({
+      const signed = await verifySignedAdminRequestWithNonceGuard({
         method: request.method,
         path,
         headers: request.headers,
         configuredSecret: env.COLLECTOR_SHARED_SECRET?.trim() || env.CACHE_BUST_SECRET,
+        nonceGuardNamespace: env.INTEL_CACHE,
+        clientIp: request.headers.get("CF-Connecting-IP") ?? "unknown",
       });
       if (!signed.ok) {
-        return corsJson(origin, 403, { error: "Forbidden", reason: signed.reason });
+        return corsJson(origin, signed.status, { error: "Forbidden", reason: signed.reason });
       }
 
       let payload: unknown;

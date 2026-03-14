@@ -2,6 +2,7 @@ import http from "node:http";
 import { Api } from "telegram";
 import { readTelegramCollectorRuntimeConfig } from "./runtime-config.mjs";
 import { forwardCollectorBatch } from "./edge-client.mjs";
+import { normalizeTelegramEventMessage } from "./container-message.mjs";
 
 const port = Number.parseInt(process.env.PORT || "8080", 10);
 const config = readTelegramCollectorRuntimeConfig(process.env);
@@ -126,37 +127,6 @@ async function forwardBatchMessages(batchMessages) {
   }
 }
 
-function normalizeTelegramEventMessage(event) {
-  const message = event?.message;
-  const chat = event?.chat;
-  const username = String(chat?.username || "").trim().toLowerCase();
-  const channel = channelMap.get(username);
-  if (!channel || !message?.id) return null;
-
-  const textOriginal = String(message?.message || "").trim();
-  const media = [];
-  const hasPhoto = Boolean(message?.photo);
-  const mimeType = String(message?.media?.document?.mimeType || "");
-  const hasVideo = mimeType.startsWith("video/");
-
-  return {
-    channel: channel.username,
-    label: channel.label,
-    category: channel.category,
-    messageId: String(message.id),
-    datetime: message?.date instanceof Date ? message.date.toISOString() : new Date().toISOString(),
-    link: `https://t.me/${channel.username}/${message.id}`,
-    textOriginal,
-    textEn: textOriginal || undefined,
-    language: "unknown",
-    views: message?.views ? String(message.views) : undefined,
-    media,
-    hasPhoto,
-    hasVideo,
-    collectorMessageId: `${channel.username}:${message.id}`,
-  };
-}
-
 async function connectClient() {
   if (!state.configured || state.connected || state.connecting) return;
   state.connecting = true;
@@ -177,7 +147,7 @@ async function connectClient() {
     await nextClient.connect();
     nextClient.addEventHandler(async (event) => {
       try {
-        const normalized = normalizeTelegramEventMessage(event);
+        const normalized = normalizeTelegramEventMessage({ event, channelMap });
         if (!normalized) return;
         buffer.push(normalized);
         state.bufferSize = buffer.length;

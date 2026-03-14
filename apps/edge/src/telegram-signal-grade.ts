@@ -120,7 +120,9 @@ const PROFILE_GROUPS = {
 } satisfies Record<string, TelegramSignalProfile>;
 
 const CATEGORY_TO_PROFILE_GROUP: Record<string, keyof typeof PROFILE_GROUPS> = {
+  conflict: "conflict",
   cyber: "cyber",
+  alerts: "alerts",
   ua_official: "alerts",
   ru_official: "alerts",
   air_defense: "alerts",

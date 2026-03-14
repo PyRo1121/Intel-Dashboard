@@ -284,7 +284,6 @@ export default function Sidebar() {
                               alt={userDisplay().displayName}
                               class="w-7 h-7 rounded-sm flex-shrink-0 ring-1 ring-white/[0.06]"
                               referrerpolicy="no-referrer"
-                              loading="lazy"
                               onError={() => setAvatarFailed(true)}
                             />
                           </Show>
@@ -293,7 +292,7 @@ export default function Sidebar() {
                               <p class="text-[12px] font-medium text-zinc-300 truncate leading-tight font-['Chakra_Petch']">
                                 {userDisplay().displayName}
                               </p>
-                              <p class="text-[10px] text-zinc-500 truncate leading-tight font-['Fira_Code']">
+                              <p class="text-[10px] text-zinc-400 truncate leading-tight font-['Fira_Code']">
                                 {userDisplay().displayLogin}
                               </p>
                               <p class={`text-[10px] truncate leading-tight mt-0.5 font-['Fira_Code'] ${planTone()}`}>
@@ -335,7 +334,7 @@ export default function Sidebar() {
             <div class="flex items-center justify-between flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
                 <Activity size={12} class="text-[var(--color-accent)] opacity-80" />
-                <span class="text-[11px] text-zinc-400 font-medium font-['Chakra_Petch'] uppercase tracking-widest text-shadow-[0_0_8px_var(--color-accent-dim)]">Live</span>
+                <span class="text-[11px] text-zinc-400 font-medium font-['Chakra_Petch'] uppercase tracking-widest [text-shadow:0_0_8px_var(--color-accent-dim)]">Live</span>
               </div>
               <span class="text-[10px] text-zinc-600 font-['Fira_Code']">v0.2</span>
             </div>

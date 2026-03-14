@@ -255,6 +255,66 @@ export async function verifySignedAdminRequest(params: {
   return { ok: true, nonce, timestampMs };
 }
 
+type AdminNonceGuardStubLike = {
+  fetch(request: Request): Promise<Response>;
+};
+
+type AdminNonceGuardNamespaceLike = {
+  idFromName(name: string): unknown;
+  get(id: unknown): AdminNonceGuardStubLike;
+};
+
+export async function verifySignedAdminRequestWithNonceGuard(params: {
+  method: string;
+  path: string;
+  headers: Headers;
+  configuredSecret?: string | null;
+  nonceGuardNamespace: AdminNonceGuardNamespaceLike;
+  clientIp?: string | null;
+  scope?: string;
+  nowMs?: number;
+  maxSkewMs?: number;
+}): Promise<
+  | { ok: true; nonce: string; timestampMs: number }
+  | { ok: false; reason: string; status: number }
+> {
+  const signed = await verifySignedAdminRequest({
+    method: params.method,
+    path: params.path,
+    headers: params.headers,
+    configuredSecret: params.configuredSecret,
+    nowMs: params.nowMs,
+    maxSkewMs: params.maxSkewMs,
+  });
+  if (!signed.ok) {
+    return { ok: false, reason: signed.reason, status: 403 };
+  }
+
+  const guardId = params.nonceGuardNamespace.idFromName("main");
+  const guardStub = params.nonceGuardNamespace.get(guardId);
+  const guardRes = await guardStub.fetch(new Request("https://do/api/admin/guard", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      scope: params.scope ?? params.path,
+      nonce: signed.nonce,
+      timestampMs: signed.timestampMs,
+      clientIp: params.clientIp?.trim() || "unknown",
+    }),
+  }));
+  if (!guardRes.ok) {
+    return {
+      ok: false,
+      reason: guardRes.status === 409 ? "nonce_reused" : "nonce_guard_failed",
+      status: guardRes.status,
+    };
+  }
+
+  return signed;
+}
+
 export function decodeAndValidateMediaKey(encodedKey: string): string | null {
   if (!encodedKey) return null;
   let key = "";

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  computeTelegramSourceLeaderboardScore,
   normalizeTelegramSourceLeaderboardRows,
   queryTelegramSourceLeaderboard,
   resolveTelegramLeaderboardWindowStart,
@@ -61,6 +62,7 @@ test("queryTelegramSourceLeaderboard queries D1 and normalizes the leaderboard",
                   source_history_score: 85,
                   trust_tier: "verified",
                   latency_tier: "fast",
+                  leaderboard_score: 77,
                 },
               ],
             }),
@@ -79,4 +81,26 @@ test("queryTelegramSourceLeaderboard queries D1 and normalizes the leaderboard",
   assert.equal(result.window, "7d");
   assert.equal(boundCutoff, "2026-03-02T12:00:00.000Z");
   assert.equal(result.entries[0]?.channel, "alpha");
+  assert.equal(result.entries[0]?.leaderboardScore, 77);
+});
+
+test("computeTelegramSourceLeaderboardScore rewards corroborated high-signal lead quality over raw volume", () => {
+  const focused = computeTelegramSourceLeaderboardScore({
+    leadCount: 3,
+    avgSignalScore: 89,
+    highSignalLeadCount: 3,
+    corroboratedLeadCount: 3,
+    sourceHistoryScore: 90,
+    trustTier: "core",
+  });
+  const noisy = computeTelegramSourceLeaderboardScore({
+    leadCount: 12,
+    avgSignalScore: 52,
+    highSignalLeadCount: 1,
+    corroboratedLeadCount: 2,
+    sourceHistoryScore: 45,
+    trustTier: "watch",
+  });
+
+  assert.ok(focused > noisy);
 });

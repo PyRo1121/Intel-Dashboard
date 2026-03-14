@@ -1,0 +1,70 @@
+packages/shared/entitlement.ts
+  0e65710de4296aeb 80
+e2e/debug-status.test.mjs
+  fbdbb1d68cb02f36 1-24
+apps/web/src/app.css
+  0e65710de4296aeb 1,5-23,26-28,30-36,42-46,52-53,59,67-77,80-81,86,88,90-91,93,97-100,102-117,121-124,127-141,143-144,147-148,153-159,161,167,170,172-174,176-179,183,187-188,192-195,199-200,204-210,214-216,220-222,225-226,230-233,239-242,255-257,260-261,265-269,272-273,278-280,284-286,290,295-296,298,302-304,306,308,315-319,324,327-333,335-337,341,347-350,353,355-360,363-366,369-372,387-388,391-392,397-399,404-405,407,411,416-418,429-430,434,438-440,444,447-448,454,458-460,465-466,468-469,477,479-480,485-488,494-497,503-504,508,519-525,527-528,534-536,539,542,544-545,547,550,555,557,560,563-565,567-569,571-573,576,589
+apps/edge/src/telegram-scraper-do.ts
+  0e65710de4296aeb 50
+apps/edge/src/intel-cache-do.ts
+  0e65710de4296aeb 56,668-670,672,674,690-692,695
+apps/web/src/lib/telegram-entry-meta.ts
+  0e65710de4296aeb 50
+apps/web/src/lib/entitlement.test.ts
+  0e65710de4296aeb 33,79
+apps/web/src/lib/telegram-reconcile.ts
+  0e65710de4296aeb 22,25,31-32,41-63,66
+apps/web/src/routes/telegram/index.tsx
+  0e65710de4296aeb 314-315,321-322,333-335,367-370,372-373
+apps/edge/wrangler.toml
+  fbdbb1d68cb02f36 57-58,60-61
+apps/web/src/components/layout/Sidebar.tsx
+  0e65710de4296aeb 129,135-136,142,147,149,189,192,196,199,213,254,277,285,287,293,296,299,310,331-332,337-338,340,352
+  1cab093849cd45e1 168,233,385,413
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.1.12",
+  "base_commit_sha": "489f9a27b0d97091e2c27627ec8c44e7d77bf552",
+  "prompts": {
+    "0e65710de4296aeb": {
+      "agent_id": {
+        "tool": "gemini",
+        "id": "a593c47a-6e5b-4f70-be98-74166862486a",
+        "model": "gemini-3.1-pro-preview"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 369,
+      "overriden_lines": 0
+    },
+    "1cab093849cd45e1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd9dd-d12c-78d0-8f94-c0cbd4413312",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 4,
+      "accepted_lines": 4,
+      "overriden_lines": 0
+    },
+    "fbdbb1d68cb02f36": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019cd0d9-c76f-7c23-b348-713dec4ebf33",
+        "model": "gpt-5.4"
+      },
+      "human_author": "Olen Latham <olen@latham.cloud>",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 2,
+      "accepted_lines": 28,
+      "overriden_lines": 0
+    }
+  }
+}

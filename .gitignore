@@ -56,3 +56,4 @@ gitignore
 Thumbs.db
 
 .codex-backups/
+.gstack/

@@ -32,6 +32,7 @@ export default function MyAlertsPage() {
   const [busyAll, setBusyAll] = createSignal(false);
   const [savingControls, setSavingControls] = createSignal(false);
   const [controlsSaved, setControlsSaved] = createSignal("");
+  const [alertsError, setAlertsError] = createSignal("");
   const [firstReportRegionEnabled, setFirstReportRegionEnabled] = createSignal(true);
   const [highSignalRegionEnabled, setHighSignalRegionEnabled] = createSignal(true);
   const [firstReportChannelEnabled, setFirstReportChannelEnabled] = createSignal(true);
@@ -41,11 +42,25 @@ export default function MyAlertsPage() {
 
   const [alertPreferences, { refetch: refetchAlertPreferences }] = createResource(
     () => (entitled() ? "enabled" : null),
-    () => fetchSubscriberAlertPreferences(),
+    async () => {
+      const result = await fetchSubscriberAlertPreferences();
+      if (!result.ok) {
+        return null;
+      }
+      return result.data;
+    },
   );
   const [alerts, { refetch }] = createResource(
     () => (entitled() ? state() : null),
-    (nextState) => fetchSubscriberAlerts(nextState),
+    async (nextState) => {
+      const result = await fetchSubscriberAlerts(nextState);
+      if (!result.ok) {
+        setAlertsError(result.error || "Unable to load alerts.");
+        return null;
+      }
+      setAlertsError("");
+      return result.data;
+    },
   );
 
   const items = () => alerts()?.items ?? [];
@@ -72,9 +87,13 @@ export default function MyAlertsPage() {
 
   const markRead = async (alertId: string) => {
     setBusyId(alertId);
+    setAlertsError("");
     try {
-      if (await markSubscriberAlertsRead([alertId])) {
+      const result = await markSubscriberAlertsRead([alertId]);
+      if (result.ok) {
         await refetch();
+      } else {
+        setAlertsError(result.error || "Unable to mark alert as read.");
       }
     } finally {
       setBusyId("");
@@ -83,9 +102,13 @@ export default function MyAlertsPage() {
 
   const markAll = async () => {
     setBusyAll(true);
+    setAlertsError("");
     try {
-      if (await markAllSubscriberAlertsRead()) {
+      const result = await markAllSubscriberAlertsRead();
+      if (result.ok) {
         await refetch();
+      } else {
+        setAlertsError(result.error || "Unable to mark alerts as read.");
       }
     } finally {
       setBusyAll(false);
@@ -104,11 +127,11 @@ export default function MyAlertsPage() {
     };
     try {
       const saved = await saveSubscriberAlertPreferences(payload);
-      if (!saved) {
-        setControlsSaved("Save failed");
+      if (!saved.ok) {
+        setControlsSaved(saved.error || "Save failed");
         return;
       }
-      applyControlsToForm(saved);
+      applyControlsToForm(saved.data);
       setControlsSaved("Controls saved");
       await refetchAlertPreferences();
       await refetch();
@@ -229,6 +252,12 @@ export default function MyAlertsPage() {
               {busyAll() ? "Marking..." : "Mark all read"}
             </button>
           </section>
+
+          <Show when={alertsError()}>
+            <div class="surface-card mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+              {alertsError()}
+            </div>
+          </Show>
 
           <Show when={degradedNotice()}>
             <div class="surface-card mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">

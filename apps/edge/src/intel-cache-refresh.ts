@@ -18,7 +18,10 @@ export function buildCacheBustRefreshBatches(
   refreshTargets: readonly string[],
   maxParallelism: number,
 ): string[][] {
-  const normalizedMaxParallelism = Math.max(1, Math.floor(maxParallelism));
+  const flooredMaxParallelism = Math.floor(maxParallelism);
+  const normalizedMaxParallelism = Number.isFinite(flooredMaxParallelism) && flooredMaxParallelism > 0
+    ? flooredMaxParallelism
+    : 1;
   const batches: string[][] = [];
   for (let index = 0; index < refreshTargets.length; index += normalizedMaxParallelism) {
     batches.push(refreshTargets.slice(index, index + normalizedMaxParallelism));

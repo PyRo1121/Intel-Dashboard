@@ -44,6 +44,20 @@ test("buildCacheBustRefreshBatches bounds cache-bust rewarm concurrency", () => 
   ]);
 });
 
+test("buildCacheBustRefreshBatches clamps invalid parallelism to one", () => {
+  const batches = buildCacheBustRefreshBatches([
+    "/api/intel",
+    "/api/briefings",
+    "/api/air-sea",
+  ], Number.NaN);
+
+  assert.deepEqual(batches, [
+    ["/api/intel"],
+    ["/api/briefings"],
+    ["/api/air-sea"],
+  ]);
+});
+
 test("formatCacheBustRefreshFailure reports null and error failures explicitly", () => {
   assert.equal(
     formatCacheBustRefreshFailure("/api/intel", null),

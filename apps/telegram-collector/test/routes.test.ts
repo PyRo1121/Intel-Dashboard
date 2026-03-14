@@ -22,7 +22,7 @@ test("collector status exposes mappedChannelIds field", () => {
 test("collector worker proxies runtime routes through the shared retry path", () => {
   const source = readSource("index.ts");
   assert.match(source, /proxyCollectorRequest/);
-  assert.match(source, /container\.fetch\(request\)/);
+  assert.match(source, /container\.fetch\(new Request\(request\)\)/);
 });
 
 

@@ -38,7 +38,7 @@ test("readTelegramCollectorRuntimeConfig normalizes env values", () => {
   assert.deepEqual(config.missingConfig, []);
 });
 
-test("readTelegramCollectorRuntimeConfig requires collector self url for control-state sync", () => {
+test("readTelegramCollectorRuntimeConfig leaves control-state sync disabled when collector self url is missing", () => {
   const config = readTelegramCollectorRuntimeConfig({
     TELEGRAM_API_ID: "12345",
     TELEGRAM_API_HASH: "hash",
@@ -49,5 +49,22 @@ test("readTelegramCollectorRuntimeConfig requires collector self url for control
     TELEGRAM_HOT_CHANNELS: "channel-a|Channel A|conflict",
   } as NodeJS.ProcessEnv);
 
-  assert.equal(config.missingConfig.includes("COLLECTOR_SELF_URL"), true);
+  assert.equal(config.selfUrl, "");
+  assert.equal(config.missingConfig.includes("COLLECTOR_SELF_URL"), false);
+});
+
+test("readTelegramCollectorRuntimeConfig rejects invalid collector self url values", () => {
+  const config = readTelegramCollectorRuntimeConfig({
+    TELEGRAM_API_ID: "12345",
+    TELEGRAM_API_HASH: "hash",
+    TELEGRAM_SESSION_STRING: "session",
+    TELEGRAM_ACCOUNT_ID: "acct-1",
+    COLLECTOR_SELF_URL: "not-a-url",
+    COLLECTOR_EDGE_URL: "https://intel.pyro1121.com",
+    COLLECTOR_SHARED_SECRET: "secret",
+    TELEGRAM_HOT_CHANNELS: "channel-a|Channel A|conflict",
+  } as NodeJS.ProcessEnv);
+
+  assert.equal(config.selfUrl, "");
+  assert.deepEqual(config.missingConfig, []);
 });

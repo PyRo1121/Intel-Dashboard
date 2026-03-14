@@ -10,6 +10,17 @@ function normalizeBoundedInt(value, fallback, min, max) {
   return Math.max(min, Math.min(max, parsed));
 }
 
+function normalizeOptionalUrl(value) {
+  const raw = trim(value);
+  if (!raw) return "";
+  try {
+    new URL(raw);
+    return raw;
+  } catch {
+    return "";
+  }
+}
+
 export function parseCollectorChannelSpecs(raw) {
   const text = trim(raw);
   if (!text) return [];
@@ -41,7 +52,7 @@ export function readTelegramCollectorRuntimeConfig(env) {
     apiHash: trim(env.TELEGRAM_API_HASH),
     sessionString: trim(env.TELEGRAM_SESSION_STRING),
     accountId: trim(env.TELEGRAM_ACCOUNT_ID) || "primary",
-    selfUrl: trim(env.COLLECTOR_SELF_URL),
+    selfUrl: normalizeOptionalUrl(env.COLLECTOR_SELF_URL),
     edgeUrl: trim(env.COLLECTOR_EDGE_URL),
     edgePath: trim(env.COLLECTOR_EDGE_PATH) || "/api/telegram/collector-ingest",
     sharedSecret: trim(env.COLLECTOR_SHARED_SECRET),
@@ -53,7 +64,6 @@ export function readTelegramCollectorRuntimeConfig(env) {
   if (!config.apiHash) config.missingConfig.push("TELEGRAM_API_HASH");
   if (!config.sessionString) config.missingConfig.push("TELEGRAM_SESSION_STRING");
   if (!config.channels.length) config.missingConfig.push("TELEGRAM_HOT_CHANNELS");
-  if (!config.selfUrl) config.missingConfig.push("COLLECTOR_SELF_URL");
   if (!config.edgeUrl) config.missingConfig.push("COLLECTOR_EDGE_URL");
   if (!config.sharedSecret) config.missingConfig.push("COLLECTOR_SHARED_SECRET");
   return config;

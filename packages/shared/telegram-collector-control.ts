@@ -164,6 +164,13 @@ export function isStoredCollectorControlState(value: unknown, fallback: Collecto
   if (typeof record.accountId !== "string" || !Array.isArray(record.watchedChannels)) {
     return false;
   }
+  if (
+    typeof record.updatedAt !== "string" ||
+    !record.updatedAt.trim() ||
+    !Number.isFinite(Date.parse(record.updatedAt))
+  ) {
+    return false;
+  }
   const normalized = normalizeCollectorControlUpdate(value, fallback);
   return normalized.accountId === fallback.accountId &&
     sameWatchedSet(normalized.watchedChannels, fallback.watchedChannels);

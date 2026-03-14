@@ -185,7 +185,7 @@ async function proxyCollectorRequest(container: CollectorContainerStub, request:
   let lastError: unknown = null;
   for (let attempt = 0; attempt < COLLECTOR_PROXY_RETRY_ATTEMPTS; attempt += 1) {
     try {
-      return await container.fetch(request);
+      return await container.fetch(new Request(request));
     } catch (error) {
       lastError = error;
       if (!isColdStartContainerError(error) || attempt === COLLECTOR_PROXY_RETRY_ATTEMPTS - 1) {

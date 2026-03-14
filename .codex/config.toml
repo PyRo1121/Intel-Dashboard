@@ -20,12 +20,13 @@ sandbox_mode = "workspace-write"
 web_search = "live"
 
 # External notifications receive a JSON payload on stdin.
-notify = [
-  "terminal-notifier",
-  "-title", "Codex ECC",
-  "-message", "Task completed!",
-  "-sound", "default",
-]
+#
+# NOTE:
+# - `terminal-notifier` is macOS-specific and will fail or no-op on Linux/Windows.
+# - To keep this shared repo config cross-platform, we intentionally leave
+#   `notify` unset here.
+# - Developers can add a platform-appropriate notifier in their personal
+#   `~/.codex/config.toml`.
 
 # Prefer AGENTS.md and project-local .codex/AGENTS.md for instructions.
 # model_instructions_file replaces built-in instructions instead of AGENTS.md,
@@ -37,26 +38,26 @@ notify = [
 # the launching environment or can be supplied by a user-level ~/.codex/config.toml.
 [mcp_servers.github]
 command = "npx"
-args = ["-y", "@modelcontextprotocol/server-github"]
+args = ["-y", "@modelcontextprotocol/server-github@2025.4.8"]
 
 [mcp_servers.context7]
 command = "npx"
-args = ["-y", "@upstash/context7-mcp@latest"]
+args = ["-y", "@upstash/context7-mcp@2.1.4"]
 
 [mcp_servers.exa]
 url = "https://mcp.exa.ai/mcp"
 
 [mcp_servers.memory]
 command = "npx"
-args = ["-y", "@modelcontextprotocol/server-memory"]
+args = ["-y", "@modelcontextprotocol/server-memory@2026.1.26"]
 
 [mcp_servers.playwright]
 command = "npx"
-args = ["-y", "@playwright/mcp@latest", "--extension"]
+args = ["-y", "@playwright/mcp@0.0.68", "--extension"]
 
 [mcp_servers.sequential-thinking]
 command = "npx"
-args = ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+args = ["-y", "@modelcontextprotocol/server-sequential-thinking@2025.12.18"]
 
 # Additional MCP servers (uncomment as needed):
 # [mcp_servers.supabase]

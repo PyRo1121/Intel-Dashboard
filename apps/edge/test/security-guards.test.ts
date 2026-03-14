@@ -364,6 +364,57 @@ describe("verifySignedAdminRequestWithNonceGuard", () => {
       status: 409,
     });
   });
+
+  it("preserves retryAfterMs when the nonce guard rate limits the request", async () => {
+    const headers = await buildSignedHeaders("collector-secret", "/api/telegram/collector-ingest");
+    const result = await verifySignedAdminRequestWithNonceGuard({
+      method: "POST",
+      path: "/api/telegram/collector-ingest",
+      headers,
+      configuredSecret: "collector-secret",
+      nowMs: 1_730_000_000_000,
+      nonceGuardNamespace: {
+        idFromName: () => "main",
+        get: () => ({
+          async fetch() {
+            return new Response(JSON.stringify({ error: "rate_limited", retryAfterMs: 12_500 }), { status: 429 });
+          },
+        }),
+      },
+    });
+
+    assert.deepEqual(result, {
+      ok: false,
+      reason: "nonce_guard_rejected",
+      status: 429,
+      retryAfterMs: 12_500,
+    });
+  });
+
+  it("drops invalid retryAfterMs values from the nonce guard payload", async () => {
+    const headers = await buildSignedHeaders("collector-secret", "/api/telegram/collector-ingest");
+    const result = await verifySignedAdminRequestWithNonceGuard({
+      method: "POST",
+      path: "/api/telegram/collector-ingest",
+      headers,
+      configuredSecret: "collector-secret",
+      nowMs: 1_730_000_000_000,
+      nonceGuardNamespace: {
+        idFromName: () => "main",
+        get: () => ({
+          async fetch() {
+            return new Response(JSON.stringify({ error: "rate_limited", retryAfterMs: Number.NaN }), { status: 429 });
+          },
+        }),
+      },
+    });
+
+    assert.deepEqual(result, {
+      ok: false,
+      reason: "nonce_guard_rejected",
+      status: 429,
+    });
+  });
 });
 
 describe("decodeAndValidateMediaKey", () => {

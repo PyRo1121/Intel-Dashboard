@@ -1,6 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { resolveBackendEndpointUrl, usesBackendServiceBinding } from "./backend-origin";
 import { enforceIntelAdminGuard, enforceWebhookDedupe } from "./intel-cache-guards";
+import {
+  buildChatHistoryCacheKeyFromLimits,
+  collectPersistedChatHistoryEndpoints,
+} from "./intel-cache-chat-history";
 import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
 import { chunkEntries, collectStaleChunkKeys, MAX_DO_STORAGE_BATCH_ENTRIES } from "./storage-batches";
@@ -87,9 +91,20 @@ export class IntelCacheDO extends DurableObject<Env> {
     this.runtimeEnv = env;
 
     this.ctx.blockConcurrencyWhile(async () => {
+      const stored = await this.ctx.storage.list({ prefix: `cache:${CHAT_HISTORY_PATH}` });
+      const persistedChatEndpoints = collectPersistedChatHistoryEndpoints(stored.keys());
+      const defaultChatHistoryEndpoint = buildChatHistoryCacheKeyFromLimits(
+        CHAT_DEFAULT_SESSION_LIMIT,
+        CHAT_DEFAULT_MESSAGE_LIMIT,
+      );
       // Load all endpoints from storage IN PARALLEL to minimize blockConcurrencyWhile time
       // (blockConcurrencyWhile has a 30s timeout — sequential loads risk hitting it)
-      const allEndpoints = [...ENDPOINTS, "/api/whales", CHAT_HISTORY_PATH];
+      const allEndpoints = [
+        ...ENDPOINTS,
+        "/api/whales",
+        defaultChatHistoryEndpoint,
+        ...persistedChatEndpoints.filter((endpoint) => endpoint !== defaultChatHistoryEndpoint),
+      ];
       const results = await Promise.allSettled(
         allEndpoints.map((ep) => this.loadChunked(ep)),
       );
@@ -407,7 +422,10 @@ export class IntelCacheDO extends DurableObject<Env> {
       sessions: String(sessions),
       messages: String(messages),
     });
-    return `${CHAT_HISTORY_PATH}?${params.toString()}`;
+    return buildChatHistoryCacheKeyFromLimits(
+      Number(params.get("sessions")),
+      Number(params.get("messages")),
+    );
   }
 
   private async clearChatHistoryCacheVariants(): Promise<void> {
@@ -421,8 +439,8 @@ export class IntelCacheDO extends DurableObject<Env> {
 
     const storagePrefix = `cache:${CHAT_HISTORY_PATH}`;
     const stored = await this.ctx.storage.list({ prefix: storagePrefix });
-    for (const key of stored.keys()) {
-      keysToDelete.add(String(key).replace(/^cache:/, ""));
+    for (const endpoint of collectPersistedChatHistoryEndpoints(stored.keys())) {
+      keysToDelete.add(endpoint);
     }
 
     for (const endpoint of keysToDelete) {

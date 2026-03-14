@@ -46,7 +46,7 @@ export function normalizeCollectorWatchedChannels(value: unknown): string[] {
   return entries;
 }
 
-function sameWatchedSet(left: string[], right: string[]): boolean {
+function sameStringArray(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
@@ -65,10 +65,6 @@ function normalizeMissingConfig(value: unknown): string[] {
   return entries;
 }
 
-function sameMissingConfig(left: string[], right: string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
 export function buildDefaultCollectorControlState(args: {
   configured: boolean;
   missingConfig: string[];
@@ -78,7 +74,7 @@ export function buildDefaultCollectorControlState(args: {
   return {
     accountId: typeof args.accountId === "string" && args.accountId.trim() ? args.accountId.trim() : "primary",
     configured: args.configured,
-    missingConfig: [...args.missingConfig],
+    missingConfig: normalizeMissingConfig(args.missingConfig),
     connected: false,
     connecting: false,
     watchedChannels: normalizeCollectorWatchedChannels(args.watchedChannels),
@@ -195,6 +191,6 @@ export function isStoredCollectorControlState(value: unknown, fallback: Collecto
   const normalized = normalizeCollectorControlUpdate(value, fallback);
   return normalized.accountId === fallback.accountId &&
     normalized.configured === fallback.configured &&
-    sameMissingConfig(normalized.missingConfig, normalizeMissingConfig(fallback.missingConfig)) &&
-    sameWatchedSet(normalized.watchedChannels, fallback.watchedChannels);
+    sameStringArray(normalized.missingConfig, fallback.missingConfig) &&
+    sameStringArray(normalized.watchedChannels, fallback.watchedChannels);
 }

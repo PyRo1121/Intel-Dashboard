@@ -105,6 +105,38 @@ test("isStoredCollectorControlState rejects stored state when current config sha
     ),
     true,
   );
+
+  assert.equal(
+    isStoredCollectorControlState(
+      {
+        accountId: "primary",
+        configured: false,
+        missingConfig: [
+          "COLLECTOR_EDGE_URL",
+          "COLLECTOR_SHARED_SECRET",
+          "EXTRA_CONFIG_KEY",
+        ],
+        watchedChannels: ["abualiexpress"],
+        updatedAt: "2026-03-14T00:00:00.000Z",
+      },
+      fallback,
+    ),
+    false,
+  );
+
+  assert.equal(
+    isStoredCollectorControlState(
+      {
+        accountId: "primary",
+        configured: false,
+        missingConfig: ["COLLECTOR_EDGE_URL"],
+        watchedChannels: ["abualiexpress"],
+        updatedAt: "2026-03-14T00:00:00.000Z",
+      },
+      fallback,
+    ),
+    false,
+  );
 });
 
 test("normalizeCollectorControlUpdate allows explicit null to clear nullable fields", () => {

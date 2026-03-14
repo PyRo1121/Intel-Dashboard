@@ -60,8 +60,10 @@ export function normalizeTelegramSourcePerformanceRows(rows: unknown): TelegramS
   for (const row of rows) {
     if (!row || typeof row !== "object" || Array.isArray(row)) continue;
     const record = row as Record<string, unknown>;
+    const channel = typeof record.channel === "string" ? record.channel.trim() : "";
+    if (!channel) continue;
     normalized.push({
-      channel: typeof record.channel === "string" ? record.channel : "",
+      channel,
       total_events: normalizeFiniteNumber(record.total_events, 0),
       lead_reports: normalizeFiniteNumber(record.lead_reports, 0),
       follow_on_reports: normalizeFiniteNumber(record.follow_on_reports, 0),

@@ -123,6 +123,14 @@ test("applyTelegramSourcePerformanceContribution preserves a neutral seed state"
   assert.equal(next.lastSeenAtMs, Date.UTC(2026, 2, 9, 12, 0, 0));
 });
 
+test("normalizeTelegramSourcePerformanceRows returns empty array for non-array input", () => {
+  assert.deepEqual(normalizeTelegramSourcePerformanceRows(undefined), []);
+  assert.deepEqual(normalizeTelegramSourcePerformanceRows(null), []);
+  assert.deepEqual(normalizeTelegramSourcePerformanceRows({}), []);
+  assert.deepEqual(normalizeTelegramSourcePerformanceRows(42), []);
+  assert.deepEqual(normalizeTelegramSourcePerformanceRows("not-an-array"), []);
+});
+
 test("normalizeTelegramSourcePerformanceRows filters malformed entries and normalizes row fields", () => {
   const rows = normalizeTelegramSourcePerformanceRows([
     null,
@@ -164,18 +172,6 @@ test("normalizeTelegramSourcePerformanceRows filters malformed entries and norma
       last_lead_at: 100,
       last_seen_at: 200,
       updated_at: 300,
-    },
-    {
-      channel: "",
-      total_events: 0,
-      lead_reports: 0,
-      follow_on_reports: 1,
-      corroborated_reports: 0,
-      single_source_reports: 2,
-      score: 0,
-      last_lead_at: null,
-      last_seen_at: 400,
-      updated_at: null,
     },
   ]);
 });

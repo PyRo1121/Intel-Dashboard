@@ -25,7 +25,12 @@ import {
   isVerifiedEntry,
   messageText,
 } from "~/lib/telegram-entry";
-import { applyTelegramPremiumFeed, isFirstReportTelegramEntry, isHighSignalTelegramEntry } from "~/lib/telegram-premium-feed";
+import {
+  applyTelegramPremiumFeed,
+  isFirstReportTelegramEntry,
+  isHighSignalTelegramEntry,
+  resolveTelegramPremiumDefaultState,
+} from "~/lib/telegram-premium-feed";
 import { useLiveRefresh, useWallClock } from "~/lib/live-refresh";
 import { getLatestTelegramMessageTimestamp, sortTelegramChannelsByMessageTime } from "~/lib/telegram-feed";
 import {
@@ -233,7 +238,7 @@ export default function TelegramPage() {
     }
   });
 
-  useLiveRefresh(refreshTelegram, 60_000, { runImmediately: false, jitterRatio: 0.15 });
+  useLiveRefresh(refreshTelegram, 15_000, { runImmediately: false, jitterRatio: 0.15 });
 
   const telegramData = createMemo(() => resolveTelegramFeedData(data()));
   const categories = () => telegramData().categories;
@@ -269,13 +274,14 @@ export default function TelegramPage() {
   const premiumNoiseEnabled = createMemo(() => signalSubscriber() && mergeDuplicates() && hidePremiumNoise());
 
   createEffect(() => {
+    const defaults = resolveTelegramPremiumDefaultState(signalSubscriber());
     if (!signalSubscriber()) {
-      if (!signalFirstTouched) setSignalFirst(false);
-      if (!hidePremiumNoiseTouched) setHidePremiumNoise(false);
+      if (!signalFirstTouched) setSignalFirst(defaults.signalFirst);
+      if (!hidePremiumNoiseTouched) setHidePremiumNoise(defaults.hideNoise);
       return;
     }
-    if (!signalFirstTouched) setSignalFirst(true);
-    if (!hidePremiumNoiseTouched) setHidePremiumNoise(true);
+    if (!signalFirstTouched) setSignalFirst(defaults.signalFirst);
+    if (!hidePremiumNoiseTouched) setHidePremiumNoise(defaults.hideNoise);
   });
 
   const rawEntries = createMemo<TelegramEntry[]>((prev) => {
@@ -641,7 +647,7 @@ export default function TelegramPage() {
               <Clock size={12} /> Updated {timestamp()}
               <span class="text-zinc-600">•</span>
               <span class={streamConnected() ? "text-emerald-300" : "text-zinc-500"}>
-                {streamConnected() ? "Live stream" : "Polling fallback"}
+                {streamConnected() ? "Live stream" : "Polling fallback (~15s)"}
               </span>
               <span class="text-zinc-600">•</span>
               <span class="text-zinc-400">

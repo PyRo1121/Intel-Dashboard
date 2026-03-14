@@ -34,6 +34,10 @@ function verificationWeight(value: TelegramVerificationTier): number {
 }
 
 export function compareTelegramPremiumEntries<TEntry extends TelegramPremiumEntryLike>(left: TEntry, right: TEntry): number {
+  const leftFreshness = freshnessWeight(left.dedupe?.freshnessTier);
+  const rightFreshness = freshnessWeight(right.dedupe?.freshnessTier);
+  if (rightFreshness !== leftFreshness) return rightFreshness - leftFreshness;
+
   const leftSignal = left.dedupe?.signalScore ?? 0;
   const rightSignal = right.dedupe?.signalScore ?? 0;
   if (rightSignal !== leftSignal) return rightSignal - leftSignal;

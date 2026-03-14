@@ -1,3 +1,7 @@
+import {
+  normalizeAuthenticatedAuthSessionPayload,
+  type AuthSessionAuthenticatedPayload,
+} from "@intel-dashboard/shared/auth-session.ts";
 import type { AuthUser } from "./auth.tsx";
 
 export const AUTH_SESSION_TIMEOUT_MS = 10_000;
@@ -7,45 +11,19 @@ export type AuthSessionState =
   | { status: "unauthenticated" }
   | { status: "unavailable"; reason: string };
 
-type AuthMePayload = {
-  authenticated?: unknown;
-  user?: unknown;
-  entitlement?: unknown;
-};
-
 type FetchLike = typeof fetch;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 export function normalizeAuthSessionPayload(payload: unknown): AuthUser | null {
-  if (!isRecord(payload)) return null;
-  const data = payload as AuthMePayload;
-  if (data.authenticated !== true || !isRecord(data.user)) return null;
-
-  const user = data.user;
-  const login = typeof user.login === "string" ? user.login.trim() : "";
-  const name = typeof user.name === "string" ? user.name.trim() : "";
-  const avatarUrl = typeof user.avatar_url === "string" ? user.avatar_url : "";
-  const id = user.id;
-
-  if (!login || !name || (typeof id !== "string" && typeof id !== "number")) {
-    return null;
-  }
-
-  const provider = typeof user.provider === "string" ? user.provider : null;
-  const entitlement = isRecord(data.entitlement)
-    ? (data.entitlement as AuthUser["entitlement"])
-    : undefined;
-
+  const normalized = normalizeAuthenticatedAuthSessionPayload(payload);
+  if (!normalized) return null;
+  const data: AuthSessionAuthenticatedPayload = normalized;
   return {
-    login,
-    name,
-    avatar_url: avatarUrl,
-    id,
-    provider,
-    entitlement,
+    login: data.user.login,
+    name: data.user.name,
+    avatar_url: data.user.avatar_url,
+    id: data.user.id,
+    provider: data.user.provider,
+    entitlement: data.entitlement as AuthUser["entitlement"] | undefined,
   };
 }
 

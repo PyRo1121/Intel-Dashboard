@@ -1,60 +1,26 @@
-import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  buildSubscriberAlertsResponse,
-  getSubscriberAlertsMaterializationFailureMessage,
-} from "../src/subscriber-alerts-response.ts";
+import assert from "node:assert/strict";
+import { buildSubscriberAlertsResponse } from "../src/subscriber-alerts-response.ts";
 
-test("buildSubscriberAlertsResponse preserves a healthy alert payload", () => {
-  const response = buildSubscriberAlertsResponse({
+test("buildSubscriberAlertsResponse preserves a healthy alerts payload", () => {
+  const payload = buildSubscriberAlertsResponse({
     unreadCount: 2,
     items: [],
   });
-
-  assert.deepEqual(response, {
+  assert.deepEqual(payload, {
     unreadCount: 2,
     items: [],
   });
 });
 
 test("buildSubscriberAlertsResponse marks the payload degraded when materialization fails", () => {
-  const response = buildSubscriberAlertsResponse(
+  const payload = buildSubscriberAlertsResponse(
     {
       unreadCount: 2,
       items: [],
     },
-    new Error("db unavailable"),
+    new Error("collector unavailable"),
   );
-
-  assert.deepEqual(response, {
-    unreadCount: 2,
-    items: [],
-    degraded: {
-      materializationFailed: true,
-      message: getSubscriberAlertsMaterializationFailureMessage(),
-    },
-  });
-});
-
-test("buildSubscriberAlertsResponse preserves existing degraded metadata", () => {
-  const response = buildSubscriberAlertsResponse(
-    {
-      unreadCount: 1,
-      items: [],
-      degraded: {
-        materializationFailed: false,
-        message: "Older degraded state",
-      },
-    },
-    new Error("db unavailable"),
-  );
-
-  assert.deepEqual(response, {
-    unreadCount: 1,
-    items: [],
-    degraded: {
-      materializationFailed: true,
-      message: getSubscriberAlertsMaterializationFailureMessage(),
-    },
-  });
+  assert.equal(payload.degraded?.materializationFailed, true);
+  assert.equal(payload.degraded?.message, "collector unavailable");
 });

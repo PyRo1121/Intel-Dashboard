@@ -19,7 +19,7 @@ test("my alerts client normalizes success and failure payloads", async () => {
           items: [],
           degraded: {
             materializationFailed: true,
-            message: "Alert refresh failed. Showing the latest available inbox snapshot.",
+            message: "collector unavailable",
           },
         }), {
           status: 200,
@@ -51,16 +51,10 @@ test("my alerts client normalizes success and failure payloads", async () => {
     }) as typeof fetch;
 
     const alerts = await fetchSubscriberAlerts("unread");
-    assert.equal(alerts.ok, true);
-    if (alerts.ok) {
-      assert.equal(alerts.data.unreadCount, 2);
-      assert.equal(alerts.data.degraded?.materializationFailed, true);
-    }
-    const preferences = await fetchSubscriberAlertPreferences();
-    assert.equal(preferences.ok, true);
-    if (preferences.ok) {
-      assert.equal(preferences.data.minimumTelegramHighSignalGrade, "B");
-    }
+    assert.equal(alerts?.unreadCount, 2);
+    assert.equal(alerts?.degraded?.materializationFailed, true);
+    assert.equal(alerts?.degraded?.message, "collector unavailable");
+    assert.equal((await fetchSubscriberAlertPreferences())?.minimumTelegramHighSignalGrade, "B");
     assert.equal(
       (await saveSubscriberAlertPreferences({
         firstReportRegionEnabled: true,
@@ -68,24 +62,11 @@ test("my alerts client normalizes success and failure payloads", async () => {
         firstReportChannelEnabled: true,
         highSignalSourceEnabled: true,
         minimumTelegramHighSignalGrade: "A",
-      })).ok,
-      true,
-    );
-    const saved = await saveSubscriberAlertPreferences({
-      firstReportRegionEnabled: true,
-      highSignalRegionEnabled: false,
-      firstReportChannelEnabled: true,
-      highSignalSourceEnabled: true,
-      minimumTelegramHighSignalGrade: "A",
-    });
-    assert.equal(saved.ok, true);
-    if (saved.ok) {
-      assert.equal(saved.data.minimumTelegramHighSignalGrade,
+      }))?.minimumTelegramHighSignalGrade,
       "B",
-      );
-    }
-    assert.equal((await markSubscriberAlertsRead(["a1"])).ok, true);
-    assert.equal((await markAllSubscriberAlertsRead()).ok, true);
+    );
+    assert.equal(await markSubscriberAlertsRead(["a1"]), true);
+    assert.equal(await markAllSubscriberAlertsRead(), true);
 
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ error: "forbidden" }), {
@@ -93,20 +74,20 @@ test("my alerts client normalizes success and failure payloads", async () => {
         headers: { "Content-Type": "application/json" },
       })) as typeof fetch;
 
-    const failedAlerts = await fetchSubscriberAlerts("all");
-    assert.deepEqual(failedAlerts, { ok: false, error: "forbidden", status: 403 });
-    const failedPreferences = await fetchSubscriberAlertPreferences();
-    assert.deepEqual(failedPreferences, { ok: false, error: "forbidden", status: 403 });
-    const failedSave = await saveSubscriberAlertPreferences({
-      firstReportRegionEnabled: true,
-      highSignalRegionEnabled: true,
-      firstReportChannelEnabled: true,
-      highSignalSourceEnabled: true,
-      minimumTelegramHighSignalGrade: "B",
-    });
-    assert.deepEqual(failedSave, { ok: false, error: "forbidden", status: 403 });
-    assert.deepEqual(await markSubscriberAlertsRead(["a1"]), { ok: false, error: "forbidden", status: 403 });
-    assert.deepEqual(await markAllSubscriberAlertsRead(), { ok: false, error: "forbidden", status: 403 });
+    assert.equal(await fetchSubscriberAlerts("all"), null);
+    assert.equal(await fetchSubscriberAlertPreferences(), null);
+    assert.equal(
+      await saveSubscriberAlertPreferences({
+        firstReportRegionEnabled: true,
+        highSignalRegionEnabled: true,
+        firstReportChannelEnabled: true,
+        highSignalSourceEnabled: true,
+        minimumTelegramHighSignalGrade: "B",
+      }),
+      null,
+    );
+    assert.equal(await markSubscriberAlertsRead(["a1"]), false);
+    assert.equal(await markAllSubscriberAlertsRead(), false);
   } finally {
     globalThis.fetch = originalFetch;
   }

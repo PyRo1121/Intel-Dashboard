@@ -255,13 +255,9 @@ export async function verifySignedAdminRequest(params: {
   return { ok: true, nonce, timestampMs };
 }
 
-type AdminNonceGuardStubLike = {
-  fetch(request: Request): Promise<Response>;
-};
-
-type AdminNonceGuardNamespaceLike = {
+type NonceGuardNamespace = {
   idFromName(name: string): unknown;
-  get(id: unknown): AdminNonceGuardStubLike;
+  get(id: unknown): { fetch(request: Request): Promise<Response> };
 };
 
 export async function verifySignedAdminRequestWithNonceGuard(params: {
@@ -269,9 +265,8 @@ export async function verifySignedAdminRequestWithNonceGuard(params: {
   path: string;
   headers: Headers;
   configuredSecret?: string | null;
-  nonceGuardNamespace: AdminNonceGuardNamespaceLike;
+  nonceGuardNamespace: NonceGuardNamespace;
   clientIp?: string | null;
-  scope?: string;
   nowMs?: number;
   maxSkewMs?: number;
 }): Promise<
@@ -287,7 +282,11 @@ export async function verifySignedAdminRequestWithNonceGuard(params: {
     maxSkewMs: params.maxSkewMs,
   });
   if (!signed.ok) {
-    return { ok: false, reason: signed.reason, status: 403 };
+    return {
+      ok: false,
+      reason: signed.reason,
+      status: 403,
+    };
   }
 
   const guardId = params.nonceGuardNamespace.idFromName("main");
@@ -298,7 +297,7 @@ export async function verifySignedAdminRequestWithNonceGuard(params: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      scope: params.scope ?? params.path,
+      scope: params.path,
       nonce: signed.nonce,
       timestampMs: signed.timestampMs,
       clientIp: params.clientIp?.trim() || "unknown",
@@ -307,7 +306,7 @@ export async function verifySignedAdminRequestWithNonceGuard(params: {
   if (!guardRes.ok) {
     return {
       ok: false,
-      reason: guardRes.status === 409 ? "nonce_reused" : "nonce_guard_failed",
+      reason: guardRes.status === 409 ? "nonce_reused" : "nonce_guard_rejected",
       status: guardRes.status,
     };
   }

@@ -1,26 +1,17 @@
-import type { SubscriberAlertsResponse } from "@intel-dashboard/shared/subscriber-alerts.ts";
-
-const ALERT_MATERIALIZATION_FAILURE_MESSAGE =
-  "Alert refresh failed. Showing the latest available inbox snapshot.";
+import type { SubscriberAlertItem, SubscriberAlertsResponse } from "@intel-dashboard/shared/subscriber-alerts.ts";
 
 export function buildSubscriberAlertsResponse(
-  response: SubscriberAlertsResponse,
+  value: { unreadCount: number; items: SubscriberAlertItem[] },
   materializationError?: unknown,
 ): SubscriberAlertsResponse {
   if (!materializationError) {
-    return response;
+    return value;
   }
-
   return {
-    ...response,
+    ...value,
     degraded: {
-      ...(response.degraded ?? {}),
       materializationFailed: true,
-      message: ALERT_MATERIALIZATION_FAILURE_MESSAGE,
+      message: materializationError instanceof Error ? materializationError.message : "subscriber_alert_materialization_failed",
     },
   };
-}
-
-export function getSubscriberAlertsMaterializationFailureMessage(): string {
-  return ALERT_MATERIALIZATION_FAILURE_MESSAGE;
 }

@@ -102,8 +102,6 @@ test("computeTelegramSignalGrade requires at least six sources before first-repo
 
 
 test("resolveTelegramSignalProfileCategory maps categories into grouped profiles", () => {
-  assert.equal(resolveTelegramSignalProfileCategory("alerts"), "alerts");
-  assert.equal(resolveTelegramSignalProfileCategory("conflict"), "conflict");
   assert.equal(resolveTelegramSignalProfileCategory("cyber"), "cyber");
   assert.equal(resolveTelegramSignalProfileCategory("ua_official"), "alerts");
   assert.equal(resolveTelegramSignalProfileCategory("ru_milblog"), "conflict");

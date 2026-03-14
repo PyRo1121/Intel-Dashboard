@@ -1,34 +1,30 @@
-import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export function collectLockfiles() {
-  const output = execFileSync(
-    "find",
-    [
-      ".",
-      "-path",
-      "./node_modules",
-      "-prune",
-      "-o",
-      "(",
-      "-name",
-      "package-lock.json",
-      "-o",
-      "-name",
-      "pnpm-lock.yaml",
-      "-o",
-      "-name",
-      "yarn.lock",
-      ")",
-      "-print",
-    ],
-    { encoding: "utf8" },
-  );
+const LEGACY_LOCKFILES = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock"]);
 
-  return output
-    .split("\n")
+export function collectLockfiles(rootDir = ".") {
+  const results = [];
+  const stack = [rootDir];
+
+  while (stack.length > 0) {
+    const currentDir = stack.pop();
+    if (!currentDir) continue;
+    for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      const fullPath = join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (LEGACY_LOCKFILES.has(entry.name)) {
+        results.push(fullPath);
+      }
+    }
+  }
+
+  return results
     .map((line) => line.trim())
     .filter(Boolean)
     .sort();

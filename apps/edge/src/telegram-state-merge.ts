@@ -1,6 +1,4 @@
-type UsernameState = {
-  username: string;
-};
+type UsernameState = { username: string };
 
 function normalizeUsername(value: string): string {
   return value.trim().toLowerCase();

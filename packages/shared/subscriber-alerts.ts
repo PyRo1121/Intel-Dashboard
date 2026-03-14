@@ -35,11 +35,26 @@ export type SubscriberAlertItem = {
   matchedPreference: string;
 };
 
+export type SubscriberAlertsDegradedState = {
+  materializationFailed: boolean;
+  message: string;
+};
+
 export type SubscriberAlertsResponse = {
   unreadCount: number;
   items: SubscriberAlertItem[];
-  degraded?: {
-    materializationFailed: boolean;
-    message: string;
-  };
+  degraded?: SubscriberAlertsDegradedState;
+};
+
+export type SubscriberAlertsQuery = {
+  state: SubscriberAlertState;
+  limit?: number;
+};
+
+export type SubscriberAlertsReadRequest = {
+  alertIds: string[];
+};
+
+export type SubscriberAlertsMutationResponse = {
+  ok: true;
 };

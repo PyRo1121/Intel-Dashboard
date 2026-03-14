@@ -50,6 +50,25 @@ function sameWatchedSet(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function normalizeMissingConfig(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const entries: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const normalized = item.trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    entries.push(normalized);
+  }
+  entries.sort();
+  return entries;
+}
+
+function sameMissingConfig(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 export function buildDefaultCollectorControlState(args: {
   configured: boolean;
   missingConfig: string[];
@@ -124,7 +143,9 @@ export function normalizeCollectorControlUpdate(value: unknown, fallback: Collec
   return {
     accountId: accountIdOr(fallback.accountId),
     configured: boolOr("configured", fallback.configured),
-    missingConfig: stringListOr("missingConfig", fallback.missingConfig),
+    missingConfig: Array.isArray(record.missingConfig)
+      ? normalizeMissingConfig(record.missingConfig)
+      : normalizeMissingConfig(fallback.missingConfig),
     connected: boolOr("connected", fallback.connected),
     connecting: boolOr("connecting", fallback.connecting),
     watchedChannels: normalizedChannelsOr("watchedChannels", fallback.watchedChannels),
@@ -173,5 +194,7 @@ export function isStoredCollectorControlState(value: unknown, fallback: Collecto
   }
   const normalized = normalizeCollectorControlUpdate(value, fallback);
   return normalized.accountId === fallback.accountId &&
+    normalized.configured === fallback.configured &&
+    sameMissingConfig(normalized.missingConfig, normalizeMissingConfig(fallback.missingConfig)) &&
     sameWatchedSet(normalized.watchedChannels, fallback.watchedChannels);
 }

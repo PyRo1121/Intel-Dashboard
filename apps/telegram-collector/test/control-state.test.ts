@@ -70,6 +70,43 @@ test("isStoredCollectorControlState requires a valid updatedAt timestamp", () =>
   );
 });
 
+test("isStoredCollectorControlState rejects stored state when current config shape changes", () => {
+  const fallback = buildDefaultCollectorControlState({
+    configured: false,
+    missingConfig: ["COLLECTOR_EDGE_URL", "COLLECTOR_SHARED_SECRET"],
+    watchedChannels: ["abualiexpress"],
+    accountId: "primary",
+  });
+
+  assert.equal(
+    isStoredCollectorControlState(
+      {
+        accountId: "primary",
+        configured: true,
+        missingConfig: [],
+        watchedChannels: ["abualiexpress"],
+        updatedAt: "2026-03-14T00:00:00.000Z",
+      },
+      fallback,
+    ),
+    false,
+  );
+
+  assert.equal(
+    isStoredCollectorControlState(
+      {
+        accountId: "primary",
+        configured: false,
+        missingConfig: ["COLLECTOR_SHARED_SECRET", "COLLECTOR_EDGE_URL"],
+        watchedChannels: ["abualiexpress"],
+        updatedAt: "2026-03-14T00:00:00.000Z",
+      },
+      fallback,
+    ),
+    true,
+  );
+});
+
 test("normalizeCollectorControlUpdate allows explicit null to clear nullable fields", () => {
   const fallback = buildDefaultCollectorControlState({
     configured: true,

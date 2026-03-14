@@ -84,10 +84,17 @@ jobs:
 
       - name: Deploy backend
         if: steps.freshness.outputs.proceed == 'true'
-        run: bun run deploy:backend
+        id: backend_deploy_started
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "epoch=$(date -u +%s)" >> "$GITHUB_OUTPUT"
+          bun run deploy:backend
 
-      - name: Backend smoke
+      - name: Backend deployment verification
         if: steps.freshness.outputs.proceed == 'true'
+        env:
+          BACKEND_DEPLOY_STARTED_AT: ${{ steps.backend_deploy_started.outputs.epoch }}
         run: node scripts/production-smoke-backend.mjs
 
       - name: Deploy edge

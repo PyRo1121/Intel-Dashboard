@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const baseUrl = (process.env.BACKEND_SMOKE_BASE_URL || "https://backend-e2e.pyro1121.com").trim().replace(/\/+$/, "");
+import { execFileSync } from "node:child_process";
 
 function assert(condition, message) {
   if (!condition) {
@@ -8,20 +8,54 @@ function assert(condition, message) {
   }
 }
 
-const response = await fetch(`${baseUrl}/health`, {
-  redirect: "manual",
-  signal: AbortSignal.timeout(20_000),
-});
-const body = await response.text();
-
-assert(
-  response.status === 403 || response.status === 200,
-  `backend health expected 200 or 403, got ${response.status}: ${body.slice(0, 200)}`,
-);
-
-if (response.status === 403) {
-  const accessDomain = response.headers.get("cf-access-domain") || "";
-  assert(accessDomain.length > 0, `backend 403 should come from Cloudflare Access: ${body.slice(0, 200)}`);
+function run(command, args, options = {}) {
+  try {
+    return execFileSync(command, args, {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+      ...options,
+    });
+  } catch (error) {
+    const stdout = typeof error?.stdout === "string" ? error.stdout : "";
+    const stderr = typeof error?.stderr === "string" ? error.stderr : "";
+    const detail = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+    throw new Error(
+      `Failed to run ${command} ${args.join(" ")}${detail ? `:\n${detail}` : ""}`,
+    );
+  }
 }
 
-console.log(`Backend smoke passed with HTTP ${response.status}`);
+const configPath = (process.env.BACKEND_WRANGLER_CONFIG || "apps/backend/wrangler.jsonc").trim();
+const deployStartedAt = Number.parseInt(process.env.BACKEND_DEPLOY_STARTED_AT || "", 10);
+const maxClockSkewSeconds = Number.parseInt(process.env.BACKEND_DEPLOY_MAX_CLOCK_SKEW_SECONDS || "120", 10);
+
+assert(Number.isFinite(deployStartedAt) && deployStartedAt > 0, "BACKEND_DEPLOY_STARTED_AT must be set");
+assert(Number.isFinite(maxClockSkewSeconds) && maxClockSkewSeconds >= 0, "BACKEND_DEPLOY_MAX_CLOCK_SKEW_SECONDS must be a non-negative integer");
+
+const raw = run("npx", ["wrangler", "deployments", "list", "--config", configPath, "--json"], {
+  env: process.env,
+});
+const parsed = JSON.parse(raw);
+const deployments = Array.isArray(parsed)
+  ? parsed
+  : Array.isArray(parsed?.deployments)
+    ? parsed.deployments
+    : null;
+
+assert(deployments && deployments.length > 0, `wrangler deployments list returned unexpected payload: ${raw.slice(0, 500)}`);
+
+const latest = [...deployments]
+  .filter((deployment) => typeof deployment?.created_on === "string")
+  .sort((left, right) => Date.parse(right.created_on) - Date.parse(left.created_on))[0];
+
+assert(latest, "wrangler deployments list did not contain a deployment with created_on");
+const createdAtMs = Date.parse(latest?.created_on || "");
+assert(Number.isFinite(createdAtMs), `latest deployment has invalid created_on: ${JSON.stringify(latest)}`);
+
+const latestEpochSeconds = Math.floor(createdAtMs / 1000);
+assert(
+  latestEpochSeconds + maxClockSkewSeconds >= deployStartedAt,
+  `latest backend deployment (${latest?.created_on}) predates this deploy attempt (${deployStartedAt}) beyond ${maxClockSkewSeconds}s skew tolerance`,
+);
+
+console.log(`Backend deployment verification passed: ${latest?.id} @ ${latest?.created_on}`);

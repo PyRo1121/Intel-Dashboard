@@ -20,3 +20,20 @@ test("normalizeDebugCollectorBatch wraps a messages-only payload", () => {
   assert.equal(batch?.accountId, "collector");
   assert.equal(batch?.messages.length, 1);
 });
+
+test("normalizeDebugCollectorBatch keeps the trusted account id when the payload tries to override it", () => {
+  const batch = normalizeDebugCollectorBatch({
+    accountId: "untrusted",
+    messages: [
+      {
+        channel: "osirskiy",
+        category: "conflict",
+        messageId: "1",
+        datetime: "2026-03-10T18:45:00.000Z",
+        link: "https://t.me/osirskiy/1",
+      },
+    ],
+  }, "collector");
+
+  assert.equal(batch?.accountId, "collector");
+});

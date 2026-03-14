@@ -2880,7 +2880,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
         desiredAuthority: "mtproto",
         effectiveAuthority: "mtproto",
         joinStatus: "joined",
-        lastCollectorMessageAt: item.datetime || batch.collectedAt || batch.collectedAt || new Date().toISOString(),
+        lastCollectorMessageAt: item.datetime || batch.collectedAt || new Date().toISOString(),
       });
       accepted += 1;
       messageRecords.push({

@@ -21,7 +21,7 @@ export function normalizeDebugCollectorBatch(payload: Record<string, unknown>, a
   if (messages.length === 0) return null;
   return {
     source: "mtproto",
-    accountId: trim(payload.accountId) || accountId,
+    accountId: accountId || trim(payload.accountId),
     collectedAt: trim(payload.collectedAt) || new Date().toISOString(),
     messages,
   };

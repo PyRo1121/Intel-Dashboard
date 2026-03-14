@@ -22,14 +22,14 @@ export function resolveTelegramScrapePlan(args: {
   const hotLimit = Math.max(0, Math.min(args.hotChannelsPerCycle, prioritized.length));
   const hotChannels = prioritized.slice(0, hotLimit);
   const hotSet = new Set(hotChannels.map((channel) => channel.username));
-  const rotatingPool = args.channels.filter((channel) => !hotSet.has(channel.username));
+  const rotatingPool = prioritized.filter((channel) => !hotSet.has(channel.username));
   const intervalMs = Math.max(1, args.intervalMs);
   const rotationWindowMs = Math.max(1, args.rotationWindowSeconds) * 1000;
   const slots = Math.max(1, Math.ceil(rotationWindowMs / intervalMs));
 
   if (slots <= 1 || rotatingPool.length <= 1) {
     return {
-      channels: hotChannels.length > 0 ? [...hotChannels, ...rotatingPool] : args.channels,
+      channels: hotChannels.length > 0 ? [...hotChannels, ...rotatingPool] : prioritized,
       slot: 0,
       slots: 1,
     };

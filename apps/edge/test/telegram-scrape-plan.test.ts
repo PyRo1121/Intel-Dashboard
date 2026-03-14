@@ -66,3 +66,25 @@ test('resolveTelegramScrapePlan excludes MTProto-authoritative channels from the
     assert.equal(hotSlice.includes(username), false);
   }
 });
+
+test('resolveTelegramScrapePlan keeps MTProto-authoritative channels out of the rotating pool', () => {
+  const channels = CHANNELS.slice(0, 12);
+  const forcedMtproto = channels
+    .sort((a, b) => b.subscriberValueScore - a.subscriberValueScore)
+    .slice(0, 3)
+    .map((channel) => channel.username);
+
+  const plan = resolveTelegramScrapePlan({
+    channels,
+    nowMs: 0,
+    intervalMs: 10_000,
+    rotationWindowSeconds: 30,
+    hotChannelsPerCycle: 4,
+    mtprotoChannels: forcedMtproto,
+  });
+
+  const selected = plan.channels.map((channel) => channel.username);
+  for (const username of forcedMtproto) {
+    assert.equal(selected.includes(username), false);
+  }
+});

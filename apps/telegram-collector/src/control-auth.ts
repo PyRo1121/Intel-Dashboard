@@ -77,18 +77,35 @@ export async function enforceControlNonceGuard(params: {
     return { ok: false, status: 409, reason: "timestamp_out_of_window" };
   }
 
-  const nonceKey = `admin:nonce:${params.scope}:${params.nonce}`;
-  const replaySeen = await params.storage.get<number>(nonceKey);
-  if (typeof replaySeen === "number") {
-    if (now - replaySeen <= params.nonceTtlMs) {
-      return { ok: false, status: 409, reason: "replay_detected" };
+  const nonceKey = `admin:nonce-log:${params.scope}`;
+  const nonceLogRaw = await params.storage.get<Record<string, unknown>>(nonceKey);
+  const nonceLog = nonceLogRaw && typeof nonceLogRaw === "object" && !Array.isArray(nonceLogRaw)
+    ? nonceLogRaw
+    : {};
+  const nextNonceLog: Record<string, number> = {};
+  for (const [nonce, seenAt] of Object.entries(nonceLog)) {
+    if (typeof seenAt !== "number" || !Number.isFinite(seenAt)) continue;
+    if (now - seenAt <= params.nonceTtlMs) {
+      nextNonceLog[nonce] = seenAt;
     }
-    await params.storage.delete(nonceKey);
+  }
+  if (typeof nextNonceLog[params.nonce] === "number") {
+    return { ok: false, status: 409, reason: "replay_detected" };
   }
 
   const window = Math.floor(now / params.rateWindowMs);
-  const rateKey = `admin:rl:${params.scope}:${params.clientIp}:${window}`;
-  const hits = (await params.storage.get<number>(rateKey)) ?? 0;
+  const rateKey = `admin:rl:${params.scope}:${params.clientIp}`;
+  const rateLogRaw = await params.storage.get<Record<string, unknown>>(rateKey);
+  const rateLog = rateLogRaw && typeof rateLogRaw === "object" && !Array.isArray(rateLogRaw)
+    ? rateLogRaw
+    : {};
+  const nextRateLog: Record<string, number> = {};
+  for (const [windowKey, hitsValue] of Object.entries(rateLog)) {
+    if (windowKey !== String(window)) continue;
+    if (typeof hitsValue !== "number" || !Number.isFinite(hitsValue)) continue;
+    nextRateLog[windowKey] = hitsValue;
+  }
+  const hits = nextRateLog[String(window)] ?? 0;
   if (hits >= params.rateLimitPerWindow) {
     return {
       ok: false,
@@ -98,7 +115,9 @@ export async function enforceControlNonceGuard(params: {
     };
   }
 
-  await params.storage.put(rateKey, hits + 1);
-  await params.storage.put(nonceKey, now);
+  nextRateLog[String(window)] = hits + 1;
+  nextNonceLog[params.nonce] = now;
+  await params.storage.put(rateKey, nextRateLog);
+  await params.storage.put(nonceKey, nextNonceLog);
   return { ok: true };
 }

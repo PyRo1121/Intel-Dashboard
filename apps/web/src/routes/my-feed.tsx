@@ -9,6 +9,11 @@ import { useWallClock } from "~/lib/live-refresh";
 import type { SubscriberFeedPreferences, SubscriberFeedScope } from "@intel-dashboard/shared/subscriber-feed.ts";
 import { MY_FEED_DESCRIPTION, MY_FEED_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 import { siteUrl } from "@intel-dashboard/shared/site-config.ts";
+import {
+  formatSubscriberPreferenceInput,
+  normalizeSubscriberFeedPreferences,
+  parseSubscriberPreferenceInput,
+} from "~/lib/subscriber-feed-preferences";
 
 const SCOPES: SubscriberFeedScope[] = ["all", "favorites", "watched", "telegram", "osint"];
 
@@ -40,11 +45,12 @@ export default function MyFeedPage() {
 
   const applyPreferencesToForm = (prefs: SubscriberFeedPreferences | null | undefined) => {
     if (!prefs) return;
-    setFavoriteChannelsInput(prefs.favoriteChannels.join(", "));
-    setFavoriteSourcesInput(prefs.favoriteSources.join(", "));
-    setWatchRegionsInput(prefs.watchRegions.join(", "));
-    setWatchTagsInput(prefs.watchTags.join(", "));
-    setWatchCategoriesInput(prefs.watchCategories.join(", "));
+    const normalized = normalizeSubscriberFeedPreferences(prefs);
+    setFavoriteChannelsInput(formatSubscriberPreferenceInput(normalized.favoriteChannels));
+    setFavoriteSourcesInput(formatSubscriberPreferenceInput(normalized.favoriteSources));
+    setWatchRegionsInput(formatSubscriberPreferenceInput(normalized.watchRegions));
+    setWatchTagsInput(formatSubscriberPreferenceInput(normalized.watchTags));
+    setWatchCategoriesInput(formatSubscriberPreferenceInput(normalized.watchCategories));
   };
 
   createEffect(() => {
@@ -54,13 +60,13 @@ export default function MyFeedPage() {
   const persistPreferences = async () => {
     setSaving(true);
     setSaved("");
-    const payload: SubscriberFeedPreferences = {
-      favoriteChannels: favoriteChannelsInput().split(",").map((value) => value.trim()).filter(Boolean),
-      favoriteSources: favoriteSourcesInput().split(",").map((value) => value.trim()).filter(Boolean),
-      watchRegions: watchRegionsInput().split(",").map((value) => value.trim()).filter(Boolean),
-      watchTags: watchTagsInput().split(",").map((value) => value.trim()).filter(Boolean),
-      watchCategories: watchCategoriesInput().split(",").map((value) => value.trim()).filter(Boolean),
-    };
+    const payload: SubscriberFeedPreferences = normalizeSubscriberFeedPreferences({
+      favoriteChannels: parseSubscriberPreferenceInput(favoriteChannelsInput()),
+      favoriteSources: parseSubscriberPreferenceInput(favoriteSourcesInput()),
+      watchRegions: parseSubscriberPreferenceInput(watchRegionsInput()),
+      watchTags: parseSubscriberPreferenceInput(watchTagsInput()),
+      watchCategories: parseSubscriberPreferenceInput(watchCategoriesInput()),
+    });
     try {
       const savedPrefs = await saveSubscriberFeedPreferences(payload);
       if (!savedPrefs) {

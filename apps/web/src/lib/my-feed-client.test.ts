@@ -32,11 +32,11 @@ test("my feed client helpers normalize success and failure payloads", async () =
       if (url.includes("/api/subscriber/feed-preferences") && init?.method === "POST") {
         return new Response(
           JSON.stringify({
-            favoriteChannels: ["alpha"],
-            favoriteSources: [],
-            watchRegions: [],
-            watchTags: [],
-            watchCategories: [],
+            favoriteChannels: [" Alpha ", "alpha"],
+            favoriteSources: " Desk ",
+            watchRegions: [null, "Global"],
+            watchTags: [" cyber "],
+            watchCategories: [" Analysis "],
           }),
           {
             status: 200,
@@ -46,11 +46,11 @@ test("my feed client helpers normalize success and failure payloads", async () =
       }
       return new Response(
         JSON.stringify({
-          favoriteChannels: [],
-          favoriteSources: [],
-          watchRegions: [],
-          watchTags: [],
-          watchCategories: [],
+          favoriteChannels: [" alpha ", 42],
+          favoriteSources: " desk ",
+          watchRegions: " global ",
+          watchTags: [" cyber "],
+          watchCategories: [" analysis "],
         }),
         {
           status: 200,
@@ -63,7 +63,13 @@ test("my feed client helpers normalize success and failure payloads", async () =
     assert.deepEqual(feed?.items, []);
 
     const prefs = await fetchSubscriberFeedPreferences();
-    assert.deepEqual(prefs?.favoriteChannels, []);
+    assert.deepEqual(prefs, {
+      favoriteChannels: ["alpha"],
+      favoriteSources: ["desk"],
+      watchRegions: ["global"],
+      watchTags: ["cyber"],
+      watchCategories: ["analysis"],
+    });
 
     const saved = await saveSubscriberFeedPreferences({
       favoriteChannels: ["alpha"],
@@ -72,7 +78,13 @@ test("my feed client helpers normalize success and failure payloads", async () =
       watchTags: [],
       watchCategories: [],
     });
-    assert.ok(saved);
+    assert.deepEqual(saved, {
+      favoriteChannels: ["alpha"],
+      favoriteSources: ["desk"],
+      watchRegions: ["global"],
+      watchTags: ["cyber"],
+      watchCategories: ["analysis"],
+    });
 
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ error: "forbidden" }), {

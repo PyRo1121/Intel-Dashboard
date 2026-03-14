@@ -1,48 +1,43 @@
+import type {
+  CrmAiTelemetryPayload,
+  CrmApiErrorPayload,
+  CrmCustomerOpsPayload,
+  CrmOverviewPayload,
+} from "@intel-dashboard/shared/crm.ts";
 import { fetchClientJson } from "./client-json.ts";
 
 export function readCrmItems<T>(items: readonly T[] | null | undefined): T[] {
-  return items ? (items as T[]) : [];
+  return Array.isArray(items) ? [...items] : [];
 }
 
-export async function fetchCrmOverview<T extends { ok?: boolean; error?: string }>(): Promise<T> {
-  const result = await fetchClientJson<T>("/api/admin/crm/overview", {
+function toCrmErrorPayload(error: string): CrmApiErrorPayload {
+  return {
+    ok: false,
+    error,
+  };
+}
+
+export async function fetchCrmOverview(): Promise<CrmOverviewPayload> {
+  const result = await fetchClientJson<CrmOverviewPayload>("/api/admin/crm/overview", {
     method: "GET",
   });
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: result.error,
-    } as T;
-  }
-  return result.data;
+  return result.ok ? result.data : toCrmErrorPayload(result.error);
 }
 
-export async function postCrmAction<T extends { ok?: boolean; error?: string }>(
+export async function postCrmAction(
   path: string,
   payload: Record<string, unknown>,
-): Promise<T> {
-  const result = await fetchClientJson<T>(path, {
+): Promise<CrmCustomerOpsPayload> {
+  const result = await fetchClientJson<CrmCustomerOpsPayload>(path, {
     method: "POST",
     body: JSON.stringify(payload),
   });
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: result.error,
-    } as T;
-  }
-  return result.data;
+  return result.ok ? result.data : toCrmErrorPayload(result.error);
 }
 
-export async function fetchCrmAiTelemetry<T extends { ok?: boolean; error?: string }>(window: string): Promise<T> {
-  const result = await fetchClientJson<T>(`/api/admin/crm/ai-telemetry?window=${encodeURIComponent(window)}`, {
+export async function fetchCrmAiTelemetry(window: string): Promise<CrmAiTelemetryPayload> {
+  const result = await fetchClientJson<CrmAiTelemetryPayload>(`/api/admin/crm/ai-telemetry?window=${encodeURIComponent(window)}`, {
     method: "GET",
   });
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: result.error,
-    } as T;
-  }
-  return result.data;
+  return result.ok ? result.data : toCrmErrorPayload(result.error);
 }

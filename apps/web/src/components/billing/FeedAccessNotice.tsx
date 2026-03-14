@@ -4,14 +4,10 @@ import { useAuth } from "~/lib/auth";
 import { resolveAuthUserEntitlementView, resolveAuthUserFeedSurfaceLimit } from "~/lib/auth-user";
 import { formatDelayMinutesShortLabel, UPGRADE_INSTANT_FEED_LABEL } from "@intel-dashboard/shared/access-offers.ts";
 import { formatEntitlementLimit } from "@intel-dashboard/shared/entitlement.ts";
+import { resolveFeedAccessNoticeAuth } from "./feed-access-notice-auth.ts";
 
 export default function FeedAccessNotice(props: { surface: string }) {
-  let auth: ReturnType<typeof useAuth>;
-  try {
-    auth = useAuth();
-  } catch {
-    return null;
-  }
+  const auth = resolveFeedAccessNoticeAuth(useAuth);
 
   const user = () => auth.user();
   const entitlementView = () => resolveAuthUserEntitlementView(user());

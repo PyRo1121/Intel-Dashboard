@@ -4,6 +4,7 @@ import type {
   SubscriberAlertState,
   SubscriberAlertType,
 } from "@intel-dashboard/shared/subscriber-alerts.ts";
+import { matchesOsintSourcePreference } from "@intel-dashboard/shared/osint-source-profile.ts";
 import type { SubscriberFeedPreferences } from "@intel-dashboard/shared/subscriber-feed.ts";
 
 type TelegramCanonicalEventLike = {
@@ -276,7 +277,7 @@ export function matchOsintSubscriberAlerts(args: {
     }
 
     for (const favoriteSource of args.preferences.favoriteSources) {
-      if (!matchesNormalized([favoriteSource], source)) continue;
+      if (!matchesOsintSourcePreference([favoriteSource], { name: source })) continue;
       if (args.alertPreferences.highSignalSourceEnabled) {
         alerts.push(createAlert({
           userId: args.userId,

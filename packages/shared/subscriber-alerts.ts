@@ -38,4 +38,8 @@ export type SubscriberAlertItem = {
 export type SubscriberAlertsResponse = {
   unreadCount: number;
   items: SubscriberAlertItem[];
+  degraded?: {
+    materializationFailed: boolean;
+    message: string;
+  };
 };

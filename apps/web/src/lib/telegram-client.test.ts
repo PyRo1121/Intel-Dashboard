@@ -52,7 +52,10 @@ test("telegram client respects caller signal without disabling default requests"
     await fetchTelegramDedupeFeedbackStatus(controller.signal);
 
     assert.ok(signals[0] instanceof AbortSignal);
-    assert.equal(signals[1], controller.signal);
+    assert.ok(signals[1] instanceof AbortSignal);
+    assert.notEqual(signals[1], controller.signal);
+    controller.abort();
+    assert.equal((signals[1] as AbortSignal).aborted, true);
   } finally {
     globalThis.fetch = originalFetch;
   }

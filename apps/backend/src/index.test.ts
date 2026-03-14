@@ -1,10 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "./index.js";
-import { OSINT_SOURCE_CATALOG } from "./osint-sources.js";
+import { DISABLED_OSINT_SOURCE_IDS, OSINT_SOURCE_CATALOG } from "./osint-sources.js";
 import { FREE_FEED_DELAY_MINUTES } from "@intel-dashboard/shared/access-offers.ts";
 import { BACKEND_LANDING_HERO, BACKEND_OPERATOR_CARDS, BACKEND_OPERATOR_PANEL, BACKEND_OPERATOR_PRICING } from "@intel-dashboard/shared/landing-content.ts";
 
 describe("intel-dashboard backend worker", () => {
+  it("excludes disabled OSINT sources from the active catalog", () => {
+    const ids = new Set(OSINT_SOURCE_CATALOG.map((source) => source.id));
+    for (const id of DISABLED_OSINT_SOURCE_IDS) {
+      expect(ids.has(id)).toBe(false);
+    }
+    expect(ids.size).toBe(OSINT_SOURCE_CATALOG.length);
+  });
+
   function expectSecurityHeaders(response: Response) {
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("x-frame-options")).toBe("DENY");
@@ -67,6 +75,36 @@ describe("intel-dashboard backend worker", () => {
         },
       },
     };
+  }
+
+  function readRssSourceHealthRecords(data: Map<string, string>): Array<{
+    sourceId: string;
+    status: string;
+    lastCheckedAtMs: number;
+    lastSuccessAtMs?: number;
+    lastFailureAtMs?: number;
+    lastHttpStatus?: number;
+    lastError?: string;
+    consecutiveFailures: number;
+    lastItemCount: number;
+  }> {
+    return [...data.entries()]
+      .filter(([key]) => key.includes(":news:rss:health:"))
+      .map(([key, value]) => {
+        const parsed = JSON.parse(value) as Record<string, unknown>;
+        return {
+          sourceId: key.split(":").at(-1) ?? "",
+          status: String(parsed.status ?? ""),
+          lastCheckedAtMs: Number(parsed.lastCheckedAtMs ?? 0),
+          consecutiveFailures: Number(parsed.consecutiveFailures ?? 0),
+          lastItemCount: Number(parsed.lastItemCount ?? 0),
+          ...(typeof parsed.lastSuccessAtMs === "number" ? { lastSuccessAtMs: parsed.lastSuccessAtMs } : {}),
+          ...(typeof parsed.lastFailureAtMs === "number" ? { lastFailureAtMs: parsed.lastFailureAtMs } : {}),
+          ...(typeof parsed.lastHttpStatus === "number" ? { lastHttpStatus: parsed.lastHttpStatus } : {}),
+          ...(typeof parsed.lastError === "string" ? { lastError: parsed.lastError } : {}),
+        };
+      })
+      .sort((left, right) => left.sourceId.localeCompare(right.sourceId));
   }
 
   function createWebhookDedupeCoordinatorNamespace() {
@@ -653,6 +691,49 @@ describe("intel-dashboard backend worker", () => {
     expect(fetchedUrls.length).toBe(20);
   });
 
+  it("does not silently default to free-tier RSS caps when FREE_TIER_MODE is unset", async () => {
+    const kvData = new Map<string, string>();
+    const fetchedUrls: string[] = [];
+    const feedXml =
+      '<?xml version="1.0" encoding="UTF-8"?><rss><channel><item><title>Headline</title><link>https://example.com/headline</link><description>Summary</description><pubDate>Wed, 04 Mar 2026 12:00:00 GMT</pubDate></item></channel></rss>';
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        fetchedUrls.push(url);
+        return new Response(feedXml, {
+          status: 200,
+          headers: { "content-type": "application/rss+xml; charset=utf-8" },
+        });
+      }),
+    );
+
+    await worker.scheduled(
+      {
+        cron: "* * * * *",
+        scheduledTime: Date.now(),
+        noRetry: () => {},
+      },
+      {
+        USAGE_STORAGE_MODE: "kv",
+        USAGE_CACHE_WARM_ENABLED: "false",
+        NEWS_RSS_INGEST_ENABLED: "true",
+        NEWS_RSS_SOURCES_PER_RUN: "36",
+        NEWS_RSS_ITEMS_PER_SOURCE: "4",
+        NEWS_RSS_ROTATION_WINDOW_SECONDS: "60",
+        USAGE_KV: {
+          get: async (key: string) => kvData.get(key) ?? null,
+          put: async (key: string, value: string) => {
+            kvData.set(key, value);
+          },
+        },
+      },
+    );
+
+    expect(fetchedUrls.length).toBe(36);
+  });
+
   it("rotates non-priority RSS source selection per configured rotation window", async () => {
     const kvData = new Map<string, string>();
     const fetchedUrls: string[] = [];
@@ -851,6 +932,250 @@ describe("intel-dashboard backend worker", () => {
     expect(getHeader("if-modified-since")).toBe("Wed, 04 Mar 2026 12:00:00 GMT");
   });
 
+  it("records healthy RSS source health, exposes it via /sources, and resets failure counters after recovery", async () => {
+    const kv = createKvMapBinding();
+    const currentPubDate = new Date(Date.now()).toUTCString();
+    const fetchMock = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >();
+    const feedXml =
+      `<?xml version="1.0" encoding="UTF-8"?><rss><channel><item><title>Recovered headline</title><link>https://example.com/recovered</link><description>Recovered summary</description><pubDate>${currentPubDate}</pubDate></item></channel></rss>`;
+    fetchMock
+      .mockResolvedValueOnce(new Response("upstream unavailable", { status: 503 }))
+      .mockResolvedValue(
+        new Response(feedXml, {
+          status: 200,
+          headers: { "content-type": "application/rss+xml; charset=utf-8" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const env = {
+      USAGE_STORAGE_MODE: "kv",
+      USAGE_CACHE_WARM_ENABLED: "false",
+      NEWS_RSS_INGEST_ENABLED: "true",
+      NEWS_RSS_SOURCES_PER_RUN: "1",
+      NEWS_RSS_ITEMS_PER_SOURCE: "1",
+      NEWS_COORDINATOR_ENABLED: "false",
+      NEWS_COORDINATOR_ALLOW_FALLBACK: "true",
+      USAGE_DATA_SOURCE_TOKEN: "api-token",
+      USAGE_KV: kv.binding,
+    };
+
+    await worker.scheduled({ cron: "* * * * *", scheduledTime: Date.now(), noRetry: () => {} } as ScheduledController, env);
+    let healthRecords = readRssSourceHealthRecords(kv.data);
+    expect(healthRecords).toHaveLength(1);
+    expect(healthRecords[0]).toMatchObject({
+      status: "http_error",
+      lastHttpStatus: 503,
+      consecutiveFailures: 1,
+      lastItemCount: 0,
+    });
+
+    await worker.scheduled({ cron: "* * * * *", scheduledTime: Date.now() + 60_000, noRetry: () => {} } as ScheduledController, env);
+    healthRecords = readRssSourceHealthRecords(kv.data);
+    expect(healthRecords[0]).toMatchObject({
+      status: "healthy",
+      consecutiveFailures: 0,
+      lastItemCount: 1,
+    });
+    expect(healthRecords[0]?.lastSuccessAtMs).toBeGreaterThan(0);
+
+    const recoveredSourceId = healthRecords[0]?.sourceId;
+    expect(recoveredSourceId).toBeTruthy();
+
+    const response = await worker.fetch(
+      new Request("https://backend.example.com/api/intel-dashboard/sources?limit=500", {
+        method: "GET",
+        headers: { authorization: "Bearer api-token" },
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(200);
+    const decoded = (await response.json()) as {
+      ok: boolean;
+      result: {
+        items: Array<{ id: string; health?: { status: string; consecutiveFailures: number; lastItemCount: number } }>;
+        healthSummary: { checkedSourceCount: number; byStatus: Record<string, number>; failingSourceIds: string[] };
+      };
+    };
+    expect(decoded.ok).toBe(true);
+    expect(decoded.result.healthSummary.checkedSourceCount).toBe(1);
+    expect(decoded.result.healthSummary.byStatus.healthy).toBe(1);
+    expect(decoded.result.healthSummary.failingSourceIds).toEqual([]);
+    expect(decoded.result.items.find((item) => item.id === recoveredSourceId)?.health).toMatchObject({
+      status: "healthy",
+      consecutiveFailures: 0,
+      lastItemCount: 1,
+    });
+  });
+
+  it("records not_modified RSS source health on 304 responses", async () => {
+    const kv = createKvMapBinding();
+    const currentPubDate = new Date(Date.now()).toUTCString();
+    const feedXml =
+      `<?xml version="1.0" encoding="UTF-8"?><rss><channel><item><title>Cached headline</title><link>https://example.com/cached</link><description>Cached summary</description><pubDate>${currentPubDate}</pubDate></item></channel></rss>`;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(feedXml, {
+          status: 200,
+          headers: {
+            "content-type": "application/rss+xml; charset=utf-8",
+            etag: 'W/"rss-etag-1"',
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 304,
+          headers: {
+            etag: 'W/"rss-etag-1"',
+          },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const env = {
+      USAGE_STORAGE_MODE: "kv",
+      USAGE_CACHE_WARM_ENABLED: "false",
+      NEWS_RSS_INGEST_ENABLED: "true",
+      NEWS_RSS_SOURCES_PER_RUN: "1",
+      NEWS_RSS_ITEMS_PER_SOURCE: "1",
+      NEWS_COORDINATOR_ENABLED: "false",
+      NEWS_COORDINATOR_ALLOW_FALLBACK: "true",
+      USAGE_KV: kv.binding,
+    };
+
+    await worker.scheduled({ cron: "* * * * *", scheduledTime: Date.now(), noRetry: () => {} } as ScheduledController, env);
+    await worker.scheduled({ cron: "* * * * *", scheduledTime: Date.now() + 60_000, noRetry: () => {} } as ScheduledController, env);
+
+    const healthRecords = readRssSourceHealthRecords(kv.data);
+    expect(healthRecords).toHaveLength(1);
+    expect(healthRecords[0]).toMatchObject({
+      status: "not_modified",
+      consecutiveFailures: 0,
+      lastItemCount: 1,
+    });
+  });
+
+  it("records parse_error RSS source health when an upstream response is not RSS or Atom", async () => {
+    const kv = createKvMapBinding();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response("<html><body>not a feed</body></html>", {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        })),
+    );
+
+    await worker.scheduled(
+      { cron: "* * * * *", scheduledTime: Date.now(), noRetry: () => {} } as ScheduledController,
+      {
+        USAGE_STORAGE_MODE: "kv",
+        USAGE_CACHE_WARM_ENABLED: "false",
+        NEWS_RSS_INGEST_ENABLED: "true",
+        NEWS_RSS_SOURCES_PER_RUN: "1",
+        NEWS_RSS_ITEMS_PER_SOURCE: "1",
+        NEWS_COORDINATOR_ENABLED: "false",
+        NEWS_COORDINATOR_ALLOW_FALLBACK: "true",
+        USAGE_KV: kv.binding,
+      },
+    );
+
+    const healthRecords = readRssSourceHealthRecords(kv.data);
+    expect(healthRecords).toHaveLength(1);
+    expect(healthRecords[0]).toMatchObject({
+      status: "parse_error",
+      consecutiveFailures: 1,
+      lastItemCount: 0,
+      lastError: "Response did not look like RSS/Atom XML.",
+    });
+  });
+
+  it("records timeout RSS source health when fetch aborts", async () => {
+    const kv = createKvMapBinding();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new DOMException("The operation was aborted.", "AbortError");
+      }),
+    );
+
+    await worker.scheduled(
+      { cron: "* * * * *", scheduledTime: Date.now(), noRetry: () => {} } as ScheduledController,
+      {
+        USAGE_STORAGE_MODE: "kv",
+        USAGE_CACHE_WARM_ENABLED: "false",
+        NEWS_RSS_INGEST_ENABLED: "true",
+        NEWS_RSS_SOURCES_PER_RUN: "1",
+        NEWS_RSS_ITEMS_PER_SOURCE: "1",
+        NEWS_COORDINATOR_ENABLED: "false",
+        NEWS_COORDINATOR_ALLOW_FALLBACK: "true",
+        USAGE_KV: kv.binding,
+      },
+    );
+
+    const healthRecords = readRssSourceHealthRecords(kv.data);
+    expect(healthRecords).toHaveLength(1);
+    expect(healthRecords[0]).toMatchObject({
+      status: "timeout",
+      consecutiveFailures: 1,
+      lastItemCount: 0,
+    });
+  });
+
+  it("records network_error RSS source health and emits structured scheduled diagnostics", async () => {
+    const kv = createKvMapBinding();
+    const analyticsWrite = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("socket hang up");
+      }),
+    );
+
+    await worker.scheduled(
+      { cron: "* * * * *", scheduledTime: Date.now(), noRetry: () => {} } as ScheduledController,
+      {
+        USAGE_STORAGE_MODE: "kv",
+        USAGE_CACHE_WARM_ENABLED: "false",
+        NEWS_RSS_INGEST_ENABLED: "true",
+        NEWS_RSS_SOURCES_PER_RUN: "1",
+        NEWS_RSS_ITEMS_PER_SOURCE: "1",
+        NEWS_COORDINATOR_ENABLED: "false",
+        NEWS_COORDINATOR_ALLOW_FALLBACK: "true",
+        USAGE_KV: kv.binding,
+        USAGE_ANALYTICS_SAMPLE_RATE: "1",
+        USAGE_ANALYTICS: {
+          writeDataPoint: analyticsWrite,
+        },
+      },
+    );
+
+    const healthRecords = readRssSourceHealthRecords(kv.data);
+    expect(healthRecords).toHaveLength(1);
+    expect(healthRecords[0]).toMatchObject({
+      status: "network_error",
+      consecutiveFailures: 1,
+      lastItemCount: 0,
+      lastError: "socket hang up",
+    });
+    expect(analyticsWrite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blobs: expect.arrayContaining([
+          "/api/intel-dashboard/usage-data-source",
+          "SCHEDULED",
+          "rssIngest",
+          expect.stringContaining("failed:1"),
+          expect.stringContaining("outcome:failed"),
+        ]),
+        doubles: expect.arrayContaining([500, expect.any(Number), 1, 1, 0, 0]),
+      }),
+    );
+  });
+
   it("enforces 30 minute news delay for free users", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1_000_000);
     const kv = createKvMapBinding({
@@ -922,6 +1247,8 @@ describe("intel-dashboard backend worker", () => {
       {
         BILLING_ADMIN_TOKEN: "admin-token",
         NEWS_FEED_MAX_ITEMS: "3",
+        NEWS_COORDINATOR_ENABLED: "false",
+        NEWS_COORDINATOR_ALLOW_FALLBACK: "true",
         USAGE_KV: kv.binding,
       },
     );
@@ -930,6 +1257,11 @@ describe("intel-dashboard backend worker", () => {
       ok: true,
       result: {
         totalStored: 3,
+        publishMode: "local_fallback",
+        coordinator: {
+          enabled: false,
+          fallbackUsed: false,
+        },
       },
     });
 
@@ -1014,6 +1346,11 @@ describe("intel-dashboard backend worker", () => {
         published: 1,
         totalStored: 1,
         merged: true,
+        publishMode: "coordinator",
+        coordinator: {
+          enabled: true,
+          fallbackUsed: false,
+        },
       },
     });
     expect(coordinatorFetch).toHaveBeenCalledTimes(1);
@@ -1050,6 +1387,7 @@ describe("intel-dashboard backend worker", () => {
       {
         BILLING_ADMIN_TOKEN: "admin-token",
         NEWS_COORDINATOR_ENABLED: "true",
+        NEWS_COORDINATOR_ALLOW_FALLBACK: "true",
         NEWS_INGEST_COORDINATOR: coordinatorNamespace,
         USAGE_KV: kv.binding,
       },
@@ -1062,6 +1400,12 @@ describe("intel-dashboard backend worker", () => {
         published: 1,
         totalStored: 1,
         merged: true,
+        publishMode: "local_fallback",
+        coordinator: {
+          enabled: true,
+          fallbackUsed: true,
+          error: "Coordinator returned HTTP 500",
+        },
       },
     });
     expect(coordinatorFetch).toHaveBeenCalledTimes(1);
@@ -5029,6 +5373,8 @@ describe("intel-dashboard backend worker", () => {
       }),
       {
         BILLING_ADMIN_TOKEN: "admin-token",
+        NEWS_COORDINATOR_ENABLED: "false",
+        NEWS_COORDINATOR_ALLOW_FALLBACK: "true",
         USAGE_KV: kv.binding,
       },
     );
@@ -5121,6 +5467,8 @@ describe("intel-dashboard backend worker", () => {
       }),
       {
         BILLING_ADMIN_TOKEN: "admin-token",
+        NEWS_COORDINATOR_ENABLED: "false",
+        NEWS_COORDINATOR_ALLOW_FALLBACK: "true",
         USAGE_KV: kv.binding,
       },
     );
@@ -5149,6 +5497,8 @@ describe("intel-dashboard backend worker", () => {
       }),
       {
         BILLING_ADMIN_TOKEN: "admin-token",
+        NEWS_COORDINATOR_ENABLED: "false",
+        NEWS_COORDINATOR_ALLOW_FALLBACK: "true",
         USAGE_KV: kv.binding,
       },
     );
@@ -5308,6 +5658,8 @@ describe("intel-dashboard backend worker", () => {
         AI_GATEWAY_URL: "https://gateway.example.com/v1/chat/completions",
         AI_GATEWAY_CACHE_TTL_SECONDS: "600",
         NEWS_AI_ENRICH_ENABLED: "false",
+        NEWS_COORDINATOR_ENABLED: "false",
+        NEWS_COORDINATOR_ALLOW_FALLBACK: "true",
         USAGE_KV: kv.binding,
       },
     );

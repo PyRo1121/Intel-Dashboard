@@ -1,5 +1,25 @@
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+function buildTimeoutSignal(signal: AbortSignal | null | undefined): AbortSignal {
+  const timeoutSignal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
+  if (!signal) return timeoutSignal;
+  if (typeof AbortSignal.any === "function") {
+    return AbortSignal.any([timeoutSignal, signal]);
+  }
+
+  const controller = new AbortController();
+  const abort = (reason?: unknown) => {
+    if (!controller.signal.aborted) controller.abort(reason);
+  };
+  const onTimeoutAbort = () => abort(timeoutSignal.reason);
+  const onSignalAbort = () => abort(signal.reason);
+  timeoutSignal.addEventListener("abort", onTimeoutAbort, { once: true });
+  signal.addEventListener("abort", onSignalAbort, { once: true });
+  if (timeoutSignal.aborted) onTimeoutAbort();
+  if (signal.aborted) onSignalAbort();
+  return controller.signal;
+}
+
 export type ClientJsonResult<T> =
   | { ok: true; data: T; status: number }
   | { ok: false; error: string; status?: number };
@@ -58,15 +78,15 @@ export async function fetchClientJson<T>(input: string, init: RequestInit = {}):
   return fetchJsonInternal<T>(input, {
     credentials: "include",
     cache: "no-store",
-    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
     ...init,
+    signal: buildTimeoutSignal(init.signal),
   });
 }
 
 export async function fetchPublicJson<T>(input: string, init: RequestInit = {}): Promise<ClientJsonResult<T>> {
   return fetchJsonInternal<T>(input, {
     cache: "no-store",
-    signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
     ...init,
+    signal: buildTimeoutSignal(init.signal),
   });
 }

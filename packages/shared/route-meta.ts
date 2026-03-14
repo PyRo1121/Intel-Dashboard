@@ -1,4 +1,4 @@
-import { DASHBOARD_HOME_PATH } from "./auth-next-routes.ts";
+import { DASHBOARD_ROUTE_PATHS } from "./dashboard-routes.ts";
 import { SITE_NAME } from "./site-config.ts";
 
 export const PRODUCTION_HOME_TITLE = `${SITE_NAME} OSINT Dashboard | Real-Time Geopolitical Intelligence Platform`;
@@ -40,18 +40,18 @@ export const NOT_FOUND_TITLE = `Page Not Found | ${SITE_NAME}`;
 export const NOT_FOUND_DESCRIPTION = `The page you're looking for doesn't exist or has been moved. Return to the home page to continue exploring ${SITE_NAME}.`;
 
 const DASHBOARD_SHELL_TITLES = [
-  { prefix: DASHBOARD_HOME_PATH, title: OVERVIEW_TITLE },
-  { prefix: "/osint/source", title: OSINT_SOURCE_PROFILE_TITLE },
-  { prefix: "/osint", title: OSINT_TITLE },
-  { prefix: "/telegram/source", title: TELEGRAM_SOURCE_HISTORY_TITLE },
-  { prefix: "/telegram", title: TELEGRAM_TITLE },
-  { prefix: "/my-feed", title: MY_FEED_TITLE },
-  { prefix: "/my-alerts", title: MY_ALERTS_TITLE },
-  { prefix: "/briefings", title: BRIEFINGS_TITLE },
-  { prefix: "/map", title: MAP_TITLE },
-  { prefix: "/air-sea", title: AIR_SEA_TITLE },
-  { prefix: "/billing", title: BILLING_TITLE },
-  { prefix: "/crm", title: CRM_TITLE },
+  { prefix: DASHBOARD_ROUTE_PATHS.overview, title: OVERVIEW_TITLE },
+  { prefix: DASHBOARD_ROUTE_PATHS.osintSource, title: OSINT_SOURCE_PROFILE_TITLE },
+  { prefix: DASHBOARD_ROUTE_PATHS.osint, title: OSINT_TITLE },
+  { prefix: DASHBOARD_ROUTE_PATHS.telegramSource, title: TELEGRAM_SOURCE_HISTORY_TITLE },
+  { prefix: DASHBOARD_ROUTE_PATHS.telegram, title: TELEGRAM_TITLE },
+  { prefix: DASHBOARD_ROUTE_PATHS.myFeed, title: MY_FEED_TITLE },
+  { prefix: DASHBOARD_ROUTE_PATHS.myAlerts, title: MY_ALERTS_TITLE },
+  { prefix: DASHBOARD_ROUTE_PATHS.briefings, title: BRIEFINGS_TITLE },
+  { prefix: DASHBOARD_ROUTE_PATHS.map, title: MAP_TITLE },
+  { prefix: DASHBOARD_ROUTE_PATHS.airSea, title: AIR_SEA_TITLE },
+  { prefix: DASHBOARD_ROUTE_PATHS.billing, title: BILLING_TITLE },
+  { prefix: DASHBOARD_ROUTE_PATHS.crm, title: CRM_TITLE },
 ] as const;
 
 export function resolveDashboardShellTitle(path: string): string {

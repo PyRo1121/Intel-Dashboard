@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { resolveOsintSourcePreferenceKey, toggleOsintSourcePreference } from "@intel-dashboard/shared/osint-source-profile.ts";
 import {
   createEmptySubscriberFeedPreferences,
   filterSubscriberFeedItems,
@@ -65,6 +66,52 @@ test("normalize feed items mark favorite/watch matches and sort by combined scor
   assert.equal(osint.signalScore, 78);
   assert.equal(osint.combinedScore, 96);
   assert.equal(sortSubscriberFeedItems([osint, telegram])[0]?.sourceSurface, "telegram");
+});
+
+test("osint favorite matching accepts provider slug keys", () => {
+  const prefs = createEmptySubscriberFeedPreferences();
+  prefs.favoriteSources = ["example-desk"];
+
+  const osint = normalizeOsintSubscriberFeedItem(
+    {
+      title: "OSINT item",
+      summary: "OSINT item summary",
+      source: "Example Desk",
+      url: "https://example.com/item",
+      timestamp: "2026-03-09T11:00:00.000Z",
+      region: "global",
+      category: "news",
+      severity: "high",
+    },
+    prefs,
+  );
+
+  assert.equal(osint.favoriteMatch, true);
+});
+
+test("resolveOsintSourcePreferenceKey prefers slug over id and display name", () => {
+  assert.equal(
+    resolveOsintSourcePreferenceKey({
+      id: "krebs",
+      slug: "krebs-on-security",
+      name: "Krebs on Security",
+    }),
+    "krebs-on-security",
+  );
+});
+
+test("toggleOsintSourcePreference removes legacy aliases when unfavoriting", () => {
+  assert.deepEqual(
+    toggleOsintSourcePreference(
+      ["krebs on security"],
+      {
+        id: "krebs",
+        slug: "krebs-on-security",
+        name: "Krebs on Security",
+      },
+    ),
+    [],
+  );
 });
 
 test("normalize feed preferences ignores non-string watch values", () => {

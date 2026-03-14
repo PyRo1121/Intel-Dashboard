@@ -28,6 +28,7 @@ import {
   normalizeSubscriberAlertState,
   sortSubscriberAlerts,
 } from "./subscriber-alerts";
+import { buildSubscriberAlertsResponse } from "./subscriber-alerts-response";
 import { createEdgeAuth } from "./auth";
 import { misconfiguredApiResponse, unauthorizedApiResponse } from "./auth-api-response";
 import { buildDeterministicAvatarDataUrl } from "./avatar-fallback";
@@ -49,6 +50,7 @@ import { createTurnstileGateToken, type TurnstileMode, verifyTurnstileGateToken 
 import { isRecord } from "./type-guards";
 import { normalizeNumber, normalizeString } from "./value-normalization";
 import { DASHBOARD_HOME_PATH, DEFAULT_POST_AUTH_PATH } from "@intel-dashboard/shared/auth-next-routes.ts";
+import type { CrmAiTelemetryResult, CrmOverviewResult } from "@intel-dashboard/shared/crm.ts";
 import { buildAuthModeSwitchHref, buildAuthPageHref, buildAuthProviderHref } from "@intel-dashboard/shared/auth-flow.ts";
 import { getAuthCopy } from "@intel-dashboard/shared/auth-copy.ts";
 import { isOwnerRole } from "@intel-dashboard/shared/entitlement.ts";
@@ -2789,8 +2791,8 @@ async function loadCrmDirectorySnapshot(env: Env): Promise<{
 async function fetchOwnerCrmBackendSummary(params: {
   env: Env;
   user: VerifiedSession;
-}): Promise<{ ok: true; payload: Record<string, unknown> } | { ok: false; status: number; error: string }> {
-  return postOwnerBackendJson({
+}): Promise<{ ok: true; payload: CrmOverviewResult } | { ok: false; status: number; error: string }> {
+  return postOwnerBackendJson<CrmOverviewResult>({
     backendToken: resolveBackendApiToken(params.env),
     url: resolveBackendEndpointUrl(params.env, "/api/intel-dashboard/admin/crm/summary"),
     userId: resolveUserId(params.user),
@@ -2804,8 +2806,8 @@ async function fetchOwnerCrmAiTelemetry(params: {
   env: Env;
   user: VerifiedSession;
   window: string;
-}): Promise<import("./owner-backend-json").BackendJsonResult<Record<string, unknown>>> {
-  return postOwnerBackendJson<Record<string, unknown>>({
+}): Promise<import("./owner-backend-json").BackendJsonResult<CrmAiTelemetryResult>> {
+  return postOwnerBackendJson<CrmAiTelemetryResult>({
     backendToken: resolveBackendApiToken(params.env),
     url: resolveBackendEndpointUrl(params.env, "/api/intel-dashboard/admin/crm/ai-telemetry"),
     userId: resolveUserId(params.user),
@@ -5647,7 +5649,7 @@ export default {
         buildOwnerCrmOverviewPayload({
           directory,
           backendSummary: backendSummary.payload,
-        }) as Record<string, unknown>,
+        }),
       );
     }
 
@@ -6046,12 +6048,18 @@ export default {
       }
 
       const preferences = await loadSubscriberFeedPreferences(env, gate.userId);
-      await materializeSubscriberAlerts(env, gate.userId, preferences);
+      let materializationError: unknown;
+      try {
+        await materializeSubscriberAlerts(env, gate.userId, preferences);
+      } catch (error) {
+        materializationError = error;
+        console.error("[subscriber-alerts] materialization failed", error instanceof Error ? error.message : error);
+      }
       const state = normalizeSubscriberAlertState(url.searchParams.get("state"));
       const limitRaw = normalizeNumber(url.searchParams.get("limit"));
       const limit = limitRaw === null ? 50 : Math.min(Math.max(1, Math.floor(limitRaw)), 200);
       const response = await loadSubscriberAlerts(env, gate.userId, state, limit);
-      return privateApiJson(origin, 200, response);
+      return privateApiJson(origin, 200, buildSubscriberAlertsResponse(response, materializationError));
     }
 
     if (path === "/api/subscriber/alert-preferences") {

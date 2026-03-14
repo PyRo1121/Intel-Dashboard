@@ -2,6 +2,13 @@ import { OSINT_SOURCE_CATALOG, type OsintSource } from "./osint-sources.js";
 import { buildAbsoluteAuthProviderUrl } from "@intel-dashboard/shared/auth-flow.ts";
 import { FREE_FEED_DELAY_MINUTES, PREMIUM_PRICE_USD, TRIAL_DAYS, formatUsdMonthlyCompact, formatUsdMonthlySpaced } from "@intel-dashboard/shared/access-offers.ts";
 import { BACKEND_LANDING_HERO, BACKEND_OPERATOR_CARDS, BACKEND_OPERATOR_PANEL, BACKEND_OPERATOR_PRICING } from "@intel-dashboard/shared/landing-content.ts";
+import {
+  RSS_SOURCE_HEALTH_STATUSES,
+  type OsintSourcesCatalogEnvelope,
+  type OsintSourcesCatalogHealthSummary,
+  type RssSourceHealthRecord,
+  type RssSourceHealthStatus,
+} from "@intel-dashboard/shared/osint-sources.ts";
 import { INTERNAL_LANDING_TAGLINE, SITE_NAME } from "@intel-dashboard/shared/site-config.ts";
 import { matchesBearerToken } from "./token-auth.js";
 
@@ -80,7 +87,7 @@ const DEFAULT_NEWS_COORDINATOR_ENABLED = true;
 const DEFAULT_NEWS_COORDINATOR_NAME = "global";
 const DEFAULT_NEWS_COORDINATOR_SHARD_COUNT = 1;
 const MAX_NEWS_COORDINATOR_SHARD_COUNT = 64;
-const DEFAULT_NEWS_COORDINATOR_ALLOW_FALLBACK = true;
+const DEFAULT_NEWS_COORDINATOR_ALLOW_FALLBACK = false;
 const DEFAULT_NEWS_HOT_OVERLAY_ENABLED = true;
 const DEFAULT_NEWS_HOT_OVERLAY_LIMIT = 250;
 const MAX_NEWS_HOT_OVERLAY_LIMIT = 1000;
@@ -176,7 +183,8 @@ const MIN_NEWS_RSS_ROTATION_WINDOW_SECONDS = 30;
 const MAX_NEWS_RSS_ROTATION_WINDOW_SECONDS = 3_600;
 const DEFAULT_NEWS_RSS_VALIDATOR_TTL_SECONDS = 14 * 24 * 60 * 60;
 const MAX_NEWS_RSS_VALIDATOR_TTL_SECONDS = 30 * 24 * 60 * 60;
-const DEFAULT_FREE_TIER_MODE = true;
+const DEFAULT_NEWS_RSS_FETCH_CONCURRENCY = 4;
+const DEFAULT_FREE_TIER_MODE = false;
 const FREE_TIER_HARD_MAX_NEWS_RSS_SOURCES_PER_RUN = 20;
 const FREE_TIER_HARD_MAX_NEWS_RSS_ITEMS_PER_SOURCE = 12;
 const NEWS_RSS_MAX_ITEM_AGE_HOURS = 72;
@@ -562,10 +570,25 @@ type RssSourceValidatorState = {
   checkedAtMs: number;
 };
 
+type NewsPublishMode = "coordinator" | "local_fallback";
+
 type NewsPublishMergeResult = {
   published: number;
   totalStored: number;
   merged: boolean;
+  publishMode: NewsPublishMode;
+  coordinator: {
+    enabled: boolean;
+    shardName: string;
+    fallbackUsed: boolean;
+    error?: string;
+  };
+};
+
+type RssSourceFetchResult = {
+  sourceId: string;
+  items: NewsItem[];
+  health: RssSourceHealthRecord;
 };
 
 type AiBatchProvider = "internal" | "groq";
@@ -1714,6 +1737,10 @@ function resolveRssSourceValidatorKey(env: WorkerEnv, sourceId: string): string 
   return `${normalizeKvPrefix(env.USAGE_KV_PREFIX)}:news:rss:validator:${sourceId}`;
 }
 
+function resolveRssSourceHealthKey(env: WorkerEnv, sourceId: string): string {
+  return `${normalizeKvPrefix(env.USAGE_KV_PREFIX)}:news:rss:health:${sourceId}`;
+}
+
 function resolveAirSeaAviationSnapshotKey(env: WorkerEnv): string {
   return `${normalizeKvPrefix(env.USAGE_KV_PREFIX)}:airsea:aviation:snapshot`;
 }
@@ -1762,6 +1789,118 @@ async function storeRssSourceValidator(
   } catch {
     // best-effort validator cache write
   }
+}
+
+async function loadRssSourceHealth(env: WorkerEnv, sourceId: string): Promise<RssSourceHealthRecord | null> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.get !== "function") {
+    return null;
+  }
+  let raw: string | null;
+  try {
+    raw = await kv.get(resolveRssSourceHealthKey(env, sourceId));
+  } catch {
+    return null;
+  }
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRecord(parsed)) {
+      return null;
+    }
+    const status = trimString(parsed.status) as RssSourceHealthStatus | null;
+    if (!status || !RSS_SOURCE_HEALTH_STATUSES.includes(status)) {
+      return null;
+    }
+    const lastCheckedAtMs = Math.max(0, Math.floor(parseFiniteNumber(parsed.lastCheckedAtMs) ?? Date.now()));
+    const lastSuccessAtMs = parseFiniteNumber(parsed.lastSuccessAtMs);
+    const lastFailureAtMs = parseFiniteNumber(parsed.lastFailureAtMs);
+    const lastHttpStatus = parseFiniteNumber(parsed.lastHttpStatus);
+    const lastError = trimString(parsed.lastError);
+    const consecutiveFailures = Math.max(0, Math.floor(parseFiniteNumber(parsed.consecutiveFailures) ?? 0));
+    const lastItemCount = Math.max(0, Math.floor(parseFiniteNumber(parsed.lastItemCount) ?? 0));
+    return {
+      status,
+      lastCheckedAtMs,
+      ...(lastSuccessAtMs === undefined ? {} : { lastSuccessAtMs: Math.max(0, Math.floor(lastSuccessAtMs)) }),
+      ...(lastFailureAtMs === undefined ? {} : { lastFailureAtMs: Math.max(0, Math.floor(lastFailureAtMs)) }),
+      ...(lastHttpStatus === undefined ? {} : { lastHttpStatus: Math.max(0, Math.floor(lastHttpStatus)) }),
+      ...(lastError ? { lastError } : {}),
+      consecutiveFailures,
+      lastItemCount,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function storeRssSourceHealth(
+  env: WorkerEnv,
+  sourceId: string,
+  state: RssSourceHealthRecord,
+): Promise<void> {
+  const kv = env.USAGE_KV;
+  if (!kv || typeof kv.put !== "function") {
+    return;
+  }
+  try {
+    await kv.put(resolveRssSourceHealthKey(env, sourceId), JSON.stringify(state));
+  } catch {
+    // best-effort source health write
+  }
+}
+
+async function loadRssSourceHealthMap(
+  env: WorkerEnv,
+  sources: readonly OsintSource[],
+): Promise<Map<string, RssSourceHealthRecord>> {
+  const healthEntries = await Promise.all(
+    sources.map(async (source) => {
+      const health = await loadRssSourceHealth(env, source.id);
+      return health ? ([source.id, health] as const) : null;
+    }),
+  );
+  const healthMap = new Map<string, RssSourceHealthRecord>();
+  for (const entry of healthEntries) {
+    if (entry) {
+      healthMap.set(entry[0], entry[1]);
+    }
+  }
+  return healthMap;
+}
+
+function buildEmptyOsintSourceHealthSummary(feedSourceCount: number): OsintSourcesCatalogHealthSummary {
+  const byStatus = Object.fromEntries(
+    RSS_SOURCE_HEALTH_STATUSES.map((status) => [status, 0]),
+  ) as Record<RssSourceHealthStatus, number>;
+  return {
+    feedSourceCount,
+    checkedSourceCount: 0,
+    failingSourceIds: [],
+    byStatus,
+  };
+}
+
+function summarizeRssSourceHealth(
+  sources: readonly OsintSource[],
+  healthMap: ReadonlyMap<string, RssSourceHealthRecord>,
+): OsintSourcesCatalogHealthSummary {
+  const summary = buildEmptyOsintSourceHealthSummary(sources.length);
+  for (const source of sources) {
+    const health = healthMap.get(source.id);
+    if (!health) {
+      continue;
+    }
+    summary.checkedSourceCount += 1;
+    summary.byStatus[health.status] += 1;
+    if (health.status !== "healthy" && health.status !== "not_modified") {
+      summary.failingSourceIds.push(source.id);
+    }
+  }
+  summary.failingSourceIds.sort((left, right) => left.localeCompare(right));
+  return summary;
 }
 
 function resolveNewsFeedStorageKeysForRead(env: WorkerEnv): string[] {
@@ -3036,6 +3175,16 @@ function parseFeedEntries(xml: string, perSourceLimit: number): Array<{
   return items.slice(0, perSourceLimit);
 }
 
+function looksLikeFeedDocument(xml: string): boolean {
+  const normalized = xml.trim().toLowerCase();
+  return (
+    normalized.includes("<rss") ||
+    normalized.includes("<feed") ||
+    normalized.includes("<rdf:rdf") ||
+    normalized.includes("<channel")
+  );
+}
+
 function mapSourceRegionToIntelRegion(sourceRegion: string): IntelRegion {
   const normalized = sourceRegion.trim().toLowerCase().replaceAll("-", "_");
   if (normalized === "ukraine") return "ukraine";
@@ -3159,11 +3308,21 @@ async function fetchSourceFeedNews(args: {
   source: OsintSource;
   perSourceLimit: number;
   validatorTtlSeconds: number;
-}): Promise<NewsItem[]> {
+}): Promise<RssSourceFetchResult> {
   if (!args.source.feedUrl) {
-    return [];
+    return {
+      sourceId: args.source.id,
+      items: [],
+      health: {
+        status: "disabled",
+        lastCheckedAtMs: Date.now(),
+        consecutiveFailures: 0,
+        lastItemCount: 0,
+      },
+    };
   }
   const validatorState = await loadRssSourceValidator(args.env, args.source.id);
+  const previousHealth = await loadRssSourceHealth(args.env, args.source.id);
   const requestHeaders: Record<string, string> = {
     "user-agent": "intel-dashboard-backend/1.0",
     accept: "application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.5",
@@ -3177,6 +3336,7 @@ async function fetchSourceFeedNews(args: {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
+    const checkedAtMs = Date.now();
     const response = await fetch(args.source.feedUrl, {
       headers: requestHeaders,
       signal: controller.signal,
@@ -3191,14 +3351,42 @@ async function fetchSourceFeedNews(args: {
         {
           ...(nextEtag ? { etag: nextEtag } : {}),
           ...(nextLastModified ? { lastModified: nextLastModified } : {}),
-          checkedAtMs: Date.now(),
+          checkedAtMs,
         },
         args.validatorTtlSeconds,
       );
-      return [];
+      const health: RssSourceHealthRecord = {
+        status: "not_modified",
+        lastCheckedAtMs: checkedAtMs,
+        lastSuccessAtMs: checkedAtMs,
+        consecutiveFailures: 0,
+        lastItemCount: previousHealth?.lastItemCount ?? 0,
+        ...(previousHealth?.lastHttpStatus === undefined ? {} : { lastHttpStatus: previousHealth.lastHttpStatus }),
+      };
+      await storeRssSourceHealth(args.env, args.source.id, health);
+      return {
+        sourceId: args.source.id,
+        items: [],
+        health,
+      };
     }
     if (!response.ok) {
-      return [];
+      const health: RssSourceHealthRecord = {
+        status: "http_error",
+        lastCheckedAtMs: checkedAtMs,
+        lastFailureAtMs: checkedAtMs,
+        lastHttpStatus: response.status,
+        lastError: `HTTP ${response.status}`,
+        consecutiveFailures: (previousHealth?.consecutiveFailures ?? 0) + 1,
+        lastItemCount: previousHealth?.lastItemCount ?? 0,
+        ...(previousHealth?.lastSuccessAtMs === undefined ? {} : { lastSuccessAtMs: previousHealth.lastSuccessAtMs }),
+      };
+      await storeRssSourceHealth(args.env, args.source.id, health);
+      return {
+        sourceId: args.source.id,
+        items: [],
+        health,
+      };
     }
     const xml = await response.text();
     await storeRssSourceValidator(
@@ -3207,10 +3395,27 @@ async function fetchSourceFeedNews(args: {
       {
         ...(nextEtag ? { etag: nextEtag } : {}),
         ...(nextLastModified ? { lastModified: nextLastModified } : {}),
-        checkedAtMs: Date.now(),
+        checkedAtMs,
       },
       args.validatorTtlSeconds,
     );
+    if (!looksLikeFeedDocument(xml)) {
+      const health: RssSourceHealthRecord = {
+        status: "parse_error",
+        lastCheckedAtMs: checkedAtMs,
+        lastFailureAtMs: checkedAtMs,
+        lastError: "Response did not look like RSS/Atom XML.",
+        consecutiveFailures: (previousHealth?.consecutiveFailures ?? 0) + 1,
+        lastItemCount: previousHealth?.lastItemCount ?? 0,
+        ...(previousHealth?.lastSuccessAtMs === undefined ? {} : { lastSuccessAtMs: previousHealth.lastSuccessAtMs }),
+      };
+      await storeRssSourceHealth(args.env, args.source.id, health);
+      return {
+        sourceId: args.source.id,
+        items: [],
+        health,
+      };
+    }
     const parsed = parseFeedEntries(xml, args.perSourceLimit);
     const nowMs = Date.now();
     const minPublishedAtMs = nowMs - NEWS_RSS_MAX_ITEM_AGE_HOURS * 60 * 60 * 1000;
@@ -3241,9 +3446,39 @@ async function fetchSourceFeedNews(args: {
         language: args.source.language,
       });
     }
-    return items;
-  } catch {
-    return [];
+    const health: RssSourceHealthRecord = {
+      status: "healthy",
+      lastCheckedAtMs: checkedAtMs,
+      lastSuccessAtMs: checkedAtMs,
+      consecutiveFailures: 0,
+      lastItemCount: items.length,
+    };
+    await storeRssSourceHealth(args.env, args.source.id, health);
+    return {
+      sourceId: args.source.id,
+      items,
+      health,
+    };
+  } catch (error) {
+    const checkedAtMs = Date.now();
+    const timedOut =
+      controller.signal.aborted ||
+      (error instanceof DOMException && error.name === "AbortError");
+    const health: RssSourceHealthRecord = {
+      status: timedOut ? "timeout" : "network_error",
+      lastCheckedAtMs: checkedAtMs,
+      lastFailureAtMs: checkedAtMs,
+      lastError: error instanceof Error ? error.message : String(error),
+      consecutiveFailures: (previousHealth?.consecutiveFailures ?? 0) + 1,
+      lastItemCount: previousHealth?.lastItemCount ?? 0,
+      ...(previousHealth?.lastSuccessAtMs === undefined ? {} : { lastSuccessAtMs: previousHealth.lastSuccessAtMs }),
+    };
+    await storeRssSourceHealth(args.env, args.source.id, health);
+    return {
+      sourceId: args.source.id,
+      items: [],
+      health,
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -3253,9 +3488,14 @@ async function ingestNewsFromSourceCatalog(env: WorkerEnv): Promise<{
   selectedSources: number;
   fetchedItems: number;
   publishedItems: number;
+  failedSources: number;
+  failingSourceIds: string[];
+  publishMode: NewsPublishMode | "none";
+  publishOutcome: "published" | "skipped" | "failed";
+  publishError?: string;
 }> {
   if (!normalizeBoolean(env.NEWS_RSS_INGEST_ENABLED, DEFAULT_NEWS_RSS_INGEST_ENABLED)) {
-    return { selectedSources: 0, fetchedItems: 0, publishedItems: 0 };
+    return { selectedSources: 0, fetchedItems: 0, publishedItems: 0, failedSources: 0, failingSourceIds: [], publishMode: "none", publishOutcome: "skipped" };
   }
   let perRun = normalizeNewsRssSourcesPerRun(env.NEWS_RSS_SOURCES_PER_RUN);
   let perSourceLimit = normalizeNewsRssItemsPerSource(env.NEWS_RSS_ITEMS_PER_SOURCE);
@@ -3267,15 +3507,29 @@ async function ingestNewsFromSourceCatalog(env: WorkerEnv): Promise<{
   }
   const selectedSources = selectFeedSourcesForRun(Date.now(), perRun, rotationWindowSeconds);
   if (selectedSources.length < 1) {
-    return { selectedSources: 0, fetchedItems: 0, publishedItems: 0 };
+    return { selectedSources: 0, fetchedItems: 0, publishedItems: 0, failedSources: 0, failingSourceIds: [], publishMode: "none", publishOutcome: "skipped" };
   }
 
-  const batches = await mapWithConcurrency(selectedSources, 4, (source) =>
+  const batches = await mapWithConcurrency(selectedSources, DEFAULT_NEWS_RSS_FETCH_CONCURRENCY, (source) =>
     fetchSourceFeedNews({ env, source, perSourceLimit, validatorTtlSeconds }),
   );
-  const fetchedItems = batches.flat();
+  const fetchedItems = batches.flatMap((batch) => batch.items);
+  const failingSourceIds = batches
+    .filter((batch) => batch.health.status !== "healthy" && batch.health.status !== "not_modified")
+    .map((batch) => batch.sourceId)
+    .sort((left, right) => left.localeCompare(right));
   if (fetchedItems.length < 1) {
-    return { selectedSources: selectedSources.length, fetchedItems: 0, publishedItems: 0 };
+    const failed = failingSourceIds.length > 0;
+    return {
+      selectedSources: selectedSources.length,
+      fetchedItems: 0,
+      publishedItems: 0,
+      failedSources: failingSourceIds.length,
+      failingSourceIds,
+      publishMode: "none",
+      publishOutcome: failed ? "failed" : "skipped",
+      ...(failed ? { publishError: "No RSS items were fetched and at least one source failed." } : {}),
+    };
   }
 
   const dedupedByUrl = new Map<string, NewsItem>();
@@ -3288,17 +3542,34 @@ async function ingestNewsFromSourceCatalog(env: WorkerEnv): Promise<{
   }
   const dedupedItems = Array.from(dedupedByUrl.values()).sort((left, right) => right.publishedAtMs - left.publishedAtMs);
   const enriched = await enrichNewsItemsForPublish({ env, inputItems: dedupedItems });
-  const publish = await publishNewsWithCoordinator({
-    env,
-    inputItems: enriched,
-    merge: true,
-    shardKey: `rss-ingest-${Math.floor(Date.now() / (Math.max(rotationWindowSeconds, 1) * 1_000))}`,
-  });
-  return {
-    selectedSources: selectedSources.length,
-    fetchedItems: dedupedItems.length,
-    publishedItems: publish.published,
-  };
+  try {
+    const publish = await publishNewsWithCoordinator({
+      env,
+      inputItems: enriched,
+      merge: true,
+      shardKey: `rss-ingest-${Math.floor(Date.now() / (Math.max(rotationWindowSeconds, 1) * 1_000))}`,
+    });
+    return {
+      selectedSources: selectedSources.length,
+      fetchedItems: dedupedItems.length,
+      publishedItems: publish.published,
+      failedSources: failingSourceIds.length,
+      failingSourceIds,
+      publishMode: publish.publishMode,
+      publishOutcome: "published",
+    };
+  } catch (error) {
+    return {
+      selectedSources: selectedSources.length,
+      fetchedItems: dedupedItems.length,
+      publishedItems: 0,
+      failedSources: failingSourceIds.length,
+      failingSourceIds,
+      publishMode: "coordinator",
+      publishOutcome: "failed",
+      publishError: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function normalizeOutboundTarget(value: unknown): OutboundTarget | null {
@@ -6282,6 +6553,8 @@ async function publishNewsFeed(args: {
   inputItems: NewsItem[];
   merge: boolean;
   shardName?: string;
+  publishMode?: NewsPublishMode;
+  coordinator: NewsPublishMergeResult["coordinator"];
 }): Promise<NewsPublishMergeResult> {
   const maxFeedItems = normalizeNewsFeedMaxItems(args.env.NEWS_FEED_MAX_ITEMS);
   const storageKey = resolveNewsFeedStorageKey(args.env, args.shardName);
@@ -6298,6 +6571,8 @@ async function publishNewsFeed(args: {
     published: inputItems.length,
     totalStored: merged.length,
     merged: args.merge,
+    publishMode: args.publishMode ?? "local_fallback",
+    coordinator: args.coordinator,
   };
 }
 
@@ -6319,13 +6594,24 @@ async function publishNewsWithCoordinator(args: {
     DEFAULT_NEWS_COORDINATOR_ENABLED,
   );
   const namespace = args.env.NEWS_INGEST_COORDINATOR;
+  const localPublish = (options?: { fallbackUsed?: boolean; error?: string }) =>
+    publishNewsFeed({
+      ...args,
+      shardName: coordinatorName,
+      coordinator: {
+        enabled: coordinatorEnabled,
+        shardName: coordinatorName,
+        fallbackUsed: options?.fallbackUsed === true,
+        ...(trimString(options?.error) ? { error: trimString(options?.error)! } : {}),
+      },
+    });
   if (!coordinatorEnabled || !namespace) {
     if (!allowFallback) {
       throw new Error("News coordinator is required but unavailable.");
     }
-    return publishNewsFeed({
-      ...args,
-      shardName: coordinatorName,
+    return localPublish({
+      fallbackUsed: coordinatorEnabled,
+      error: coordinatorEnabled && !namespace ? "News coordinator is required but unavailable." : undefined,
     });
   }
 
@@ -6362,14 +6648,20 @@ async function publishNewsWithCoordinator(args: {
       published: Math.max(0, Math.floor(published)),
       totalStored: Math.max(0, Math.floor(totalStored)),
       merged: decoded.result.merged !== false,
+      publishMode: "coordinator",
+      coordinator: {
+        enabled: true,
+        shardName: coordinatorName,
+        fallbackUsed: false,
+      },
     };
-  } catch {
+  } catch (error) {
     if (!allowFallback) {
       throw new Error("News coordinator failed and fallback is disabled.");
     }
-    return publishNewsFeed({
-      ...args,
-      shardName: coordinatorName,
+    return localPublish({
+      fallbackUsed: true,
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -8057,6 +8349,7 @@ function renderLandingPage(env: WorkerEnv): Response {
 }
 
 async function handleSourcesCatalog(args: {
+  env: WorkerEnv;
   body: unknown;
 }): Promise<Response> {
   const payload = isRecord(args.body) ? args.body : {};
@@ -8076,6 +8369,10 @@ async function handleSourcesCatalog(args: {
       ?.split(",")
       .map((tag) => tag.trim().toLowerCase())
       .filter((tag) => tag.length > 0) ?? [];
+
+  const feedSources = OSINT_SOURCE_CATALOG.filter((source) => typeof source.feedUrl === "string" && source.feedUrl.length > 0);
+  const healthMap = await loadRssSourceHealthMap(args.env, feedSources);
+  const healthSummary = summarizeRssSourceHealth(feedSources, healthMap);
 
   const items = OSINT_SOURCE_CATALOG.filter((source) => {
     if (category && source.category.toLowerCase() !== category) {
@@ -8114,15 +8411,21 @@ async function handleSourcesCatalog(args: {
       }
     }
     return true;
-  }).slice(0, limit);
+  }).slice(0, limit).map((source) => {
+    const health = healthMap.get(source.id);
+    return health ? { ...source, health } : source;
+  });
+
+  const result: OsintSourcesCatalogEnvelope<OsintSource & { health?: RssSourceHealthRecord }> = {
+    returned: items.length,
+    total: OSINT_SOURCE_CATALOG.length,
+    items,
+    healthSummary,
+  };
 
   return responseJson(200, {
     ok: true,
-    result: {
-      returned: items.length,
-      total: OSINT_SOURCE_CATALOG.length,
-      items,
-    },
+    result,
   });
 }
 
@@ -9706,12 +10009,14 @@ async function handleNewsPublish(args: {
     }
   }
 
-  return responseJson(200, {
+  const response = responseJson(200, {
     ok: true,
     result: {
       published: publishResult.published,
       totalStored: publishResult.totalStored,
       merged: publishResult.merged,
+      publishMode: publishResult.publishMode,
+      coordinator: publishResult.coordinator,
       ...(outboundPayload === null
         ? {}
         : outboundQueued
@@ -9735,6 +10040,8 @@ async function handleNewsPublish(args: {
           }),
     },
   });
+  response.headers.set("x-intel-analytics-outcome", `news-publish:${publishResult.publishMode}`);
+  return response;
 }
 
 async function handleNewsGet(args: {
@@ -11186,6 +11493,12 @@ export class NewsIngestCoordinator {
         inputItems,
         merge,
         shardName,
+        publishMode: "coordinator",
+        coordinator: {
+          enabled: true,
+          shardName: shardName ?? "coordinator",
+          fallbackUsed: false,
+        },
       });
       const hotLimit = normalizeNewsHotOverlayLimit(this.env.NEWS_HOT_OVERLAY_LIMIT);
       const existingHot = await this.readHotItems(hotLimit);
@@ -11274,6 +11587,8 @@ const worker = {
       meta: { rpcMethod: string; cacheHit: boolean; outcome: string },
     ): Response => {
       const securedResponse = applyDefaultSecurityHeaders(response);
+      const outcome = trimString(securedResponse.headers.get("x-intel-analytics-outcome")) ?? meta.outcome;
+      securedResponse.headers.delete("x-intel-analytics-outcome");
       writeUsageAnalytics({
         env,
         path: url.pathname,
@@ -11283,7 +11598,7 @@ const worker = {
         cacheHit: meta.cacheHit,
         status: securedResponse.status,
         durationMs: Date.now() - startedAt,
-        outcome: meta.outcome,
+        outcome,
       });
       return securedResponse;
     };
@@ -11772,7 +12087,7 @@ const worker = {
           tags: url.searchParams.get("tags") ?? undefined,
           limit: url.searchParams.get("limit") ?? undefined,
         };
-        return finalize(await handleSourcesCatalog({ body }), {
+        return finalize(await handleSourcesCatalog({ env, body }), {
           rpcMethod: "sources.catalog",
           cacheHit: false,
           outcome: "sources-catalog",
@@ -11788,7 +12103,7 @@ const worker = {
         });
       }
 
-      return finalize(await handleSourcesCatalog({ body: parsed.body }), {
+      return finalize(await handleSourcesCatalog({ env, body: parsed.body }), {
         rpcMethod: "sources.catalog",
         cacheHit: false,
         outcome: "sources-catalog",
@@ -12259,12 +12574,21 @@ const worker = {
         rpcMethod: "rssIngest",
         mode: "kv",
         cacheHit: false,
-        status: 200,
+        status: ingest.publishOutcome === "failed" ? 500 : 200,
         durationMs: Date.now() - ingestStartedAt,
-        outcome: `sources:${ingest.selectedSources}|fetched:${ingest.fetchedItems}|published:${ingest.publishedItems}`,
-        extraDoubles: [ingest.selectedSources, ingest.fetchedItems, ingest.publishedItems],
+        outcome: [
+          `sources:${ingest.selectedSources}`,
+          `failed:${ingest.failedSources}`,
+          `failIds:${ingest.failingSourceIds.join(",") || "none"}`,
+          `fetched:${ingest.fetchedItems}`,
+          `published:${ingest.publishedItems}`,
+          `mode:${ingest.publishMode}`,
+          `outcome:${ingest.publishOutcome}`,
+          ...(trimString(ingest.publishError) ? [`publishError:${trimString(ingest.publishError)}`] : []),
+        ].join("|"),
+        extraDoubles: [ingest.selectedSources, ingest.failedSources, ingest.fetchedItems, ingest.publishedItems],
       });
-    } catch {
+    } catch (error) {
       writeUsageAnalytics({
         env,
         path: endpointPath,
@@ -12274,7 +12598,16 @@ const worker = {
         cacheHit: false,
         status: 500,
         durationMs: Date.now() - ingestStartedAt,
-        outcome: "rss-ingest-failed",
+        outcome: [
+          "sources:0",
+          "failed:0",
+          "failIds:none",
+          "fetched:0",
+          "published:0",
+          "mode:none",
+          "outcome:failed",
+          `publishError:${error instanceof Error ? error.message : String(error)}`,
+        ].join("|"),
       });
     }
 

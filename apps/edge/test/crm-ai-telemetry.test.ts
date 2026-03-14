@@ -3,14 +3,14 @@ import { describe, it } from "node:test";
 import { buildOwnerCrmAiTelemetryFailureResponse } from "../src/crm-ai-telemetry-proxy.ts";
 
 describe("buildOwnerCrmAiTelemetryFailureResponse", () => {
-  it("normalizes backend availability failures into a non-network-error payload", async () => {
+  it("preserves backend availability failures as real API errors", async () => {
     const response = buildOwnerCrmAiTelemetryFailureResponse("https://intel.pyro1121.com", {
       ok: false,
       status: 503,
       error: "AI telemetry query credentials are not configured.",
     });
 
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 503);
     const payload = await response.json() as { ok?: boolean; error?: string };
     assert.equal(payload.ok, false);
     assert.equal(payload.error, "AI telemetry query credentials are not configured.");

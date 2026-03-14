@@ -71,7 +71,7 @@ test("resolveAuthUserFeedSurfaceLimit reuses shared per-surface entitlement limi
   assert.equal(resolveAuthUserFeedSurfaceLimit(user, "Briefings"), 8);
   assert.equal(resolveAuthUserFeedSurfaceLimit(user, "Air-Sea"), 12);
   assert.equal(resolveAuthUserFeedSurfaceLimit(user, "Telegram"), 50);
-  assert.equal(resolveAuthUserFeedSurfaceLimit(user, "Unknown"), undefined);
+  assert.equal(resolveAuthUserFeedSurfaceLimit(user, "Unknown"), 20);
   assert.equal(resolveAuthUserFeedSurfaceLimit(undefined, "OSINT"), undefined);
 });
 

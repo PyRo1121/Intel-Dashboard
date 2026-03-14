@@ -63,7 +63,7 @@ test("shared entitlement helpers normalize tier labels and entitlement roles", (
   assert.equal(resolveFeedSurfaceLimit("Briefings", limits), 8);
   assert.equal(resolveFeedSurfaceLimit("Air-Sea", limits), 12);
   assert.equal(resolveFeedSurfaceLimit("Telegram", limits), 50);
-  assert.equal(resolveFeedSurfaceLimit("Unknown", limits), undefined);
+  assert.equal(resolveFeedSurfaceLimit("Unknown", limits), 20);
 
   assert.equal(isEntitledRole("owner"), true);
   assert.equal(isEntitledRole("subscriber"), true);

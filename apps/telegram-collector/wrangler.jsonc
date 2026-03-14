@@ -17,6 +17,10 @@
       {
         "name": "TELEGRAM_COLLECTOR",
         "class_name": "TelegramCollectorContainer"
+      },
+      {
+        "name": "TELEGRAM_COLLECTOR_CONTROL",
+        "class_name": "TelegramCollectorControlDO"
       }
     ]
   },
@@ -24,6 +28,10 @@
     {
       "tag": "v1-telegram-collector",
       "new_sqlite_classes": ["TelegramCollectorContainer"]
+    },
+    {
+      "tag": "v2-collector-control",
+      "new_sqlite_classes": ["TelegramCollectorControlDO"]
     }
   ],
   "vars": {

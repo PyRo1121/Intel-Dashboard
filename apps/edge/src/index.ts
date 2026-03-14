@@ -2199,33 +2199,27 @@ async function requireOwnerEntitlement(params: {
   }
   const userId = resolveUserId(params.user);
   const loginPrincipal = (params.user.login ?? "").trim();
-  let actingUserId = userId;
-  const primaryEntitlement = await fetchFeedEntitlement({
-    env: params.env,
-    userId,
-  });
-  let entitlement = primaryEntitlement;
   if (
     loginPrincipal.length > 0 &&
-    loginPrincipal !== userId &&
-    !isOwnerRole(primaryEntitlement.role)
+    loginPrincipal !== userId
   ) {
     const loginEntitlement = await fetchFeedEntitlement({
       env: params.env,
       userId: loginPrincipal,
     });
     if (isOwnerRole(loginEntitlement.role)) {
-      entitlement = loginEntitlement;
-      actingUserId = loginPrincipal;
+      return {
+        ok: true,
+        entitlement: loginEntitlement,
+        userId: loginPrincipal,
+      };
     }
   }
-  if (!isOwnerRole(entitlement.role)) {
-    entitlement = await fetchFeedEntitlement({
-      env: params.env,
-      userId,
-      userLogin: params.user.login,
-    });
-  }
+  const entitlement = await fetchFeedEntitlement({
+    env: params.env,
+    userId,
+    userLogin: params.user.login,
+  });
   if (!isOwnerRole(entitlement.role)) {
     return {
       ok: false,
@@ -2235,7 +2229,7 @@ async function requireOwnerEntitlement(params: {
   return {
     ok: true,
     entitlement,
-    userId: actingUserId,
+    userId,
   };
 }
 

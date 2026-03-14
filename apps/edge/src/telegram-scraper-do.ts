@@ -37,7 +37,7 @@ import { resolveTelegramScrapePlan } from "./telegram-scrape-plan";
 // Types
 // ============================================================================
 
-interface Env extends Cloudflare.Env {
+type Env = Cloudflare.Env & {
   GROQ_API_KEY: string;
   CF_API_TOKEN?: string;
   AI_GATEWAY_TOKEN?: string;
@@ -49,7 +49,7 @@ interface Env extends Cloudflare.Env {
   CHANNEL_BUILD_CONCURRENCY?: string;
   MAX_MESSAGES_PER_CHANNEL?: string;
   DEBUG_RUNTIME_LOGS?: string;
-}
+};
 
 interface StoredMessage {
   text_original: string;
@@ -3153,7 +3153,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
     // Download from Telegram CDN
     const dlRes = await fetch(item.url, {
       headers: { "User-Agent": USER_AGENT },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(this.getScrapeFetchTimeoutMs()),
     });
     if (!dlRes.ok) return item;
 

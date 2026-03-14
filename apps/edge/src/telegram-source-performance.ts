@@ -12,6 +12,19 @@ export interface TelegramSourcePerformanceStats {
   updatedAtMs: number | null;
 }
 
+export interface TelegramSourcePerformanceRow {
+  channel: string;
+  total_events: number;
+  lead_reports: number;
+  follow_on_reports: number;
+  corroborated_reports: number;
+  single_source_reports: number;
+  score: number;
+  last_lead_at: number | null;
+  last_seen_at: number | null;
+  updated_at: number | null;
+}
+
 export interface TelegramSourcePerformanceContribution {
   totalEvents: number;
   leadReports: number;
@@ -31,6 +44,36 @@ function clamp(value: number, min: number, max: number): number {
 
 function normalizeMetric(value: number | null | undefined): number {
   return Number.isFinite(value) ? Math.max(0, Number(value)) : 0;
+}
+
+function normalizeFiniteNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeNullableFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export function normalizeTelegramSourcePerformanceRows(rows: unknown): TelegramSourcePerformanceRow[] {
+  if (!Array.isArray(rows)) return [];
+  const normalized: TelegramSourcePerformanceRow[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    const record = row as Record<string, unknown>;
+    normalized.push({
+      channel: typeof record.channel === "string" ? record.channel : "",
+      total_events: normalizeFiniteNumber(record.total_events, 0),
+      lead_reports: normalizeFiniteNumber(record.lead_reports, 0),
+      follow_on_reports: normalizeFiniteNumber(record.follow_on_reports, 0),
+      corroborated_reports: normalizeFiniteNumber(record.corroborated_reports, 0),
+      single_source_reports: normalizeFiniteNumber(record.single_source_reports, 0),
+      score: normalizeFiniteNumber(record.score, 0),
+      last_lead_at: normalizeNullableFiniteNumber(record.last_lead_at),
+      last_seen_at: normalizeNullableFiniteNumber(record.last_seen_at),
+      updated_at: normalizeNullableFiniteNumber(record.updated_at),
+    });
+  }
+  return normalized;
 }
 
 function decayFactor(nowMs: number, updatedAtMs: number | null | undefined, halfLifeDays: number): number {

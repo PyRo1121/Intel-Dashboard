@@ -21,14 +21,14 @@ async function fetchJson(path) {
   } catch {
     throw new Error(`collector ${path} returned non-JSON: ${text.slice(0, 200)}`);
   }
-  return { response, payload };
+  return { response, payload, text };
 }
 
 for (const path of ["/status", "/status/live"]) {
-  const { response, payload } = await fetchJson(path);
-  assert(response.status === 200, `${path} expected 200, got ${response.status}`);
-  assert(payload?.ok === true, `${path} should report ok=true`);
-  assert(payload?.configured === true, `${path} should report configured=true`);
+  const { response, payload, text } = await fetchJson(path);
+  assert(response.status === 200, `${path} expected 200, got ${response.status}: ${text.slice(0, 200)}`);
+  assert(payload?.ok === true, `${path} should report ok=true: ${text.slice(0, 200)}`);
+  assert(payload?.configured === true, `${path} should report configured=true: ${text.slice(0, 200)}`);
 }
 
 console.log("Collector smoke passed");

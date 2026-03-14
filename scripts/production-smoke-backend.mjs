@@ -12,15 +12,16 @@ const response = await fetch(`${baseUrl}/health`, {
   redirect: "manual",
   signal: AbortSignal.timeout(20_000),
 });
+const body = await response.text();
 
 assert(
   response.status === 403 || response.status === 200,
-  `backend health expected 200 or 403, got ${response.status}`,
+  `backend health expected 200 or 403, got ${response.status}: ${body.slice(0, 200)}`,
 );
 
 if (response.status === 403) {
   const accessDomain = response.headers.get("cf-access-domain") || "";
-  assert(accessDomain.length > 0, "backend 403 should come from Cloudflare Access");
+  assert(accessDomain.length > 0, `backend 403 should come from Cloudflare Access: ${body.slice(0, 200)}`);
 }
 
 console.log(`Backend smoke passed with HTTP ${response.status}`);

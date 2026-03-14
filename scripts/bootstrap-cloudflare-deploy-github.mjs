@@ -7,16 +7,27 @@ function trim(value) {
 }
 
 function run(command, args, options = {}) {
-  return execFileSync(command, args, {
-    encoding: "utf8",
-    stdio: ["pipe", "pipe", "pipe"],
-    ...options,
-  });
+  try {
+    return execFileSync(command, args, {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+      ...options,
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to run ${command} ${args.join(" ")}: ${detail}`);
+  }
 }
 
 function parseAccountIdFromWhoAmI(output) {
-  const match = output.match(/\b([a-f0-9]{32})\b/i);
-  return match ? match[1] : "";
+  for (const line of output.split(/\r?\n/)) {
+    if (!line.includes("│")) continue;
+    const match = line.match(/([a-f0-9]{32})/i);
+    if (match) {
+      return match[1];
+    }
+  }
+  return "";
 }
 
 const repo = trim(process.env.GITHUB_REPOSITORY) || "PyRo1121/Intel-Dashboard";

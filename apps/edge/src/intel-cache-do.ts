@@ -418,14 +418,7 @@ export class IntelCacheDO extends DurableObject<Env> {
       CHAT_DEFAULT_MESSAGE_LIMIT,
       CHAT_MAX_MESSAGE_LIMIT,
     );
-    const params = new URLSearchParams({
-      sessions: String(sessions),
-      messages: String(messages),
-    });
-    return buildChatHistoryCacheKeyFromLimits(
-      Number(params.get("sessions")),
-      Number(params.get("messages")),
-    );
+    return buildChatHistoryCacheKeyFromLimits(sessions, messages);
   }
 
   private async clearChatHistoryCacheVariants(): Promise<void> {

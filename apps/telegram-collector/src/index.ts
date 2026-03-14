@@ -3,6 +3,7 @@ import type { TelegramCollectorBatch } from "@intel-dashboard/shared/telegram-co
 import { forwardCollectorBatch } from "./edge-client";
 import { isCollectorPushBatchPath } from "./routes";
 import { normalizeDebugCollectorBatch } from "./debug-batch";
+import { hasCollectorControlAccess } from "./control-auth";
 
 export interface Env {
   TELEGRAM_COLLECTOR: DurableObjectNamespace<any>;
@@ -86,11 +87,13 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     console.log("[collector-worker] route", request.method, url.pathname);
-    const container = getContainer(env.TELEGRAM_COLLECTOR as any, resolveCollectorInstanceName(env)) as {
-      fetch(request: Request): Promise<Response>;
-    };
+    const getCollectorContainer = () =>
+      getContainer(env.TELEGRAM_COLLECTOR as any, resolveCollectorInstanceName(env)) as {
+        fetch(request: Request): Promise<Response>;
+      };
 
     if (url.pathname === "/health") {
+      const container = getCollectorContainer();
       const response = await container.fetch(new Request("https://container/health"));
       const next = new Response(response.body, response);
       next.headers.set("x-collector-revision", COLLECTOR_WORKER_REVISION);
@@ -98,6 +101,7 @@ export default {
     }
 
     if (url.pathname === "/status") {
+      const container = getCollectorContainer();
       const response = await container.fetch(new Request("https://container/status"));
       const next = new Response(response.body, response);
       next.headers.set("x-collector-revision", COLLECTOR_WORKER_REVISION);
@@ -107,6 +111,12 @@ export default {
     if (isCollectorPushBatchPath(url.pathname)) {
       if (request.method !== "POST") {
         return json({ error: "Method Not Allowed" }, 405);
+      }
+      if (!env.COLLECTOR_SHARED_SECRET?.trim()) {
+        return json({ error: "Collector shared secret is not configured" }, 503);
+      }
+      if (!hasCollectorControlAccess(request, env.COLLECTOR_SHARED_SECRET)) {
+        return json({ error: "Unauthorized" }, 401);
       }
       const payload = parseJsonObject(await request.text());
       if (!payload) {
@@ -135,6 +145,7 @@ export default {
           },
         });
       }
+      const container = getCollectorContainer();
       const response = await container.fetch(
         new Request("https://container/control/push-batch", {
           method: "POST",
@@ -153,6 +164,13 @@ export default {
       if (request.method !== "POST") {
         return json({ error: "Method Not Allowed" }, 405);
       }
+      if (!env.COLLECTOR_SHARED_SECRET?.trim()) {
+        return json({ error: "Collector shared secret is not configured" }, 503);
+      }
+      if (!hasCollectorControlAccess(request, env.COLLECTOR_SHARED_SECRET)) {
+        return json({ error: "Unauthorized" }, 401);
+      }
+      const container = getCollectorContainer();
       const response = await container.fetch(
         new Request("https://container/control/join-configured-channels", {
           method: "POST",

@@ -176,7 +176,6 @@ async function refreshChannelAvailability() {
       .filter((username) => !available.has(username));
     state.mappedChannelIds = channelIdMap.size;
     scheduleControlStatePush();
-    scheduleControlStatePush();
     scheduleJoinRetry();
     scheduleAvailabilityRefresh();
   } catch (error) {
@@ -310,7 +309,6 @@ async function connectClient() {
         state.receivedMessages += 1;
         state.lastEventAt = new Date().toISOString();
         scheduleControlStatePush();
-        scheduleControlStatePush();
         if (!isLikelyChannelEvent(event)) return;
         const normalized = normalizeTelegramEventMessage(event, channelMap, channelIdMap);
         if (!normalized) {
@@ -329,7 +327,6 @@ async function connectClient() {
         state.matchedMessages += 1;
         buffer.push(normalized);
         scheduleControlStatePush();
-        scheduleControlStatePush();
         state.bufferSize = buffer.length;
         scheduleFlush();
       } catch (error) {
@@ -344,7 +341,6 @@ async function connectClient() {
     await joinMissingChannels();
     scheduleJoinRetry();
     scheduleAvailabilityRefresh();
-    scheduleControlStatePush();
     scheduleControlStatePush();
   } catch (error) {
     state.connected = false;

@@ -169,6 +169,10 @@ type ControlStatusResponse = CollectorControlState & {
   stateSource: "stored" | "default";
 };
 
+type NonceGuardVerificationResult =
+  | { ok: true; status: number }
+  | { ok: false; status: number; reason?: string; retryAfterMs?: number };
+
 function getCollectorContainerStub(env: Env): CollectorContainerStub {
   return getContainer(env.TELEGRAM_COLLECTOR, resolveCollectorInstanceName(env));
 }
@@ -224,9 +228,13 @@ async function writeControlState(env: Env, payload: CollectorControlState): Prom
   }));
 }
 
-async function verifyControlRequestWithNonceGuard(request: Request, env: Env): Promise<boolean> {
+async function verifyControlRequestWithNonceGuard(request: Request, env: Env): Promise<NonceGuardVerificationResult> {
   if (!verifyControlRequest(request, env.COLLECTOR_SHARED_SECRET)) {
-    return false;
+    return {
+      ok: false,
+      status: 403,
+      reason: "invalid_control_signature",
+    };
   }
   const timestampMs = Number.parseInt(request.headers.get("X-Admin-Timestamp") || "", 10);
   const nonce = request.headers.get("X-Admin-Nonce") || "";
@@ -240,7 +248,21 @@ async function verifyControlRequestWithNonceGuard(request: Request, env: Env): P
       clientIp: request.headers.get("CF-Connecting-IP") ?? "unknown",
     }),
   }));
-  return response.ok;
+  const payload = await response.clone().json().catch(() => null) as { reason?: unknown; error?: unknown; retryAfterMs?: unknown } | null;
+  if (response.ok) {
+    return { ok: true, status: response.status };
+  }
+  return {
+    ok: false,
+    status: response.status,
+    reason:
+      typeof payload?.reason === "string"
+        ? payload.reason
+        : typeof payload?.error === "string"
+          ? payload.error
+          : undefined,
+    retryAfterMs: typeof payload?.retryAfterMs === "number" ? payload.retryAfterMs : undefined,
+  };
 }
 
 function verifyControlRequest(request: Request, secret: string | undefined): boolean {
@@ -249,6 +271,24 @@ function verifyControlRequest(request: Request, secret: string | undefined): boo
     secret,
     maxSkewMs: CONTROL_REQUEST_MAX_SKEW_MS,
   });
+}
+
+function buildNonceGuardFailureResponse(result: Extract<NonceGuardVerificationResult, { ok: false }>): Response {
+  const headers = result.status === 429 && typeof result.retryAfterMs === "number"
+    ? { "Retry-After": String(Math.max(1, Math.ceil(result.retryAfterMs / 1000))) }
+    : undefined;
+  return new Response(
+    JSON.stringify(result.reason ? { error: "Forbidden", reason: result.reason } : { error: "Forbidden" }),
+    {
+      status: result.status,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "x-collector-revision": COLLECTOR_WORKER_REVISION,
+        ...(headers ?? {}),
+      },
+    },
+  );
 }
 
 function parseJsonObject(text: string): Record<string, unknown> | null {
@@ -346,8 +386,9 @@ export default {
       if (request.method !== "POST") {
         return json({ error: "Method Not Allowed" }, 405);
       }
-      if (!(await verifyControlRequestWithNonceGuard(request, env))) {
-        return json({ error: "Forbidden" }, 403);
+      const guardResult = await verifyControlRequestWithNonceGuard(request, env);
+      if (!guardResult.ok) {
+        return buildNonceGuardFailureResponse(guardResult);
       }
       const payload = parseJsonObject(await request.text());
       if (!payload) {
@@ -380,8 +421,9 @@ export default {
       if (request.method !== "POST") {
         return json({ error: "Method Not Allowed" }, 405);
       }
-      if (!(await verifyControlRequestWithNonceGuard(request, env))) {
-        return json({ error: "Forbidden" }, 403);
+      const guardResult = await verifyControlRequestWithNonceGuard(request, env);
+      if (!guardResult.ok) {
+        return buildNonceGuardFailureResponse(guardResult);
       }
       const payload = parseJsonObject(await request.text());
       if (!payload) {
@@ -401,8 +443,9 @@ export default {
       if (request.method !== "POST") {
         return json({ error: "Method Not Allowed" }, 405);
       }
-      if (!(await verifyControlRequestWithNonceGuard(request, env))) {
-        return json({ error: "Forbidden" }, 403);
+      const guardResult = await verifyControlRequestWithNonceGuard(request, env);
+      if (!guardResult.ok) {
+        return buildNonceGuardFailureResponse(guardResult);
       }
       const response = await getCollectorControlStub(env).fetch(new Request("https://do/reset", { method: "POST" }));
       const next = new Response(response.body, response);
@@ -414,8 +457,9 @@ export default {
       if (request.method !== "POST") {
         return json({ error: "Method Not Allowed" }, 405);
       }
-      if (!(await verifyControlRequestWithNonceGuard(request, env))) {
-        return json({ error: "Forbidden" }, 403);
+      const guardResult = await verifyControlRequestWithNonceGuard(request, env);
+      if (!guardResult.ok) {
+        return buildNonceGuardFailureResponse(guardResult);
       }
       try {
         const response = await proxyCollectorRequest(container, new Request("https://container/control/join-configured-channels", {

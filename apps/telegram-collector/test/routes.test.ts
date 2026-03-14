@@ -95,6 +95,8 @@ test("collector control routes enforce nonce-guarded control signatures", () => 
   const source = fs.readFileSync(path.resolve("src/index.ts"), "utf8");
   const authSource = fs.readFileSync(path.resolve("src/control-auth.ts"), "utf8");
   assert.match(source, /verifyControlRequestWithNonceGuard/);
+  assert.match(source, /buildNonceGuardFailureResponse/);
+  assert.match(source, /Retry-After/);
   assert.match(source, /url\.pathname === "\/admin\/guard"/);
   assert.match(source, /blockConcurrencyWhile/);
   assert.match(source, /verifySignedControlRequest/);

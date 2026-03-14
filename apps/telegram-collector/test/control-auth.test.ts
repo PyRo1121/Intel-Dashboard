@@ -66,6 +66,67 @@ test("verifySignedControlRequest accepts valid signed requests and rejects tampe
   );
 });
 
+test("verifySignedControlRequest rejects skewed timestamps and malformed headers", () => {
+  const secret = "shared-secret";
+  const nowMs = 10_000;
+  const valid = buildSignedRequest(secret, nowMs, "nonce-window");
+  assert.equal(
+    verifySignedControlRequest({
+      request: valid,
+      secret,
+      maxSkewMs: 5_000,
+      nowMs: nowMs + 4_999,
+    }),
+    true,
+  );
+  assert.equal(
+    verifySignedControlRequest({
+      request: valid,
+      secret,
+      maxSkewMs: 5_000,
+      nowMs: nowMs + 5_001,
+    }),
+    false,
+  );
+  assert.equal(
+    verifySignedControlRequest({
+      request: valid,
+      secret,
+      maxSkewMs: 5_000,
+      nowMs: nowMs - 5_001,
+    }),
+    false,
+  );
+
+  const missingHeaders = new Request(valid.url, { method: valid.method });
+  assert.equal(
+    verifySignedControlRequest({
+      request: missingHeaders,
+      secret,
+      maxSkewMs: 5_000,
+      nowMs,
+    }),
+    false,
+  );
+
+  const malformedSignature = new Request(valid.url, {
+    method: valid.method,
+    headers: {
+      ...Object.fromEntries(valid.headers.entries()),
+      "X-Admin-Signature": "short",
+    },
+  });
+  assert.equal(
+    verifySignedControlRequest({
+      request: malformedSignature,
+      secret,
+      maxSkewMs: 5_000,
+      nowMs,
+    }),
+    false,
+  );
+});
+
 test("enforceControlNonceGuard rejects replayed nonces", async () => {
   const storage = new MemoryStorage();
   const base = {
@@ -125,4 +186,88 @@ test("enforceControlNonceGuard rate limits repeated requests within the same win
     reason: "rate_limited",
     retryAfterMs: 58_000,
   });
+});
+
+test("enforceControlNonceGuard allows nonce reuse after ttl expiry and resets per scope/ip/window", async () => {
+  const storage = new MemoryStorage();
+
+  assert.deepEqual(
+    await enforceControlNonceGuard({
+      storage,
+      scope: "/control/state-update",
+      nonce: "nonce-expire",
+      timestampMs: 1_000,
+      clientIp: "127.0.0.1",
+      maxSkewMs: 10_000,
+      nonceTtlMs: 500,
+      rateWindowMs: 60_000,
+      rateLimitPerWindow: 1,
+      nowMs: 1_000,
+    }),
+    { ok: true },
+  );
+
+  assert.deepEqual(
+    await enforceControlNonceGuard({
+      storage,
+      scope: "/control/state-update",
+      nonce: "nonce-expire",
+      timestampMs: 1_600,
+      clientIp: "127.0.0.1",
+      maxSkewMs: 10_000,
+      nonceTtlMs: 500,
+      rateWindowMs: 60_000,
+      rateLimitPerWindow: 10,
+      nowMs: 1_600,
+    }),
+    { ok: true },
+  );
+
+  assert.deepEqual(
+    await enforceControlNonceGuard({
+      storage,
+      scope: "/control/join-configured-channels",
+      nonce: "nonce-scope",
+      timestampMs: 2_000,
+      clientIp: "127.0.0.1",
+      maxSkewMs: 10_000,
+      nonceTtlMs: 10_000,
+      rateWindowMs: 60_000,
+      rateLimitPerWindow: 1,
+      nowMs: 2_000,
+    }),
+    { ok: true },
+  );
+
+  assert.deepEqual(
+    await enforceControlNonceGuard({
+      storage,
+      scope: "/control/join-configured-channels",
+      nonce: "nonce-other-ip",
+      timestampMs: 2_000,
+      clientIp: "10.0.0.2",
+      maxSkewMs: 10_000,
+      nonceTtlMs: 10_000,
+      rateWindowMs: 60_000,
+      rateLimitPerWindow: 1,
+      nowMs: 2_000,
+    }),
+    { ok: true },
+  );
+
+  assert.deepEqual(
+    await enforceControlNonceGuard({
+      storage,
+      scope: "/control/join-configured-channels",
+      nonce: "nonce-next-window",
+      timestampMs: 61_000,
+      clientIp: "127.0.0.1",
+      maxSkewMs: 70_000,
+      nonceTtlMs: 10_000,
+      rateWindowMs: 60_000,
+      rateLimitPerWindow: 1,
+      nowMs: 61_000,
+    }),
+    { ok: true },
+  );
 });

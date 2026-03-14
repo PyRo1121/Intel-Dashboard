@@ -88,6 +88,35 @@ test('resolveTelegramScrapePlan splits non-MTProto channels into must-hit, fast,
   assert.ok(plan.channels.length >= 6);
 });
 
+test('resolveTelegramScrapePlan keeps must-hit channels stable while fast and slow tiers rotate across slots', () => {
+  const channels = CHANNELS.slice(0, 30);
+  const planA = resolveTelegramScrapePlan({
+    channels,
+    nowMs: 0,
+    intervalMs: 10_000,
+    rotationWindowSeconds: 30,
+    hotChannelsPerCycle: 12,
+    mustHitChannelsPerCycle: 6,
+    fastRotateBandSize: 12,
+    slowRotationMultiplier: 4,
+  });
+  const planB = resolveTelegramScrapePlan({
+    channels,
+    nowMs: 30_000,
+    intervalMs: 10_000,
+    rotationWindowSeconds: 30,
+    hotChannelsPerCycle: 12,
+    mustHitChannelsPerCycle: 6,
+    fastRotateBandSize: 12,
+    slowRotationMultiplier: 4,
+  });
+
+  const mustHitA = planA.channels.slice(0, planA.mustHitCount).map((channel) => channel.username);
+  const mustHitB = planB.channels.slice(0, planB.mustHitCount).map((channel) => channel.username);
+  assert.deepEqual(mustHitA, mustHitB);
+  assert.notDeepEqual(planA.channels.map((channel) => channel.username), planB.channels.map((channel) => channel.username));
+});
+
 
 test('summarizeSlowFetches reports the slowest fetches above threshold', () => {
   const summary = summarizeSlowFetches([
@@ -98,4 +127,21 @@ test('summarizeSlowFetches reports the slowest fetches above threshold', () => {
   ], 3000, 2);
   assert.equal(summary, 'd:7100ms, b:6200ms');
   assert.equal(summarizeSlowFetches([{ username: 'a', durationMs: 1000 }]), null);
+  assert.equal(summarizeSlowFetches([]), null);
+  assert.equal(
+    summarizeSlowFetches([
+      { username: 'a', durationMs: 2999 },
+      { username: 'b', durationMs: Number.NaN },
+      { username: 'c', durationMs: Number.POSITIVE_INFINITY },
+    ], 3000, 1),
+    null,
+  );
+  assert.equal(
+    summarizeSlowFetches([
+      { username: 'a', durationMs: 6200 },
+      { username: 'b', durationMs: 7100 },
+      { username: 'c', durationMs: 4800 },
+    ], 3000, 1),
+    'b:7100ms',
+  );
 });

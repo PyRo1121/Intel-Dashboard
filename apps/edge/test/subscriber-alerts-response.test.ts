@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSubscriberAlertsResponse } from "../src/subscriber-alerts-response.ts";
+import {
+  ALERT_MATERIALIZATION_FAILURE_MESSAGE,
+  buildSubscriberAlertsResponse,
+  getSubscriberAlertsMaterializationFailureMessage,
+} from "../src/subscriber-alerts-response.ts";
 
 test("buildSubscriberAlertsResponse preserves a healthy alerts payload", () => {
   const payload = buildSubscriberAlertsResponse({
@@ -22,5 +26,9 @@ test("buildSubscriberAlertsResponse marks the payload degraded when materializat
     new Error("collector unavailable"),
   );
   assert.equal(payload.degraded?.materializationFailed, true);
-  assert.equal(payload.degraded?.message, "collector unavailable");
+  assert.equal(payload.degraded?.message, ALERT_MATERIALIZATION_FAILURE_MESSAGE);
+});
+
+test("getSubscriberAlertsMaterializationFailureMessage stays stable and user-safe", () => {
+  assert.equal(getSubscriberAlertsMaterializationFailureMessage(), ALERT_MATERIALIZATION_FAILURE_MESSAGE);
 });

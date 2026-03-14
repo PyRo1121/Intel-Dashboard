@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { resolveBackendEndpointUrl, usesBackendServiceBinding } from "./backend-origin";
+import { enforceIntelAdminGuard, enforceWebhookDedupe } from "./intel-cache-guards";
 import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
 import { chunkEntries, collectStaleChunkKeys, MAX_DO_STORAGE_BATCH_ENTRIES } from "./storage-batches";
@@ -269,35 +270,22 @@ export class IntelCacheDO extends DurableObject<Env> {
       return jsonResponse({ ok: false, reason: "invalid_payload" }, { status: 400 });
     }
 
-    const now = Date.now();
-    if (Math.abs(now - timestampMs) > 5 * 60 * 1000) {
-      return jsonResponse({ ok: false, reason: "timestamp_out_of_window" }, { status: 409 });
-    }
-
-    const nonceKey = `admin:nonce:${scope}:${nonce}`;
-    const replaySeen = await this.ctx.storage.get<number>(nonceKey);
-    if (typeof replaySeen === "number") {
-      if (now - replaySeen <= ADMIN_NONCE_TTL_SECONDS * 1000) {
-        return jsonResponse({ ok: false, reason: "replay_detected" }, { status: 409 });
-      }
-      await this.ctx.storage.delete(nonceKey);
-    }
-
-    const window = Math.floor(now / ADMIN_RATE_WINDOW_MS);
-    const rateKey = `admin:rl:${scope}:${clientIp}:${window}`;
-    const hits = (await this.ctx.storage.get<number>(rateKey)) ?? 0;
-    if (hits >= ADMIN_RATE_LIMIT_PER_WINDOW) {
-      return jsonResponse({
-        ok: false,
-        reason: "rate_limited",
-        retryAfterMs: ADMIN_RATE_WINDOW_MS - (now % ADMIN_RATE_WINDOW_MS),
-      }, { status: 429 });
-    }
-
-    await this.ctx.storage.put(rateKey, hits + 1);
-    await this.ctx.storage.put(nonceKey, now);
-
-    return jsonResponse({ ok: true }, { status: 200 });
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const result = await enforceIntelAdminGuard({
+        storage: this.ctx.storage,
+        scope,
+        nonce,
+        timestampMs,
+        clientIp,
+        nonceTtlMs: ADMIN_NONCE_TTL_SECONDS * 1000,
+        rateWindowMs: ADMIN_RATE_WINDOW_MS,
+        rateLimitPerWindow: ADMIN_RATE_LIMIT_PER_WINDOW,
+        maxSkewMs: 5 * 60 * 1000,
+      });
+      return result.ok
+        ? jsonResponse({ ok: true }, { status: 200 })
+        : jsonResponse(result, { status: result.status });
+    });
   }
 
   private async handleWebhookDedupe(request: Request): Promise<Response> {
@@ -312,24 +300,20 @@ export class IntelCacheDO extends DurableObject<Env> {
       return jsonResponse({ ok: false, reason: "invalid_json" }, { status: 400 });
     }
 
-    const provider = typeof payload.provider === "string" ? payload.provider.trim().toLowerCase() : "";
-    const eventId = typeof payload.eventId === "string" ? payload.eventId.trim() : "";
+    const provider = typeof payload.provider === "string" ? payload.provider : "";
+    const eventId = typeof payload.eventId === "string" ? payload.eventId : "";
 
-    if (!provider || !eventId) {
-      return jsonResponse({ ok: false, reason: "invalid_payload" }, { status: 400 });
-    }
-
-    const key = `webhook:${provider}:${eventId}`;
-    const seen = await this.ctx.storage.get<number>(key);
-    if (typeof seen === "number") {
-      if (Date.now() - seen <= WEBHOOK_EVENT_TTL_SECONDS * 1000) {
-        return jsonResponse({ ok: false, duplicate: true }, { status: 409 });
-      }
-      await this.ctx.storage.delete(key);
-    }
-
-    await this.ctx.storage.put(key, Date.now());
-    return jsonResponse({ ok: true, duplicate: false }, { status: 200 });
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const result = await enforceWebhookDedupe({
+        storage: this.ctx.storage,
+        provider,
+        eventId,
+        eventTtlMs: WEBHOOK_EVENT_TTL_SECONDS * 1000,
+      });
+      return result.ok
+        ? jsonResponse(result, { status: 200 })
+        : jsonResponse(result, { status: result.status });
+    });
   }
 
   async alarm(): Promise<void> {

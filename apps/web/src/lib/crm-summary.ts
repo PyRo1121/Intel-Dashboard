@@ -129,7 +129,16 @@ export function getCrmQualityBadgeTone(state: CrmDataQualityState): string {
     (state?.placeholderNameUsers ?? 0) +
     (state?.syntheticLoginUsers ?? 0) +
     (state?.orphanTrackedUsers ?? 0);
+  const providerCoverage = Math.max(0, state?.providerCoveragePct ?? 100);
+  const billingCoverage = Math.max(0, state?.billingCoveragePct ?? 100);
+  const degradedCoverage = providerCoverage < 90 || billingCoverage < 90;
+  const severeIssues = issues >= 10 || providerCoverage < 75 || billingCoverage < 75;
+  if (severeIssues) {
+    return "text-rose-300 border-rose-500/40 bg-rose-500/10";
+  }
   return issues > 0
+    ? "text-amber-300 border-amber-500/40 bg-amber-500/10"
+    : degradedCoverage
     ? "text-amber-300 border-amber-500/40 bg-amber-500/10"
     : "text-emerald-300 border-emerald-500/40 bg-emerald-500/10";
 }

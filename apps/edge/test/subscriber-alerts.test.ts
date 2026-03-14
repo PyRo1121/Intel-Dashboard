@@ -77,7 +77,7 @@ test("telegram alerts match watched regions and favorite channels", () => {
 test("osint alerts match watched regions and favorite sources only for high severity", () => {
   const prefs = createEmptySubscriberFeedPreferences();
   prefs.watchRegions = ["global"];
-  prefs.favoriteSources = ["example desk"];
+  prefs.favoriteSources = ["example-desk"];
 
   const alerts = matchOsintSubscriberAlerts({
     userId: "user-1",

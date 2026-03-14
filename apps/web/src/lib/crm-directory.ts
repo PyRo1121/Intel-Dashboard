@@ -12,6 +12,8 @@ export type CrmDirectoryUserLike = {
   name: string;
   email: string;
   providers?: string[];
+  createdAtMs?: number;
+  updatedAtMs?: number;
 };
 
 export function buildCrmAccountStatusMap(

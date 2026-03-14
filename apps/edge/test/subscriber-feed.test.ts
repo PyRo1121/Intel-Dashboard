@@ -67,6 +67,27 @@ test("normalize feed items mark favorite/watch matches and sort by combined scor
   assert.equal(sortSubscriberFeedItems([osint, telegram])[0]?.sourceSurface, "telegram");
 });
 
+test("osint favorite matching accepts provider slug keys", () => {
+  const prefs = createEmptySubscriberFeedPreferences();
+  prefs.favoriteSources = ["example-desk"];
+
+  const osint = normalizeOsintSubscriberFeedItem(
+    {
+      title: "OSINT item",
+      summary: "OSINT item summary",
+      source: "Example Desk",
+      url: "https://example.com/item",
+      timestamp: "2026-03-09T11:00:00.000Z",
+      region: "global",
+      category: "news",
+      severity: "high",
+    },
+    prefs,
+  );
+
+  assert.equal(osint.favoriteMatch, true);
+});
+
 test("normalize feed preferences ignores non-string watch values", () => {
   const prefs = normalizeSubscriberFeedPreferences({
     watchTags: ["alpha", 42, null, " beta "],

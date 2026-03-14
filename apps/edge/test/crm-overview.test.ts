@@ -58,6 +58,9 @@ test("buildOwnerCrmOverviewPayload preserves backend degraded state while adding
   });
 
   assert.equal(payload.ok, true);
+  if (!payload.ok) {
+    throw new Error("expected CRM overview payload to be ok");
+  }
   const result = payload.result as unknown as {
     generatedAtMs: number;
     degraded: unknown;
@@ -115,6 +118,9 @@ test("buildOwnerCrmOverviewPayload keeps edge-derived directory and data quality
     },
   });
 
+  if (!payload.ok) {
+    throw new Error("expected CRM overview payload to be ok");
+  }
   const result = payload.result as unknown as {
     generatedAtMs: number;
     directory: { totalUsers: number; orphanTrackedUsers: number };

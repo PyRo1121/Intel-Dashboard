@@ -50,6 +50,7 @@ export default function MyAlertsPage() {
 
   const items = () => alerts()?.items ?? [];
   const unreadCount = () => alerts()?.unreadCount ?? 0;
+  const degradedNotice = () => alerts()?.degraded?.message ?? "";
   const loadingInitial = () => isInitialResourceLoading(alerts.state, items().length);
 
   const applyControlsToForm = (preferences: SubscriberAlertPreferences | null | undefined) => {
@@ -228,6 +229,12 @@ export default function MyAlertsPage() {
               {busyAll() ? "Marking..." : "Mark all read"}
             </button>
           </section>
+
+          <Show when={degradedNotice()}>
+            <div class="surface-card mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              {degradedNotice()}
+            </div>
+          </Show>
 
           <Show when={!loadingInitial()} fallback={<div class="surface-card p-6 text-sm text-zinc-400">Loading My Alerts...</div>}>
             <div class="space-y-2">

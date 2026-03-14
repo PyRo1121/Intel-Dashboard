@@ -56,9 +56,14 @@ test("shared entitlement helpers normalize tier labels and entitlement roles", (
     telegramTotalMessagesMax: 50,
   };
   assert.equal(resolveFeedSurfaceLimit("OSINT", limits), 20);
+  assert.equal(resolveFeedSurfaceLimit("Overview", limits), 20);
+  assert.equal(resolveFeedSurfaceLimit("Map", limits), 20);
+  assert.equal(resolveFeedSurfaceLimit("My-Feed", limits), 20);
+  assert.equal(resolveFeedSurfaceLimit("My-Alerts", limits), 20);
   assert.equal(resolveFeedSurfaceLimit("Briefings", limits), 8);
   assert.equal(resolveFeedSurfaceLimit("Air-Sea", limits), 12);
   assert.equal(resolveFeedSurfaceLimit("Telegram", limits), 50);
+  assert.equal(resolveFeedSurfaceLimit("Unknown", limits), undefined);
 
   assert.equal(isEntitledRole("owner"), true);
   assert.equal(isEntitledRole("subscriber"), true);

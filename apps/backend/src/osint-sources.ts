@@ -2009,4 +2009,21 @@ const EXPANDED_OSINT_SOURCE_CATALOG: BaseOsintSource[] = [
   },
 ];
 
-export const OSINT_SOURCE_CATALOG: OsintSource[] = [...BASE_OSINT_SOURCE_CATALOG, ...EXPANDED_OSINT_SOURCE_CATALOG].map(buildSource);
+export const DISABLED_OSINT_SOURCE_IDS = new Set<string>([
+  "reuters-world",
+  "emsc-quakes",
+  "noaa-space-weather",
+  "sentinel-hub",
+  "ifrc-emergency",
+  "opensky-network",
+  "marine-traffic",
+  "maritime-executive",
+  "cisco-talos",
+  "google-threat-intelligence",
+  "dark-reading",
+  "intel-crab",
+]);
+
+export const OSINT_SOURCE_CATALOG: OsintSource[] = [...BASE_OSINT_SOURCE_CATALOG, ...EXPANDED_OSINT_SOURCE_CATALOG]
+  .filter((source) => !DISABLED_OSINT_SOURCE_IDS.has(source.id))
+  .map(buildSource);

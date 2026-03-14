@@ -1,5 +1,11 @@
 import { Meta, Title } from "@solidjs/meta";
 import { For, Show, createMemo, createResource, createSignal } from "solid-js";
+import type {
+  CrmAiTelemetryResult,
+  CrmCustomerOpsPayload,
+  CrmCustomerOpsResult,
+  CrmOverviewResult,
+} from "@intel-dashboard/shared/crm.ts";
 import { computeAiCacheHitRatePercent, getAiTelemetryLabel, getAiTelemetryMaxValue, getAiTelemetryTopEntryBy, readAiTelemetryItems } from "~/lib/ai-telemetry";
 import { useAuth } from "~/lib/auth";
 import { isAuthUserOwner } from "~/lib/auth-user";
@@ -42,261 +48,15 @@ import {
 } from "~/lib/utils";
 import { CRM_DESCRIPTION, CRM_TITLE } from "@intel-dashboard/shared/route-meta.ts";
 
-type CrmUser = {
-  id: string;
-  login: string;
-  name: string;
-  email: string;
-  avatarUrl?: string;
-  providers?: string[];
-  createdAtMs: number;
-  updatedAtMs: number;
-};
-
-type CrmPayload = {
-  ok?: boolean;
-  error?: string;
-  result?: {
-    generatedAtMs?: number;
-    degraded?: {
-      partial?: boolean;
-      stale?: boolean;
-      accountsTruncated?: boolean;
-      activityTruncated?: boolean;
-      reasons?: string[];
-    };
-    directory?: {
-      totalUsers?: number;
-      activeSessions?: number;
-      newUsers24h?: number;
-      newUsers7d?: number;
-      untrackedUsers?: number;
-      orphanTrackedUsers?: number;
-      users?: CrmUser[];
-    };
-    billing?: {
-      trackedUsers?: number;
-      statuses?: {
-        active?: number;
-        trialing?: number;
-        canceled?: number;
-        expired?: number;
-        none?: number;
-      };
-      mrrActiveUsd?: number;
-      arrActiveUsd?: number;
-      accounts?: Array<{
-        userId?: string;
-        status?: string;
-        monthlyPriceUsd?: number;
-        updatedAtMs?: number;
-      }>;
-      stripe?: {
-        live?: boolean;
-        source?: string;
-        syncedAtMs?: number;
-        error?: string;
-        subscriptionsTotal?: number;
-        customersTotal?: number;
-        statuses?: {
-          active?: number;
-          trialing?: number;
-          pastDue?: number;
-          unpaid?: number;
-          canceled?: number;
-        };
-      };
-    };
-    telemetry?: {
-      events24h?: number;
-      events7d?: number;
-      uniqueUsers24h?: number;
-      uniqueUsers7d?: number;
-      trialStarts7d?: number;
-      paidStarts7d?: number;
-      cancellations7d?: number;
-      cancellations30d?: number;
-      topKinds7d?: Array<{ kind?: string; count?: number }>;
-    };
-    commandCenter?: {
-      revenue?: {
-        mrrActiveUsd?: number;
-        arrActiveUsd?: number;
-        arpuActiveUsd?: number;
-        mrrBillableUsd?: number;
-        arrBillableUsd?: number;
-        source?: string;
-      };
-      funnel?: {
-        trialStarts7d?: number;
-        paidStarts7d?: number;
-        trialToPaidRate7dPct?: number;
-        subscriberPenetrationPct?: number;
-        trialingSharePct?: number;
-      };
-      risk?: {
-        cancellations7d?: number;
-        cancellations30d?: number;
-        churnRate30dPct?: number;
-        netSubscriberDelta7d?: number;
-      };
-      activity?: {
-        events24h?: number;
-        events7d?: number;
-        uniqueUsers24h?: number;
-        uniqueUsers7d?: number;
-      };
-    };
-    dataQuality?: {
-      missingAvatarUsers?: number;
-      placeholderNameUsers?: number;
-      syntheticLoginUsers?: number;
-      providerCoveragePct?: number;
-      billingCoveragePct?: number;
-      mappedBillingUsers?: number;
-      untrackedUsers?: number;
-      orphanTrackedUsers?: number;
-    };
-    latestEvents?: Array<{
-      id?: string;
-      userId?: string;
-      kind?: string;
-      source?: string;
-      status?: string;
-      note?: string;
-      atMs?: number;
-    }>;
-  };
-};
-
-type CrmCustomerOpsPayload = {
-  ok?: boolean;
-  error?: string;
-  result?: {
-    targetUserId?: string;
-    account?: {
-      status?: string;
-      stripeCustomerId?: string;
-      stripeSubscriptionId?: string;
-      monthlyPriceUsd?: number;
-    };
-    stripe?: {
-      customer?: {
-        id?: string;
-        email?: string | null;
-        name?: string | null;
-        currency?: string;
-        delinquent?: boolean;
-        createdAtMs?: number | null;
-        balanceUsd?: number;
-      };
-      subscription?: {
-        id?: string | null;
-        status?: string | null;
-        cancelAtPeriodEnd?: boolean;
-        cancelAtMs?: number | null;
-        currentPeriodEndMs?: number | null;
-        canceledAtMs?: number | null;
-      } | null;
-      invoices?: Array<{
-        id?: string;
-        status?: string;
-        amountDueUsd?: number;
-        amountPaidUsd?: number;
-        paid?: boolean;
-        createdAtMs?: number;
-        hostedInvoiceUrl?: string | null;
-      }>;
-      charges?: Array<{
-        id?: string;
-        status?: string;
-        amountUsd?: number;
-        refundedUsd?: number;
-        paid?: boolean;
-        refunded?: boolean;
-        createdAtMs?: number;
-        receiptUrl?: string | null;
-        paymentIntentId?: string | null;
-      }>;
-    };
-    cache?: {
-      source?: string;
-      stale?: boolean;
-      fetchedAtMs?: number;
-    };
-  };
-};
-
-type AiTelemetryPayload = {
-  ok?: boolean;
-  error?: string;
-  result?: {
-    generatedAtMs?: number;
-    window?: string;
-    summary?: {
-      calls?: number;
-      promptTokens?: number;
-      completionTokens?: number;
-      totalTokens?: number;
-      outputInputRatio?: number;
-      avgDurationMs?: number;
-      p95DurationMs?: number;
-      failures?: number;
-      cacheHits?: number;
-      cacheMisses?: number;
-    };
-    lanes?: Array<{
-      label?: string;
-      calls?: number;
-      totalTokens?: number;
-      promptTokens?: number;
-      completionTokens?: number;
-      outputInputRatio?: number;
-      avgDurationMs?: number;
-      p95DurationMs?: number;
-      failures?: number;
-      cacheHits?: number;
-      cacheMisses?: number;
-    }>;
-    models?: Array<{
-      label?: string;
-      calls?: number;
-      totalTokens?: number;
-      promptTokens?: number;
-      completionTokens?: number;
-      outputInputRatio?: number;
-      avgDurationMs?: number;
-      p95DurationMs?: number;
-      failures?: number;
-      cacheHits?: number;
-      cacheMisses?: number;
-    }>;
-    outcomes?: Array<{
-      label?: string;
-      calls?: number;
-    }>;
-    cacheStatuses?: Array<{
-      label?: string;
-      calls?: number;
-    }>;
-    series?: Array<{
-      bucket?: string;
-      calls?: number;
-      totalTokens?: number;
-      completionTokens?: number;
-    }>;
-  };
-};
-
 export default function CrmRoute() {
   const auth = useAuth();
   const isOwner = () => isAuthUserOwner(auth.user());
-  const [crm, { refetch }] = createResource(() => fetchCrmOverview<CrmPayload>());
+  const [crm, { refetch }] = createResource(() => fetchCrmOverview());
   const [aiWindow, setAiWindow] = createSignal<"15m" | "1h" | "24h" | "7d" | "30d">("1h");
   const aiTelemetrySource = createMemo(() => (isOwner() ? aiWindow() : undefined));
   const [aiTelemetry, { refetch: refetchAiTelemetry }] = createResource(
     aiTelemetrySource,
-    (window) => fetchCrmAiTelemetry<AiTelemetryPayload>(window),
+    (window) => fetchCrmAiTelemetry(window),
   );
   const [searchTerm, setSearchTerm] = createSignal("");
   const [statusFilter, setStatusFilter] = createSignal<"all" | "active" | "trialing" | "canceled" | "expired" | "none">("all");
@@ -308,8 +68,22 @@ export default function CrmRoute() {
   const [refundAmountUsd, setRefundAmountUsd] = createSignal("");
   const [refundReason, setRefundReason] = createSignal<"requested_by_customer" | "duplicate" | "fraudulent">("requested_by_customer");
 
-  const crmResult = createMemo(() => crm()?.result);
-  const aiResult = createMemo(() => aiTelemetry()?.result);
+  const crmError = createMemo(() => {
+    const payload = crm();
+    return payload && payload.ok === false ? payload.error : "";
+  });
+  const crmResult = createMemo<CrmOverviewResult | undefined>(() => {
+    const payload = crm();
+    return payload && payload.ok ? payload.result : undefined;
+  });
+  const aiError = createMemo(() => {
+    const payload = aiTelemetry();
+    return payload && payload.ok === false ? payload.error : "";
+  });
+  const aiResult = createMemo<CrmAiTelemetryResult | undefined>(() => {
+    const payload = aiTelemetry();
+    return payload && payload.ok ? payload.result : undefined;
+  });
   const crmDirectory = createMemo(() => crmResult()?.directory);
   const crmBilling = createMemo(() => crmResult()?.billing);
   const crmBillingStripe = createMemo(() => crmBilling()?.stripe);
@@ -317,7 +91,10 @@ export default function CrmRoute() {
   const crmCommandCenter = createMemo(() => crmResult()?.commandCenter);
   const crmDataQuality = createMemo(() => crmResult()?.dataQuality);
   const accountStatusMap = createMemo(() => buildCrmAccountStatusMap(crmResult()?.billing?.accounts));
-  const selectedCustomerResult = createMemo(() => selectedCustomerOps()?.result);
+  const selectedCustomerResult = createMemo<CrmCustomerOpsResult | undefined>(() => {
+    const payload = selectedCustomerOps();
+    return payload && payload.ok ? payload.result : undefined;
+  });
   const selectedCustomerCache = createMemo(() => selectedCustomerResult()?.cache);
   const selectedCustomerCharges = createMemo(() => readCrmCustomerCharges(selectedCustomerResult()));
 
@@ -333,7 +110,7 @@ export default function CrmRoute() {
     setOpsError("");
     setOpsNotice("");
     setOpsBusy(true);
-    const payload = await postCrmAction<CrmCustomerOpsPayload>("/api/admin/crm/customer", { targetUserId, ...(refresh ? { refresh: true } : {}) });
+    const payload = await postCrmAction("/api/admin/crm/customer", { targetUserId, ...(refresh ? { refresh: true } : {}) });
     if (payload.ok === false) {
       setOpsError(payload.error || "Unable to load Stripe customer details.");
       setSelectedCustomerOps(null);
@@ -353,7 +130,7 @@ export default function CrmRoute() {
     setOpsBusy(true);
     setOpsError("");
     setOpsNotice("");
-    const payload = await postCrmAction<CrmCustomerOpsPayload>("/api/admin/crm/cancel-subscription", {
+    const payload = await postCrmAction("/api/admin/crm/cancel-subscription", {
       targetUserId,
       atPeriodEnd,
     });
@@ -384,7 +161,7 @@ export default function CrmRoute() {
     setOpsBusy(true);
     setOpsError("");
     setOpsNotice("");
-    const payload = await postCrmAction<CrmCustomerOpsPayload>("/api/admin/crm/refund", {
+    const payload = await postCrmAction("/api/admin/crm/refund", {
       targetUserId,
       ...(chargeId ? { chargeId } : {}),
       ...(hasAmount ? { amountUsd: parsedAmount } : {}),
@@ -395,7 +172,7 @@ export default function CrmRoute() {
       setOpsBusy(false);
       return;
     }
-    const refundId = (payload.result as { refundId?: string } | undefined)?.refundId;
+    const refundId = payload.result?.refundId;
     setOpsNotice(refundId ? `Refund created: ${refundId}` : "Refund created.");
     setRefundAmountUsd("");
     await refetch();
@@ -514,7 +291,7 @@ export default function CrmRoute() {
           }>
             <Show when={crm()?.ok !== false} fallback={
               <div class="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-                {crm()?.error || "Unable to load CRM data."}
+                {crmError() || "Unable to load CRM data."}
               </div>
             }>
               <Show when={crmDegradedMessage()}>
@@ -659,7 +436,7 @@ export default function CrmRoute() {
                 }>
                   <Show when={aiTelemetry() && aiTelemetry()?.ok !== false} fallback={
                     <div class="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200" data-testid="crm-ai-surface-unavailable">
-                      {aiTelemetry()?.error || "Unable to load AI telemetry."}
+                      {aiError() || "Unable to load AI telemetry."}
                     </div>
                   }>
                     <section class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6" data-testid="crm-ai-surface-configured">

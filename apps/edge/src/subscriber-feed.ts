@@ -1,4 +1,5 @@
 import type { SubscriberFeedItem, SubscriberFeedPreferences, SubscriberFeedScope } from "@intel-dashboard/shared/subscriber-feed.ts";
+import { matchesOsintSourcePreference } from "@intel-dashboard/shared/osint-source-profile.ts";
 export type { SubscriberFeedPreferences };
 
 type TelegramCanonicalEventLike = {
@@ -164,7 +165,7 @@ export function normalizeOsintSubscriberFeedItem(
   preferences: SubscriberFeedPreferences,
 ): SubscriberFeedItem {
   const tags = [item.category, item.region].filter(Boolean);
-  const favoriteMatch = includesNormalized(preferences.favoriteSources, item.source);
+  const favoriteMatch = matchesOsintSourcePreference(preferences.favoriteSources, { name: item.source });
   const watchMatch =
     includesNormalized(preferences.watchRegions, item.region) ||
     includesNormalized(preferences.watchCategories, item.category) ||

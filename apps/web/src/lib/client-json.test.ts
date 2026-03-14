@@ -49,6 +49,31 @@ test("fetchPublicJson applies no-store defaults without forcing credentials", as
   }
 });
 
+test("fetchClientJson composes caller abort signal with timeout protection", async () => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  const calls: Array<RequestInit | undefined> = [];
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push(init);
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  try {
+    const result = await fetchClientJson<{ ok: boolean }>("/api/example", { signal: controller.signal });
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0]?.signal instanceof AbortSignal);
+    assert.notEqual(calls[0]?.signal, controller.signal);
+    controller.abort(new Error("caller aborted"));
+    assert.equal((calls[0]?.signal as AbortSignal).aborted, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("fetchClientJson returns upstream error payloads when available", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = (async () =>

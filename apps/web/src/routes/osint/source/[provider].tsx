@@ -9,6 +9,10 @@ import { useWallClock } from "~/lib/live-refresh";
 import { fetchSubscriberFeedPreferences, saveSubscriberFeedPreferences } from "~/lib/my-feed-client";
 import { fetchOsintSourceProfile } from "~/lib/osint-source-client";
 import {
+  matchesOsintSourcePreference,
+  resolveOsintSourcePreferenceKey,
+} from "@intel-dashboard/shared/osint-source-profile.ts";
+import {
   cloneSubscriberFeedPreferences,
   includesSubscriberPreferenceValue,
   toggleSubscriberPreferenceValue,
@@ -36,8 +40,9 @@ export default function OsintSourceProfilePage() {
 
   const loadingInitial = () => isInitialResourceLoading(profile.state, profile()?.recentItems?.length ?? 0);
   const sourceName = () => profile()?.source.name || provider() || "OSINT Source";
+  const sourcePreferenceKey = () => resolveOsintSourcePreferenceKey(profile()?.source ?? { slug: provider(), name: sourceName() });
   const title = () => sourceName();
-  const favoriteSource = () => includesSubscriberPreferenceValue(preferences()?.favoriteSources ?? [], sourceName());
+  const favoriteSource = () => matchesOsintSourcePreference(preferences()?.favoriteSources ?? [], profile()?.source ?? { slug: provider(), name: sourceName() });
 
   const persistPreferences = async (updater: (current: ReturnType<typeof cloneSubscriberFeedPreferences>) => void) => {
     if (preferences.loading || !preferences()) {
@@ -140,7 +145,7 @@ export default function OsintSourceProfilePage() {
                         type="button"
                         disabled={saving()}
                         onClick={() => void persistPreferences((next) => {
-                          next.favoriteSources = toggleSubscriberPreferenceValue(next.favoriteSources, sourceName());
+                          next.favoriteSources = toggleSubscriberPreferenceValue(next.favoriteSources, sourcePreferenceKey());
                         })}
                         class={`rounded-xl border px-3 py-2 text-sm ${favoriteSource() ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
                       >

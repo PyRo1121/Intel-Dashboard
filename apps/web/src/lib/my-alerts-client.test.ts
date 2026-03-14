@@ -14,7 +14,14 @@ test("my alerts client normalizes success and failure payloads", async () => {
     globalThis.fetch = (async (input) => {
       const url = String(input);
       if (url.includes("/api/subscriber/my-alerts?")) {
-        return new Response(JSON.stringify({ unreadCount: 2, items: [] }), {
+        return new Response(JSON.stringify({
+          unreadCount: 2,
+          items: [],
+          degraded: {
+            materializationFailed: true,
+            message: "Alert refresh failed. Showing the latest available inbox snapshot.",
+          },
+        }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
@@ -45,6 +52,7 @@ test("my alerts client normalizes success and failure payloads", async () => {
 
     const alerts = await fetchSubscriberAlerts("unread");
     assert.equal(alerts?.unreadCount, 2);
+    assert.equal(alerts?.degraded?.materializationFailed, true);
     assert.equal((await fetchSubscriberAlertPreferences())?.minimumTelegramHighSignalGrade, "B");
     assert.equal(
       (await saveSubscriberAlertPreferences({

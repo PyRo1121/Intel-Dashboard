@@ -3,6 +3,7 @@ import { resolveBackendEndpointUrl, usesBackendServiceBinding } from "./backend-
 import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
 import { normalizeNumber, normalizeString } from "./value-normalization";
+import { buildWhalesUnavailableResponse } from "./whales-unavailable-response";
 
 interface Env extends Cloudflare.Env {
   BACKEND_URL?: string;
@@ -71,8 +72,6 @@ const WEBHOOK_EVENT_TTL_SECONDS = 7 * 24 * 60 * 60;
 function normalizeWhaleAlertApiKey(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
-
-
 
 export class IntelCacheDO extends DurableObject<Env> {
   private cache: Map<string, CachedResponse> = new Map();
@@ -398,7 +397,7 @@ export class IntelCacheDO extends DurableObject<Env> {
       return this.cachedJsonResponse(cached, "durable-object-stale-if-error", Date.now() - cached.timestamp, 200);
     }
 
-    return jsonResponse([], { status: 200 });
+    return buildWhalesUnavailableResponse();
   }
 
   private clampPositiveInt(raw: string | null, fallback: number, max: number): number {

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import type { CrmAiTelemetryPayload, CrmCustomerOpsPayload, CrmOverviewPayload } from "@intel-dashboard/shared/crm.ts";
 import { fetchCrmAiTelemetry, fetchCrmOverview, postCrmAction, readCrmItems } from "./crm-client.ts";
 
 test("crm client helpers normalize overview, action, and telemetry responses", async () => {
@@ -14,7 +15,7 @@ test("crm client helpers normalize overview, action, and telemetry responses", a
         });
       }
       if (url.includes("/api/admin/crm/customer")) {
-        return new Response(JSON.stringify({ ok: true, result: { source: "crm_customer_cache" } }), {
+        return new Response(JSON.stringify({ ok: true, result: { cache: { source: "crm_customer_cache" } } }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
@@ -31,30 +32,30 @@ test("crm client helpers normalize overview, action, and telemetry responses", a
       });
     }) as typeof fetch;
 
-    assert.deepEqual(await fetchCrmOverview<{ ok?: boolean; result?: { generatedAtMs?: number } }>(), {
+    assert.deepEqual(await fetchCrmOverview(), {
       ok: true,
       result: { generatedAtMs: 1 },
-    });
+    } satisfies CrmOverviewPayload);
     assert.deepEqual(
-      await postCrmAction<{ ok?: boolean; result?: { source?: string } }>("/api/admin/crm/customer", { targetUserId: "user-1" }),
+      await postCrmAction("/api/admin/crm/customer", { targetUserId: "user-1" }),
       {
         ok: true,
-        result: { source: "crm_customer_cache" },
-      },
+        result: { cache: { source: "crm_customer_cache" } },
+      } satisfies CrmCustomerOpsPayload,
     );
     assert.deepEqual(
-      await fetchCrmAiTelemetry<{ ok?: boolean; result?: { summary?: { calls?: number } } }>("1h"),
+      await fetchCrmAiTelemetry("1h"),
       {
         ok: true,
         result: { summary: { calls: 10 } },
-      },
+      } satisfies CrmAiTelemetryPayload,
     );
     assert.deepEqual(
-      await postCrmAction<{ ok?: boolean; error?: string }>("/api/admin/crm/forbidden", {}),
+      await postCrmAction("/api/admin/crm/forbidden", {}),
       {
         ok: false,
         error: "Forbidden",
-      },
+      } satisfies CrmCustomerOpsPayload,
     );
   } finally {
     globalThis.fetch = originalFetch;

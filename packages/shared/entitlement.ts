@@ -28,6 +28,15 @@ export type EntitlementLimitsInput = {
   telegramTotalMessagesMax?: number | null;
 };
 
+const INTEL_FEED_SURFACES = new Set([
+  "intel",
+  "overview",
+  "osint",
+  "map",
+  "my-feed",
+  "my-alerts",
+]);
+
 export function resolveEntitlementView(entitlement: EntitlementViewInput | null | undefined): {
   role: string;
   entitled: boolean;
@@ -63,7 +72,8 @@ export function resolveFeedSurfaceLimit(
   if (scope === "telegram") return limits?.telegramTotalMessagesMax;
   if (scope === "briefings") return limits?.briefingsMaxItems;
   if (scope === "air-sea") return limits?.airSeaMaxItems;
-  return limits?.intelMaxItems;
+  if (INTEL_FEED_SURFACES.has(scope)) return limits?.intelMaxItems;
+  return undefined;
 }
 
 export function isEntitledRole(value: string | undefined): boolean {

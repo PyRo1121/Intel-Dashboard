@@ -1,14 +1,8 @@
+import type { CrmOverviewPayload, CrmOverviewResult, CrmUser } from "@intel-dashboard/shared/crm.ts";
 import { summarizeCrmDataQuality } from "./crm-quality.ts";
-
-export type CrmDirectoryUser = {
-  id: string;
-  login: string;
-  name: string;
-  email: string;
+export type CrmDirectoryUser = CrmUser & {
   avatarUrl: string;
   providers: string[];
-  createdAtMs: number;
-  updatedAtMs: number;
 };
 
 export type CrmDirectorySnapshot = {
@@ -21,14 +15,13 @@ export type CrmDirectorySnapshot = {
 
 export function buildOwnerCrmOverviewPayload(args: {
   directory: CrmDirectorySnapshot;
-  backendSummary: Record<string, unknown>;
-}) {
+  backendSummary: CrmOverviewResult;
+}): CrmOverviewPayload {
   const generatedAtMs =
     typeof args.backendSummary.generatedAtMs === "number" && Number.isFinite(args.backendSummary.generatedAtMs)
       ? args.backendSummary.generatedAtMs
       : Date.now();
-  const billing = (args.backendSummary.billing ?? {}) as Record<string, unknown>;
-  const trackedUsers = Math.max(0, Math.floor(typeof billing.trackedUsers === "number" ? billing.trackedUsers : 0));
+  const trackedUsers = Math.max(0, Math.floor(args.backendSummary.billing?.trackedUsers ?? 0));
   const qualitySummary = summarizeCrmDataQuality({
     users: args.directory.users,
     totalUsers: args.directory.totalUsers,

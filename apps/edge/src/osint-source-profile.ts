@@ -1,9 +1,10 @@
-import type {
-  OsintSourceProfileItem,
-  OsintSourceProfileOwnerDiagnostics,
-  OsintSourceProfileResponse,
-  OsintSourceProfileSource,
-  OsintSourceProfileSummary,
+import {
+  buildOsintSourceSlug as sharedBuildOsintSourceSlug,
+  type OsintSourceProfileItem,
+  type OsintSourceProfileOwnerDiagnostics,
+  type OsintSourceProfileResponse,
+  type OsintSourceProfileSource,
+  type OsintSourceProfileSummary,
 } from "@intel-dashboard/shared/osint-source-profile.ts";
 
 type IntelItemLike = {
@@ -34,14 +35,6 @@ function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function normalizeSlug(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
 function normalizeTier<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
 }
@@ -65,7 +58,7 @@ function summarizeVerdict(summary: {
 }
 
 export function buildOsintSourceSlug(value: string): string {
-  return normalizeSlug(value);
+  return sharedBuildOsintSourceSlug(value);
 }
 
 export function normalizeOsintSourceProfile(args: {

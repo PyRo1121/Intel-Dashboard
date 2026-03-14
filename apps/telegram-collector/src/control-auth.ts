@@ -81,15 +81,15 @@ export async function enforceControlNonceGuard(params: {
   const nonceLogRaw = await params.storage.get<Record<string, unknown>>(nonceKey);
   const nonceLog = nonceLogRaw && typeof nonceLogRaw === "object" && !Array.isArray(nonceLogRaw)
     ? nonceLogRaw
-    : {};
-  const nextNonceLog: Record<string, number> = {};
+    : Object.create(null);
+  const nextNonceLog: Record<string, number> = Object.create(null);
   for (const [nonce, seenAt] of Object.entries(nonceLog)) {
     if (typeof seenAt !== "number" || !Number.isFinite(seenAt)) continue;
     if (now - seenAt <= params.nonceTtlMs) {
       nextNonceLog[nonce] = seenAt;
     }
   }
-  if (typeof nextNonceLog[params.nonce] === "number") {
+  if (Object.prototype.hasOwnProperty.call(nextNonceLog, params.nonce)) {
     return { ok: false, status: 409, reason: "replay_detected" };
   }
 
@@ -98,8 +98,8 @@ export async function enforceControlNonceGuard(params: {
   const rateLogRaw = await params.storage.get<Record<string, unknown>>(rateKey);
   const rateLog = rateLogRaw && typeof rateLogRaw === "object" && !Array.isArray(rateLogRaw)
     ? rateLogRaw
-    : {};
-  const nextRateLog: Record<string, number> = {};
+    : Object.create(null);
+  const nextRateLog: Record<string, number> = Object.create(null);
   for (const [windowKey, hitsValue] of Object.entries(rateLog)) {
     if (windowKey !== String(window)) continue;
     if (typeof hitsValue !== "number" || !Number.isFinite(hitsValue)) continue;

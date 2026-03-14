@@ -271,3 +271,37 @@ test("enforceControlNonceGuard allows nonce reuse after ttl expiry and resets pe
     { ok: true },
   );
 });
+
+test("enforceControlNonceGuard rejects replay for special object-key nonces", async () => {
+  const storage = new MemoryStorage();
+  const first = await enforceControlNonceGuard({
+    storage,
+    scope: "/control/state-update",
+    nonce: "__proto__",
+    timestampMs: 5_000,
+    clientIp: "127.0.0.1",
+    maxSkewMs: 10_000,
+    nonceTtlMs: 10_000,
+    rateWindowMs: 60_000,
+    rateLimitPerWindow: 8,
+    nowMs: 5_000,
+  });
+  const second = await enforceControlNonceGuard({
+    storage,
+    scope: "/control/state-update",
+    nonce: "__proto__",
+    timestampMs: 5_001,
+    clientIp: "127.0.0.1",
+    maxSkewMs: 10_000,
+    nonceTtlMs: 10_000,
+    rateWindowMs: 60_000,
+    rateLimitPerWindow: 8,
+    nowMs: 5_001,
+  });
+  assert.deepEqual(first, { ok: true });
+  assert.deepEqual(second, {
+    ok: false,
+    status: 409,
+    reason: "replay_detected",
+  });
+});

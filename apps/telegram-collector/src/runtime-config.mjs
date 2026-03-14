@@ -53,6 +53,7 @@ export function readTelegramCollectorRuntimeConfig(env) {
   if (!config.apiHash) config.missingConfig.push("TELEGRAM_API_HASH");
   if (!config.sessionString) config.missingConfig.push("TELEGRAM_SESSION_STRING");
   if (!config.channels.length) config.missingConfig.push("TELEGRAM_HOT_CHANNELS");
+  if (!config.selfUrl) config.missingConfig.push("COLLECTOR_SELF_URL");
   if (!config.edgeUrl) config.missingConfig.push("COLLECTOR_EDGE_URL");
   if (!config.sharedSecret) config.missingConfig.push("COLLECTOR_SHARED_SECRET");
   return config;

@@ -13,3 +13,25 @@ export function buildCacheBustRefreshEndpoints(
   }
   return [...endpoints];
 }
+
+export function buildCacheBustRefreshBatches(
+  refreshTargets: readonly string[],
+  maxParallelism: number,
+): string[][] {
+  const normalizedMaxParallelism = Math.max(1, Math.floor(maxParallelism));
+  const batches: string[][] = [];
+  for (let index = 0; index < refreshTargets.length; index += normalizedMaxParallelism) {
+    batches.push(refreshTargets.slice(index, index + normalizedMaxParallelism));
+  }
+  return batches;
+}
+
+export function formatCacheBustRefreshFailure(endpoint: string, error: unknown): string {
+  if (error instanceof Error) {
+    return `${endpoint}: ${error.message}`;
+  }
+  if (typeof error === "string" && error.trim()) {
+    return `${endpoint}: ${error}`;
+  }
+  return `${endpoint}: refresh_unavailable`;
+}

@@ -105,6 +105,10 @@ jobs:
         if: steps.freshness.outputs.proceed == 'true'
         run: bun run deploy:edge
 
+      - name: Allowlist runner IP for edge smoke
+        if: steps.freshness.outputs.proceed == 'true'
+        run: bun run security:cf:allow-owner-e2e-ip
+
       - name: Edge smoke
         if: steps.freshness.outputs.proceed == 'true'
         run: node scripts/production-smoke-edge.mjs
@@ -116,3 +120,8 @@ jobs:
       - name: Collector smoke
         if: steps.freshness.outputs.proceed == 'true'
         run: node scripts/production-smoke-collector.mjs
+
+      - name: Clear runner IP allowlist
+        if: always() && steps.freshness.outputs.proceed == 'true'
+        continue-on-error: true
+        run: bun run security:cf:clear-owner-e2e-ip

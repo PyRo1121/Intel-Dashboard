@@ -5,6 +5,10 @@ import {
   buildChatHistoryCacheKeyFromLimits,
   collectPersistedChatHistoryEndpoints,
 } from "./intel-cache-chat-history";
+import {
+  buildCacheBustRefreshEndpoints,
+  isCurrentCacheGeneration,
+} from "./intel-cache-refresh";
 import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
 import { chunkEntries, collectStaleChunkKeys, MAX_DO_STORAGE_BATCH_ENTRIES } from "./storage-batches";
@@ -84,6 +88,7 @@ export class IntelCacheDO extends DurableObject<Env> {
   private refreshing = false;
   private inFlightFetches: Map<string, Promise<CachedResponse | null>> = new Map();
   private backgroundRefreshAfter: Map<string, number> = new Map();
+  private cacheGeneration = 0;
   private readonly runtimeEnv: Env;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -136,36 +141,49 @@ export class IntelCacheDO extends DurableObject<Env> {
 
     // Force cache bust — wipe all cached data and refresh immediately
     if (path === "/api/cache-bust") {
-      debugRuntimeLog(this.runtimeEnv, "[IntelCacheDO] Cache bust requested — wiping all cached data");
-      this.cache.clear();
-      for (const endpoint of ENDPOINTS) {
-        await this.deleteChunked(endpoint);
-      }
-      await this.deleteChunked("/api/whales");
-      await this.clearChatHistoryCacheVariants();
+      return this.ctx.blockConcurrencyWhile(async () => {
+        debugRuntimeLog(this.runtimeEnv, "[IntelCacheDO] Cache bust requested — wiping all cached data");
+        this.cacheGeneration += 1;
+        this.cache.clear();
+        this.inFlightFetches.clear();
+        this.backgroundRefreshAfter.clear();
 
-      const errors: string[] = [];
-      try {
-        await this.refreshAll();
-      } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err);
-        errors.push(`refreshAll: ${detail}`);
-      }
+        const deletedChatHistoryEndpoints = await this.clearChatHistoryCacheVariants();
+        for (const endpoint of ENDPOINTS) {
+          await this.deleteChunked(endpoint);
+        }
+        await this.deleteChunked("/api/whales");
 
-      const cacheInfo: Record<string, unknown> = {};
-      for (const [k, v] of this.cache.entries()) {
-        cacheInfo[k] = {
-          timestamp: new Date(v.timestamp).toISOString(),
-          sizeBytes: v.data.length,
-          status: v.status,
-        };
-      }
+        const errors: string[] = [];
+        const refreshTargets = buildCacheBustRefreshEndpoints(ENDPOINTS, deletedChatHistoryEndpoints);
+        for (const endpoint of refreshTargets) {
+          try {
+            if (endpoint === "/api/whales") {
+              await this.fetchWhalesDedup();
+            } else {
+              await this.fetchEndpointDedup(endpoint, 0);
+            }
+          } catch (err) {
+            const detail = err instanceof Error ? err.message : String(err);
+            errors.push(`${endpoint}: ${detail}`);
+          }
+        }
 
-      return jsonResponse({
-        status: "cache_busted",
-        refreshed: cacheInfo,
-        errors: errors.length ? errors : undefined,
-        cacheKeys: [...this.cache.keys()],
+        const cacheInfo: Record<string, unknown> = {};
+        for (const [k, v] of this.cache.entries()) {
+          cacheInfo[k] = {
+            timestamp: new Date(v.timestamp).toISOString(),
+            sizeBytes: v.data.length,
+            status: v.status,
+          };
+        }
+
+        return jsonResponse({
+          status: "cache_busted",
+          refreshed: cacheInfo,
+          errors: errors.length ? errors : undefined,
+          cacheKeys: [...this.cache.keys()],
+        });
       });
     }
 
@@ -421,7 +439,7 @@ export class IntelCacheDO extends DurableObject<Env> {
     return buildChatHistoryCacheKeyFromLimits(sessions, messages);
   }
 
-  private async clearChatHistoryCacheVariants(): Promise<void> {
+  private async clearChatHistoryCacheVariants(): Promise<string[]> {
     const keysToDelete = new Set<string>();
 
     for (const key of this.cache.keys()) {
@@ -440,6 +458,7 @@ export class IntelCacheDO extends DurableObject<Env> {
       this.cache.delete(endpoint);
       await this.deleteChunked(endpoint);
     }
+    return [...keysToDelete];
   }
 
   private async handleChatHistory(url: URL): Promise<Response> {
@@ -473,6 +492,7 @@ export class IntelCacheDO extends DurableObject<Env> {
     endpoint: string,
     retries = 1,
   ): Promise<CachedResponse | null> {
+    const generationAtStart = this.cacheGeneration;
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
         const backendRequest = this.buildBackendRequest(endpoint);
@@ -508,6 +528,9 @@ export class IntelCacheDO extends DurableObject<Env> {
           status: res.status,
         };
 
+        if (!isCurrentCacheGeneration(generationAtStart, this.cacheGeneration)) {
+          return null;
+        }
         this.cache.set(endpoint, cached);
         await this.saveChunked(endpoint, cached);
 
@@ -583,6 +606,7 @@ export class IntelCacheDO extends DurableObject<Env> {
   }
 
   private async fetchWhales(): Promise<CachedResponse | null> {
+    const generationAtStart = this.cacheGeneration;
     const apiKey = normalizeWhaleAlertApiKey(this.env.WHALE_ALERT_API_KEY);
     if (!apiKey) {
       return this.cache.get("/api/whales") ?? null;
@@ -623,6 +647,9 @@ export class IntelCacheDO extends DurableObject<Env> {
         timestamp: Date.now(),
         status: 200,
       };
+      if (!isCurrentCacheGeneration(generationAtStart, this.cacheGeneration)) {
+        return null;
+      }
       this.cache.set("/api/whales", entry);
       await this.ctx.storage.put(WHALE_CACHE_KEY, entry);
       return entry;

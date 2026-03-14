@@ -20,8 +20,15 @@ function run(command, args, options = {}) {
 }
 
 function parseAccountIdFromWhoAmI(output) {
-  for (const line of output.split(/\r?\n/)) {
-    if (!line.includes("│")) continue;
+  const lines = output.split(/\r?\n/);
+  for (const line of lines) {
+    if (!/account id/i.test(line)) continue;
+    const match = line.match(/\b([a-f0-9]{32})\b/i);
+    if (match) {
+      return match[1];
+    }
+  }
+  for (const line of lines) {
     const match = line.match(/([a-f0-9]{32})/i);
     if (match) {
       return match[1];

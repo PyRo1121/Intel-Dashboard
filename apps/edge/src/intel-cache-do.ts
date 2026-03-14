@@ -460,7 +460,14 @@ export class IntelCacheDO extends DurableObject<Env> {
 
   private async handleChatHistory(url: URL): Promise<Response> {
     const cacheKey = this.buildChatHistoryCacheKey(url);
-    const cached = this.cache.get(cacheKey);
+    let cached = this.cache.get(cacheKey);
+    if (!cached) {
+      const persisted = await this.loadChunked(cacheKey);
+      if (persisted) {
+        this.cache.set(cacheKey, persisted);
+        cached = persisted;
+      }
+    }
     if (cached) {
       const ageMs = Date.now() - cached.timestamp;
       if (ageMs < CHAT_HISTORY_REFRESH_MS) {

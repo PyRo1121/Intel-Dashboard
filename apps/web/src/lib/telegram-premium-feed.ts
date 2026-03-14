@@ -1,5 +1,5 @@
 import { parseTimestampMs } from "./utils.ts";
-import { HIGH_SIGNAL_TELEGRAM_SCORE_THRESHOLD } from "@intel-dashboard/shared/telegram-signal.ts";
+import { HIGH_SIGNAL_TELEGRAM_SCORE_THRESHOLD, hasConfirmedFirstReporter } from "@intel-dashboard/shared/telegram-signal.ts";
 
 type TelegramPremiumEntryLike = {
   message: {
@@ -34,6 +34,10 @@ function verificationWeight(value: TelegramVerificationTier): number {
 }
 
 export function compareTelegramPremiumEntries<TEntry extends TelegramPremiumEntryLike>(left: TEntry, right: TEntry): number {
+  const leftFreshness = freshnessWeight(left.dedupe?.freshnessTier);
+  const rightFreshness = freshnessWeight(right.dedupe?.freshnessTier);
+  if (rightFreshness !== leftFreshness) return rightFreshness - leftFreshness;
+
   const leftSignal = left.dedupe?.signalScore ?? 0;
   const rightSignal = right.dedupe?.signalScore ?? 0;
   if (rightSignal !== leftSignal) return rightSignal - leftSignal;
@@ -41,10 +45,6 @@ export function compareTelegramPremiumEntries<TEntry extends TelegramPremiumEntr
   const leftRank = left.dedupe?.rankScore ?? left.dedupe?.subscriberValueScore ?? 0;
   const rightRank = right.dedupe?.rankScore ?? right.dedupe?.subscriberValueScore ?? 0;
   if (rightRank !== leftRank) return rightRank - leftRank;
-
-  const leftFreshness = freshnessWeight(left.dedupe?.freshnessTier);
-  const rightFreshness = freshnessWeight(right.dedupe?.freshnessTier);
-  if (rightFreshness !== leftFreshness) return rightFreshness - leftFreshness;
 
   const leftVerification = verificationWeight(left.dedupe?.verificationState);
   const rightVerification = verificationWeight(right.dedupe?.verificationState);
@@ -92,7 +92,7 @@ export function isHighSignalTelegramEntry<TEntry extends TelegramPremiumEntryLik
 }
 
 export function isFirstReportTelegramEntry<TEntry extends TelegramPremiumEntryLike>(entry: TEntry): boolean {
-  return Array.isArray(entry.dedupe?.signalReasons) && entry.dedupe.signalReasons.includes("first");
+  return hasConfirmedFirstReporter(entry.dedupe?.sourceCount) && Array.isArray(entry.dedupe?.signalReasons) && entry.dedupe.signalReasons.includes("first");
 }
 
 export function resolveTelegramPremiumDefaultState(_isSubscriber: boolean): {

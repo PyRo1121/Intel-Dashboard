@@ -1,0 +1,24 @@
+{
+  "name": "@intel-dashboard/telegram-collector",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "generate-session": "node src/../scripts/generate-session.mjs",
+    "join-hot-channels": "node src/../scripts/join-hot-channels.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --experimental-strip-types --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.1.1",
+    "input": "^1.0.1",
+    "telegram": "2.26.22"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260305.0",
+    "@types/node": "^25.3.5",
+    "typescript": "^5.9.2",
+    "wrangler": "^4.70.0"
+  }
+}

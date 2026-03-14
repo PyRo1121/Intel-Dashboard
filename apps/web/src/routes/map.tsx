@@ -206,10 +206,10 @@ export default function ThreatMap() {
         <div>
           <div class="flex items-center gap-2 mb-2">
             <div class="intel-badge">
-              <div class="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.5)] animate-pulse" />
+              <div class="w-1.5 h-1.5 rounded-none bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.5)] animate-pulse" />
               Live Map
             </div>
-            <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+            <span class={`rounded-none border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
               {freshness.feedFreshness().label}
               <Show when={freshness.latestFeedAgeMs() !== null}> ({freshness.latestFeedAgeLabel()})</Show>
             </span>
@@ -244,7 +244,7 @@ export default function ThreatMap() {
       <Show when={freshness.freshnessNotice()}>
         {(notice) => (
           <section
-            class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
+            class={`freshness-transition-banner rounded-sm border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
             role="status"
             aria-live="polite"
           >
@@ -262,7 +262,7 @@ export default function ThreatMap() {
             <div class="surface-card overflow-hidden"><div class="h-[450px] bg-white/[0.02] animate-shimmer" /></div>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
               <For each={[1, 2, 3, 4, 5]}>
-                {() => <div class="surface-card p-4"><div class="h-5 w-24 bg-white/[0.04] rounded mb-2 animate-shimmer" /><div class="h-2 w-full bg-white/[0.04] rounded-full mb-2 animate-shimmer" /><div class="h-4 w-16 bg-white/[0.04] rounded animate-shimmer" /></div>}
+                {() => <div class="surface-card p-4"><div class="h-5 w-24 bg-white/[0.04] rounded mb-2 animate-shimmer" /><div class="h-2 w-full bg-white/[0.04] rounded-none mb-2 animate-shimmer" /><div class="h-4 w-16 bg-white/[0.04] rounded animate-shimmer" /></div>}
               </For>
             </div>
           </div>
@@ -280,7 +280,7 @@ export default function ThreatMap() {
 
           <div class="relative">
             <div ref={mapEl} class="h-[450px] w-full" />
-            <div class="pointer-events-none absolute bottom-3 left-3 z-[500] rounded-lg border border-white/10 bg-black/70 backdrop-blur-sm px-2.5 py-1.5 text-[10px] text-zinc-400 font-mono-data">
+            <div class="pointer-events-none absolute bottom-3 left-3 z-[500] rounded-sm border border-white/10 bg-black/70 backdrop-blur-sm px-2.5 py-1.5 text-[10px] text-zinc-400 font-mono-data">
               Click a region to inspect &bull; {activeRegions().length} regions tracked
             </div>
           </div>
@@ -312,14 +312,14 @@ export default function ThreatMap() {
                       setSelectedRegion(null);
                       map?.flyTo([25, 30], 2, { animate: true, duration: 0.5 });
                     }}
-                    class="flex items-center justify-center w-7 h-7 rounded-lg text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04] transition-all"
+                    class="flex items-center justify-center w-7 h-7 rounded-sm text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.04] transition-all"
                   >
                     <XIcon size={14} />
                   </button>
                 </div>
 
                 {/* Severity breakdown bar */}
-                <div class="flex gap-0.5 h-2 rounded-full overflow-hidden mb-4 ml-3">
+                <div class="flex gap-0.5 h-2 rounded-none overflow-hidden mb-4 ml-3">
                   <Show when={summary().critical > 0}><div class="bg-red-500 rounded-l-full" style={`flex: ${summary().critical}`} /></Show>
                   <Show when={summary().high > 0}><div class="bg-amber-500" style={`flex: ${summary().high}`} /></Show>
                   <Show when={summary().medium > 0}><div class="bg-blue-500" style={`flex: ${summary().medium}`} /></Show>
@@ -377,7 +377,7 @@ export default function ThreatMap() {
 
                   <div class="flex items-center justify-between mb-2">
                     <div class="flex items-center gap-2 min-w-0">
-                      <div class="w-2.5 h-2.5 rounded-full shrink-0" style={`background: ${accent}; box-shadow: 0 0 6px ${accent}60`} />
+                      <div class="w-2.5 h-2.5 rounded-none shrink-0" style={`background: ${accent}; box-shadow: 0 0 6px ${accent}60`} />
                       <h3 class="text-sm font-semibold text-white truncate">{REGION_LABELS[r.region]}</h3>
                     </div>
                     <span class="text-xl font-bold font-mono-data text-white/90 shrink-0 ml-2">{r.eventCount}</span>
@@ -386,7 +386,7 @@ export default function ThreatMap() {
                   <span class={`text-[10px] font-bold uppercase tracking-wider ${threat.color}`}>{threat.label}</span>
 
                   {/* Severity bar */}
-                  <div class="flex gap-0.5 h-1.5 rounded-full overflow-hidden my-2">
+                  <div class="flex gap-0.5 h-1.5 rounded-none overflow-hidden my-2">
                     <Show when={r.critical > 0}><div class="bg-red-500 rounded-l-full" style={`flex: ${r.critical}`} /></Show>
                     <Show when={r.high > 0}><div class="bg-amber-500" style={`flex: ${r.high}`} /></Show>
                     <Show when={r.medium > 0}><div class="bg-blue-500" style={`flex: ${r.medium}`} /></Show>

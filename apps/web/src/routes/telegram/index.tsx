@@ -238,7 +238,7 @@ export default function TelegramPage() {
     }
   });
 
-  useLiveRefresh(refreshTelegram, 15_000, { runImmediately: false, jitterRatio: 0.15 });
+  useLiveRefresh(refreshTelegram, 10_000, { runImmediately: false, jitterRatio: 0.15 });
 
   const telegramData = createMemo(() => resolveTelegramFeedData(data()));
   const categories = () => telegramData().categories;
@@ -311,59 +311,66 @@ export default function TelegramPage() {
     return out;
   }, []);
 
+  const canonicalEntryCache = new WeakMap<TelegramCanonicalEvent, TelegramEntry>();
+
   const entries = createMemo<TelegramEntry[]>(() => {
     const snapshot = data();
     if (mergeDuplicates() && Array.isArray(snapshot?.canonical_events) && snapshot.canonical_events.length > 0) {
       const canonicalEntries: TelegramEntry[] = [];
       for (const event of snapshot.canonical_events) {
-        const message: TelegramMessage = {
-          text_original: event.text_original || event.text_en || "",
-          text_en: event.text_en || event.text_original || "",
-          image_text_en: event.image_text_en || "",
-          datetime: event.datetime,
-          link: event.sources?.[0]?.link || "",
-          views: event.sources?.[0]?.views || "",
-          media: Array.isArray(event.media) ? event.media : [],
-          has_video: Boolean(event.has_video),
-          has_photo: Boolean(event.has_photo),
-          language: event.language || "unknown",
-        };
-        if (!isTelegramMessageVisible({ message, ageWindow: ageWindow(), mediaOnly: mediaOnly(), nowMs: clockNow() })) continue;
-        canonicalEntries.push({
-          category: event.category,
-          channelLabel: event.source_labels?.[0] || event.sources?.[0]?.label || "Telegram source",
-          channelUsername: event.source_channels?.[0] || event.sources?.[0]?.channel || "",
-          message,
-          dedupe: {
-            clusterKey: event.event_key || event.event_id,
-            sourceCount: Math.max(1, Number(event.source_count) || 1),
-            duplicateCount: Math.max(0, Number(event.duplicate_count) || 0),
-            sourceLabels: Array.isArray(event.source_labels) ? event.source_labels : [],
-            categorySet: Array.isArray(event.categories) ? event.categories : [event.category],
-            domainTags: Array.isArray(event.domain_tags) ? event.domain_tags : [],
-            trustTier: event.trust_tier,
-            latencyTier: event.latency_tier,
-            sourceType: event.source_type,
-            acquisitionMethod: event.acquisition_method,
-            subscriberValueScore: typeof event.subscriber_value_score === "number" ? event.subscriber_value_score : undefined,
-            signalProfileId: event.signal_profile_id,
-            signalScore: typeof event.signal_score === "number" ? event.signal_score : undefined,
-            signalGrade: event.signal_grade,
-            signalReasons: Array.isArray(event.signal_reasons) ? event.signal_reasons : [],
-            freshnessTier: event.freshness_tier,
-            verificationState: event.verification_state,
-            rankScore: typeof event.rank_score === "number" ? event.rank_score : undefined,
-            firstReporterLabel: event.first_reporter_label,
-            firstReporterChannel: event.first_reporter_channel,
-            firstReportedAt: event.first_reported_at,
-            sources: Array.isArray(event.sources) ? event.sources : [],
-            sourceSignatures: Array.isArray(event.sources)
-              ? event.sources
-                .map((source) => source?.signature)
-                .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-              : [],
-          },
-        });
+        let entry = canonicalEntryCache.get(event);
+        if (!entry) {
+          const message: TelegramMessage = {
+            text_original: event.text_original || event.text_en || "",
+            text_en: event.text_en || event.text_original || "",
+            image_text_en: event.image_text_en || "",
+            datetime: event.datetime,
+            link: event.sources?.[0]?.link || "",
+            views: event.sources?.[0]?.views || "",
+            media: Array.isArray(event.media) ? event.media : [],
+            has_video: Boolean(event.has_video),
+            has_photo: Boolean(event.has_photo),
+            language: event.language || "unknown",
+          };
+          entry = {
+            category: event.category,
+            channelLabel: event.source_labels?.[0] || event.sources?.[0]?.label || "Telegram source",
+            channelUsername: event.source_channels?.[0] || event.sources?.[0]?.channel || "",
+            message,
+            dedupe: {
+              clusterKey: event.event_key || event.event_id,
+              sourceCount: Math.max(1, Number(event.source_count) || 1),
+              duplicateCount: Math.max(0, Number(event.duplicate_count) || 0),
+              sourceLabels: Array.isArray(event.source_labels) ? event.source_labels : [],
+              categorySet: Array.isArray(event.categories) ? event.categories : [event.category],
+              domainTags: Array.isArray(event.domain_tags) ? event.domain_tags : [],
+              trustTier: event.trust_tier,
+              latencyTier: event.latency_tier,
+              sourceType: event.source_type,
+              acquisitionMethod: event.acquisition_method,
+              subscriberValueScore: typeof event.subscriber_value_score === "number" ? event.subscriber_value_score : undefined,
+              signalProfileId: event.signal_profile_id,
+              signalScore: typeof event.signal_score === "number" ? event.signal_score : undefined,
+              signalGrade: event.signal_grade,
+              signalReasons: Array.isArray(event.signal_reasons) ? event.signal_reasons : [],
+              freshnessTier: event.freshness_tier,
+              verificationState: event.verification_state,
+              rankScore: typeof event.rank_score === "number" ? event.rank_score : undefined,
+              firstReporterLabel: event.first_reporter_label,
+              firstReporterChannel: event.first_reporter_channel,
+              firstReportedAt: event.first_reported_at,
+              sources: Array.isArray(event.sources) ? event.sources : [],
+              sourceSignatures: Array.isArray(event.sources)
+                ? event.sources
+                  .map((source) => source?.signature)
+                  .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+                : [],
+            },
+          };
+          canonicalEntryCache.set(event, entry);
+        }
+        if (!isTelegramMessageVisible({ message: entry.message, ageWindow: ageWindow(), mediaOnly: mediaOnly(), nowMs: clockNow() })) continue;
+        canonicalEntries.push(entry);
       }
       canonicalEntries.sort((left, right) => parseTs(right.message.datetime) - parseTs(left.message.datetime));
       return canonicalEntries;
@@ -567,7 +574,7 @@ export default function TelegramPage() {
         <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div class="intel-badge mb-2">
-              <div class="h-1.5 w-1.5 rounded-full bg-blue-300" />
+              <div class="h-1.5 w-1.5 rounded-none bg-blue-300" />
               Telegram Monitoring
             </div>
             <h1 class="intel-heading">Telegram Intel</h1>
@@ -575,26 +582,26 @@ export default function TelegramPage() {
           </div>
 
           <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <div class="rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-center">
+            <div class="rounded-sm border border-white/[0.08] bg-black/20 px-3 py-2 text-center">
               <p class="font-mono-data text-lg font-bold text-white">{filteredEntries().length}</p>
               <p class="text-[10px] uppercase tracking-wider text-zinc-500">Visible Msgs</p>
               <Show when={mergeDuplicates() && dedupeSavedCount() > 0}>
-                <p class="text-[10px] text-emerald-300/80">-{dedupeSavedCount()} dupes</p>
+                <p class="text-[10px] text-amber-300/80">-{dedupeSavedCount()} dupes</p>
               </Show>
             </div>
-            <div class="rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-center">
-              <p class="font-mono-data text-lg font-bold text-emerald-300">{verifiedCount()}</p>
+            <div class="rounded-sm border border-white/[0.08] bg-black/20 px-3 py-2 text-center">
+              <p class="font-mono-data text-lg font-bold text-amber-300">{verifiedCount()}</p>
               <p class="text-[10px] uppercase tracking-wider text-zinc-500">Verified</p>
             </div>
-            <div class="rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-center">
+            <div class="rounded-sm border border-white/[0.08] bg-black/20 px-3 py-2 text-center">
               <p class="font-mono-data text-lg font-bold text-cyan-300">{channels().length}</p>
               <p class="text-[10px] uppercase tracking-wider text-zinc-500">Channels Monitored</p>
             </div>
-            <div class={`rounded-xl border px-3 py-2 text-center ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+            <div class={`rounded-sm border px-3 py-2 text-center ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
               <p
                 class={`font-mono-data text-lg font-bold ${
                   freshness.feedFreshness().state === "live"
-                    ? "text-emerald-300"
+                    ? "text-amber-300"
                     : freshness.feedFreshness().state === "delayed"
                       ? "text-amber-300"
                       : "text-red-300"
@@ -618,7 +625,7 @@ export default function TelegramPage() {
                 type="button"
                 onClick={() => setGroupFilter(group.id)}
                 aria-pressed={groupFilter() === group.id}
-                class={`min-h-11 cursor-pointer rounded-xl border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
+                class={`min-h-11 cursor-pointer rounded-sm border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
                   groupFilter() === group.id
                     ? "border-blue-400/40 bg-blue-500/15 text-blue-200"
                     : "border-white/[0.06] text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300"
@@ -633,12 +640,12 @@ export default function TelegramPage() {
           <Show when={timestamp()}>
             <span class="ml-auto inline-flex items-center gap-1.5 text-[11px] text-zinc-500" aria-live="polite">
               <Show when={refreshing()}>
-                <span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-300" />
+                <span class="h-1.5 w-1.5 animate-pulse rounded-none bg-amber-300" />
               </Show>
                 <span
-                  class={`h-1.5 w-1.5 rounded-full ${
+                  class={`h-1.5 w-1.5 rounded-none ${
                   freshness.feedFreshness().state === "live"
-                    ? "bg-emerald-300"
+                    ? "bg-amber-300"
                     : freshness.feedFreshness().state === "delayed"
                       ? "bg-amber-300"
                       : "bg-red-300"
@@ -646,8 +653,8 @@ export default function TelegramPage() {
               />
               <Clock size={12} /> Updated {timestamp()}
               <span class="text-zinc-600">•</span>
-              <span class={streamConnected() ? "text-emerald-300" : "text-zinc-500"}>
-                {streamConnected() ? "Live stream" : "Polling fallback (~15s)"}
+              <span class={streamConnected() ? "text-amber-300" : "text-zinc-500"}>
+                {streamConnected() ? "Live stream" : "Polling fallback (~10s)"}
               </span>
               <span class="text-zinc-600">•</span>
               <span class="text-zinc-400">
@@ -659,17 +666,17 @@ export default function TelegramPage() {
         </div>
 
         <Show when={signalSubscriber()}>
-          <div class="rounded-xl border border-violet-400/15 bg-violet-500/5 p-3">
+          <div class="rounded-sm border border-violet-400/15 bg-violet-500/5 p-3">
             <div class="mb-2 flex flex-wrap items-center gap-2">
               <p class="text-[12px] font-semibold text-violet-100">Best First Reporters</p>
-              <div class="inline-flex rounded-xl border border-white/[0.08] bg-black/20 p-1">
+              <div class="inline-flex rounded-sm border border-white/[0.08] bg-black/20 p-1">
                 <For each={["24h", "7d", "30d"] as TelegramSourceLeaderboardWindow[]}>
                   {(window) => (
                     <button
                       type="button"
                       onClick={() => setLeaderboardWindow(window)}
                       aria-pressed={leaderboardWindow() === window}
-                      class={`min-h-9 cursor-pointer rounded-lg px-2.5 py-1 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 ${leaderboardWindow() === window ? "bg-white/[0.1] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+                      class={`min-h-9 cursor-pointer rounded-sm px-2.5 py-1 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 ${leaderboardWindow() === window ? "bg-white/[0.1] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
                     >
                       {window}
                     </button>
@@ -684,23 +691,23 @@ export default function TelegramPage() {
               <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                 <For each={sourceLeaderboard()?.entries?.slice(0, 6) ?? []}>
                   {(entry, index) => (
-                    <div class="rounded-xl border border-white/[0.08] bg-black/20 p-3">
+                    <div class="rounded-sm border border-white/[0.08] bg-black/20 p-3">
                       <div class="flex items-center justify-between gap-2">
                         <A href={`/telegram/source/${encodeURIComponent(entry.channel)}`} class="truncate text-[12px] font-semibold text-white no-underline hover:text-violet-200">
                           {index() + 1}. {entry.label}
                         </A>
-                        <span class="rounded-full border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-200">
+                        <span class="rounded-none border border-violet-400/20 bg-violet-500/10 px-2 py-0.5 text-[10px] text-violet-200">
                           Score {entry.leaderboardScore}
                         </span>
                       </div>
                       <div class="mt-2 flex flex-wrap gap-1.5 text-[10px] text-zinc-400">
-                        <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
+                        <span class="rounded-none border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
                           {entry.leadCount} first
                         </span>
-                        <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
+                        <span class="rounded-none border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
                           avg {entry.avgSignalScore}
                         </span>
-                        <span class="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
+                        <span class="rounded-none border border-white/[0.08] bg-white/[0.04] px-2 py-0.5">
                           {entry.highSignalLeadCount} A/B
                         </span>
                       </div>
@@ -713,12 +720,12 @@ export default function TelegramPage() {
         </Show>
 
         <div class="flex flex-wrap items-center gap-2">
-          <div class="inline-flex rounded-xl border border-white/[0.08] bg-black/20 p-1">
+          <div class="inline-flex rounded-sm border border-white/[0.08] bg-black/20 p-1">
             <button
               type="button"
               onClick={() => setFeedMode("deduped")}
               aria-pressed={feedMode() === "deduped"}
-              class={`min-h-11 cursor-pointer rounded-lg px-2.5 py-1 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${feedMode() === "deduped" ? "bg-white/[0.1] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+              class={`min-h-11 cursor-pointer rounded-sm px-2.5 py-1 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${feedMode() === "deduped" ? "bg-white/[0.1] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
             >
               Deduped
             </button>
@@ -726,7 +733,7 @@ export default function TelegramPage() {
               type="button"
               onClick={() => setFeedMode("raw")}
               aria-pressed={feedMode() === "raw"}
-              class={`min-h-11 cursor-pointer rounded-lg px-2.5 py-1 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${feedMode() === "raw" ? "bg-white/[0.1] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+              class={`min-h-11 cursor-pointer rounded-sm px-2.5 py-1 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${feedMode() === "raw" ? "bg-white/[0.1] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
             >
               Raw
             </button>
@@ -734,18 +741,18 @@ export default function TelegramPage() {
               type="button"
               onClick={() => setFeedMode("verified")}
               aria-pressed={feedMode() === "verified"}
-              class={`min-h-11 cursor-pointer rounded-lg px-2.5 py-1 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${feedMode() === "verified" ? "bg-white/[0.1] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+              class={`min-h-11 cursor-pointer rounded-sm px-2.5 py-1 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${feedMode() === "verified" ? "bg-white/[0.1] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
             >
               Verified
             </button>
           </div>
 
-          <div class="inline-flex rounded-xl border border-white/[0.08] bg-black/20 p-1">
+          <div class="inline-flex rounded-sm border border-white/[0.08] bg-black/20 p-1">
             <button
               type="button"
               onClick={() => setAgeWindow("all")}
               aria-pressed={ageWindow() === "all"}
-              class={`min-h-11 cursor-pointer rounded-lg px-2.5 py-1 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${ageWindow() === "all" ? "bg-white/[0.1] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+              class={`min-h-11 cursor-pointer rounded-sm px-2.5 py-1 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${ageWindow() === "all" ? "bg-white/[0.1] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
             >
               Full history
             </button>
@@ -753,7 +760,7 @@ export default function TelegramPage() {
               type="button"
               onClick={() => setAgeWindow("24h")}
               aria-pressed={ageWindow() === "24h"}
-              class={`min-h-11 cursor-pointer rounded-lg px-2.5 py-1 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${ageWindow() === "24h" ? "bg-white/[0.1] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
+              class={`min-h-11 cursor-pointer rounded-sm px-2.5 py-1 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${ageWindow() === "24h" ? "bg-white/[0.1] text-white" : "text-zinc-500 hover:text-zinc-300"}`}
             >
               Last 24h
             </button>
@@ -763,7 +770,7 @@ export default function TelegramPage() {
             type="button"
             onClick={() => setMediaOnly(!mediaOnly())}
             aria-pressed={mediaOnly()}
-            class={`min-h-11 cursor-pointer rounded-xl border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
+            class={`min-h-11 cursor-pointer rounded-sm border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
               mediaOnly() ? "border-amber-400/30 bg-amber-500/10 text-amber-300" : "border-white/[0.08] bg-black/20 text-zinc-500 hover:text-zinc-300"
             }`}
           >
@@ -774,7 +781,7 @@ export default function TelegramPage() {
               type="button"
               onClick={() => setHighSignalOnly(!highSignalOnly())}
               aria-pressed={highSignalOnly()}
-              class={`min-h-11 cursor-pointer rounded-xl border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
+              class={`min-h-11 cursor-pointer rounded-sm border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
                 highSignalOnly() ? "border-violet-400/30 bg-violet-500/10 text-violet-200" : "border-white/[0.08] bg-black/20 text-zinc-500 hover:text-zinc-300"
               }`}
             >
@@ -784,7 +791,7 @@ export default function TelegramPage() {
               type="button"
               onClick={() => setFirstReportsOnly(!firstReportsOnly())}
               aria-pressed={firstReportsOnly()}
-              class={`min-h-11 cursor-pointer rounded-xl border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
+              class={`min-h-11 cursor-pointer rounded-sm border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
                 firstReportsOnly() ? "border-cyan-400/30 bg-cyan-500/10 text-cyan-200" : "border-white/[0.08] bg-black/20 text-zinc-500 hover:text-zinc-300"
               }`}
             >
@@ -797,7 +804,7 @@ export default function TelegramPage() {
                 setSignalFirst(!signalFirst());
               }}
               aria-pressed={signalFirst()}
-              class={`min-h-11 cursor-pointer rounded-xl border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
+              class={`min-h-11 cursor-pointer rounded-sm border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
                 signalFirst() ? "border-sky-400/30 bg-sky-500/10 text-sky-200" : "border-white/[0.08] bg-black/20 text-zinc-500 hover:text-zinc-300"
               }`}
             >
@@ -810,8 +817,8 @@ export default function TelegramPage() {
                 setHidePremiumNoise(!hidePremiumNoise());
               }}
               aria-pressed={hidePremiumNoise()}
-              class={`min-h-11 cursor-pointer rounded-xl border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
-                hidePremiumNoise() ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-white/[0.08] bg-black/20 text-zinc-500 hover:text-zinc-300"
+              class={`min-h-11 cursor-pointer rounded-sm border px-3 py-1.5 text-[12px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 ${
+                hidePremiumNoise() ? "border-amber-400/30 bg-amber-500/10 text-amber-200" : "border-white/[0.08] bg-black/20 text-zinc-500 hover:text-zinc-300"
               }`}
             >
               Hide noise
@@ -820,7 +827,7 @@ export default function TelegramPage() {
               </Show>
             </button>
           </Show>
-          <div class="rounded-xl border border-white/[0.08] bg-black/20 px-3 py-1.5 text-[11px] text-zinc-400">
+          <div class="rounded-sm border border-white/[0.08] bg-black/20 px-3 py-1.5 text-[11px] text-zinc-400">
             {feedMode() === "raw"
               ? "Raw view shows single-source flow for operator triage."
               : feedMode() === "verified"
@@ -838,23 +845,23 @@ export default function TelegramPage() {
         </div>
 
         <Show when={ownerDedupeEnabled() && mergeDuplicates()}>
-          <div class="rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-3">
+          <div class="rounded-sm border border-amber-400/20 bg-amber-500/10 p-3">
             <div class="flex flex-wrap items-center gap-2">
-              <p class="text-[12px] font-semibold text-emerald-200">Owner Dedupe Controls</p>
-              <span class="rounded-full border border-emerald-400/25 bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200">
+              <p class="text-[12px] font-semibold text-amber-200">Owner Dedupe Controls</p>
+              <span class="rounded-none border border-amber-400/25 bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-200">
                 Rules: {dedupeFeedbackCount()}
               </span>
-              <span class="rounded-full border border-white/[0.1] bg-black/20 px-2 py-0.5 text-[10px] text-zinc-300">
+              <span class="rounded-none border border-white/[0.1] bg-black/20 px-2 py-0.5 text-[10px] text-zinc-300">
                 Selected events: {selectedClusterKeys().length}
               </span>
-              <span class="rounded-full border border-white/[0.1] bg-black/20 px-2 py-0.5 text-[10px] text-zinc-300">
+              <span class="rounded-none border border-white/[0.1] bg-black/20 px-2 py-0.5 text-[10px] text-zinc-300">
                 Selected signatures: {selectedSignatures().length}
               </span>
               <button
                 type="button"
                 disabled={adminBusy()}
                 onClick={() => { void mergeSelectedClusters(); }}
-                class="cursor-pointer rounded-md border border-emerald-400/35 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-medium text-emerald-100 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                class="cursor-pointer rounded-md border border-amber-400/35 bg-amber-500/15 px-2.5 py-1 text-[11px] font-medium text-amber-100 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Merge selected
               </button>
@@ -875,13 +882,13 @@ export default function TelegramPage() {
                 Refresh rules
               </button>
               <Show when={adminBusy()}>
-                <span class="inline-flex items-center gap-1 text-[11px] text-emerald-100">
+                <span class="inline-flex items-center gap-1 text-[11px] text-amber-100">
                   <LoaderCircle class="h-3.5 w-3.5 animate-spin" /> Applying...
                 </span>
               </Show>
             </div>
             <Show when={adminStatus().trim().length > 0}>
-              <p class="mt-2 text-[11px] text-emerald-100/90">{adminStatus()}</p>
+              <p class="mt-2 text-[11px] text-amber-100/90">{adminStatus()}</p>
             </Show>
           </div>
         </Show>
@@ -890,7 +897,7 @@ export default function TelegramPage() {
       <Show when={freshness.freshnessNotice()}>
         {(notice) => (
           <section
-            class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
+            class={`freshness-transition-banner rounded-sm border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
             role="status"
             aria-live="polite"
           >
@@ -920,7 +927,7 @@ export default function TelegramPage() {
       <Show when={!showInitialLoading() && filteredEntries().length > 0}>
         <section class="space-y-3">
           <div class="flex items-center gap-3 border-b border-white/[0.06] pb-2">
-            <div class="h-5 w-1 rounded-full bg-blue-500" />
+            <div class="h-5 w-1 rounded-none bg-blue-500" />
             <h2 class="text-base font-semibold text-white">
               {premiumSignalEnabled()
                 ? groupFilter() === "all"
@@ -934,7 +941,7 @@ export default function TelegramPage() {
               {filteredEntries().length} msgs
             </span>
             <Show when={premiumNoiseEnabled() && premiumNoiseHiddenCount() > 0}>
-              <span class="rounded-md border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-mono-data text-emerald-200">
+              <span class="rounded-md border border-amber-400/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-mono-data text-amber-200">
                 -{premiumNoiseHiddenCount()} noise
               </span>
             </Show>
@@ -964,7 +971,7 @@ export default function TelegramPage() {
 
       <Show when={showEmpty()}>
         <div class="surface-card p-14 text-center">
-          <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.06] bg-zinc-800/40">
+          <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-sm border border-white/[0.06] bg-zinc-800/40">
             <Radio size={24} class="text-zinc-500" />
           </div>
           <h3 class="text-sm font-medium text-zinc-400">No Telegram messages match the current filters</h3>
@@ -973,7 +980,7 @@ export default function TelegramPage() {
       </Show>
 
       <Show when={!showInitialLoading() && filteredEntries().length > 0}>
-        <div class="grid gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 text-[11px] text-zinc-500 sm:grid-cols-3">
+        <div class="grid gap-2 rounded-sm border border-white/[0.06] bg-white/[0.02] p-3 text-[11px] text-zinc-500 sm:grid-cols-3">
           <div class="flex items-center gap-2"><MessageSquare size={12} /> Raw, deduped, and verified modes let operators pivot without leaving the page</div>
           <div class="flex items-center gap-2"><Image size={12} /> Media-only mode isolates visual posts and OCR-backed entries</div>
           <div class="flex items-center gap-2"><Video size={12} /> Source matrix panels expose cluster provenance before merge or escalation</div>

@@ -130,12 +130,12 @@ export default function OsintSourceProfilePage() {
 
                   <section class="surface-card p-4">
                     <div class="flex flex-wrap gap-2 text-[11px] text-zinc-400">
-                      <span class="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5">{payload().source.name}</span>
+                      <span class="rounded-none border border-white/[0.08] bg-black/20 px-2 py-0.5">{payload().source.name}</span>
                       <For each={payload().summary.regions}>
-                        {(region) => <span class="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5">{region}</span>}
+                        {(region) => <span class="rounded-none border border-white/[0.08] bg-black/20 px-2 py-0.5">{region}</span>}
                       </For>
                       <For each={payload().summary.categories}>
-                        {(category) => <span class="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5">{category}</span>}
+                        {(category) => <span class="rounded-none border border-white/[0.08] bg-black/20 px-2 py-0.5">{category}</span>}
                       </For>
                     </div>
                   </section>
@@ -151,7 +151,7 @@ export default function OsintSourceProfilePage() {
                             profile()?.source ?? { slug: provider(), name: sourceName() },
                           );
                         })}
-                        class={`rounded-xl border px-3 py-2 text-sm ${favoriteSource() ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
+                        class={`rounded-sm border px-3 py-2 text-sm ${favoriteSource() ? "border-amber-400/30 bg-amber-500/10 text-amber-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
                       >
                         {favoriteSource() ? "Favorited provider" : "Favorite provider"}
                       </button>
@@ -165,7 +165,7 @@ export default function OsintSourceProfilePage() {
                               onClick={() => void persistPreferences((next) => {
                                 next.watchRegions = toggleSubscriberPreferenceValue(next.watchRegions, region);
                               })}
-                              class={`rounded-xl border px-3 py-2 text-sm ${active() ? "border-blue-400/30 bg-blue-500/10 text-blue-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
+                              class={`rounded-sm border px-3 py-2 text-sm ${active() ? "border-blue-400/30 bg-blue-500/10 text-blue-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
                             >
                               {active() ? `Watching ${region}` : `Watch ${region}`}
                             </button>
@@ -182,7 +182,7 @@ export default function OsintSourceProfilePage() {
                               onClick={() => void persistPreferences((next) => {
                                 next.watchCategories = toggleSubscriberPreferenceValue(next.watchCategories, category);
                               })}
-                              class={`rounded-xl border px-3 py-2 text-sm ${active() ? "border-violet-400/30 bg-violet-500/10 text-violet-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
+                              class={`rounded-sm border px-3 py-2 text-sm ${active() ? "border-violet-400/30 bg-violet-500/10 text-violet-200" : "border-white/[0.08] bg-black/20 text-zinc-300"} disabled:opacity-50`}
                             >
                               {active() ? `Watching ${category}` : `Watch ${category}`}
                             </button>
@@ -204,9 +204,9 @@ export default function OsintSourceProfilePage() {
                       <div class="space-y-2">
                         <For each={payload().recentItems}>
                           {(item) => (
-                            <a href={item.url} target="_blank" rel="noopener noreferrer" class="block rounded-xl border border-white/[0.08] bg-black/20 p-3 no-underline">
+                            <a href={item.url} target="_blank" rel="noopener noreferrer" class="block rounded-sm border border-white/[0.08] bg-black/20 p-3 no-underline">
                               <div class="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
-                                <span class="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5">{item.severity || "unknown"}</span>
+                                <span class="rounded-none border border-white/[0.08] bg-white/[0.03] px-2 py-0.5">{item.severity || "unknown"}</span>
                                 <span><Clock size={11} class="mr-1 inline" />{formatRelativeTimeAt(item.timestamp, nowMs())}</span>
                               </div>
                               <h2 class="text-sm font-medium text-white">{item.title}</h2>

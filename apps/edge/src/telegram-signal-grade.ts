@@ -1,6 +1,10 @@
 import type { ChannelConfig } from "./channels";
 
-import { HIGH_SIGNAL_TELEGRAM_SCORE_THRESHOLD } from "@intel-dashboard/shared/telegram-signal.ts";
+import {
+  CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT,
+  HIGH_SIGNAL_TELEGRAM_SCORE_THRESHOLD,
+  hasConfirmedFirstReporter,
+} from "@intel-dashboard/shared/telegram-signal.ts";
 
 export type TelegramSignalGrade = "A" | "B" | "C" | "D";
 
@@ -73,6 +77,83 @@ const DEFAULT_PROFILE: TelegramSignalProfile = {
   },
 };
 
+const PROFILE_GROUPS = {
+  conflict: {
+    profileId: "conflict",
+    category: "conflict",
+    weights: {
+      sourceQuality: 34,
+      lead: 16,
+      corroboration: 24,
+      evidence: 10,
+      freshness: 14,
+      penalty: 16,
+    },
+    thresholds: { a: 83, b: 68, c: 54 },
+  },
+  cyber: {
+    profileId: "cyber",
+    category: "cyber",
+    weights: {
+      sourceQuality: 42,
+      lead: 8,
+      corroboration: 24,
+      evidence: 10,
+      freshness: 8,
+      penalty: 16,
+    },
+    thresholds: { a: 82, b: 68, c: 54 },
+  },
+  alerts: {
+    profileId: "alerts",
+    category: "alerts",
+    weights: {
+      sourceQuality: 34,
+      lead: 10,
+      corroboration: 18,
+      evidence: 8,
+      freshness: 20,
+      penalty: 18,
+    },
+    thresholds: { a: 80, b: 66, c: 52 },
+  },
+} satisfies Record<string, TelegramSignalProfile>;
+
+const CATEGORY_TO_PROFILE_GROUP: Record<string, keyof typeof PROFILE_GROUPS> = {
+  conflict: "conflict",
+  cyber: "cyber",
+  alerts: "alerts",
+  ua_official: "alerts",
+  ru_official: "alerts",
+  air_defense: "alerts",
+  nato_tracking: "alerts",
+  nuclear_monitoring: "alerts",
+};
+
+function cloneProfile(profile: TelegramSignalProfile): TelegramSignalProfile {
+  return {
+    profileId: profile.profileId,
+    category: profile.category,
+    weights: { ...profile.weights },
+    thresholds: { ...profile.thresholds },
+  };
+}
+
+export function createSeededTelegramSignalProfiles(): TelegramSignalProfile[] {
+  return [
+    cloneProfile(DEFAULT_PROFILE),
+    cloneProfile(PROFILE_GROUPS.conflict),
+    cloneProfile(PROFILE_GROUPS.cyber),
+    cloneProfile(PROFILE_GROUPS.alerts),
+  ];
+}
+
+export function resolveTelegramSignalProfileCategory(category: string | null | undefined): string {
+  const normalized = (category || "").trim().toLowerCase();
+  if (!normalized || normalized === "default") return "default";
+  return CATEGORY_TO_PROFILE_GROUP[normalized] ?? "conflict";
+}
+
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) {
     return min;
@@ -103,12 +184,7 @@ function normalizeVerificationState(value: TelegramSignalInput["verificationStat
 }
 
 export function createDefaultTelegramSignalProfile(): TelegramSignalProfile {
-  return {
-    profileId: DEFAULT_PROFILE.profileId,
-    category: DEFAULT_PROFILE.category,
-    weights: { ...DEFAULT_PROFILE.weights },
-    thresholds: { ...DEFAULT_PROFILE.thresholds },
-  };
+  return cloneProfile(DEFAULT_PROFILE);
 }
 
 export function computeTelegramSignalGrade(args: {
@@ -131,11 +207,19 @@ export function computeTelegramSignalGrade(args: {
     1,
   );
   const freshnessFactor = normalizeFreshnessTier(args.input.freshnessTier);
-  const leadFactor = args.input.isFirstReport ? 1 : 0;
+  const confirmedFirstReport = args.input.isFirstReport && hasConfirmedFirstReporter(args.input.sourceCount);
+  const leadFactor = confirmedFirstReport
+    ? args.input.freshnessTier === "breaking"
+      ? 1
+      : args.input.freshnessTier === "fresh"
+        ? 0.45
+        : 0
+    : 0;
   const penaltyFactor = clamp(
     (args.input.verificationState === "single_source" ? 0.45 : 0) +
       (args.input.duplicateCount > args.input.sourceCount ? 0.25 : 0) +
-      (!args.input.hasMedia && !args.input.hasUsefulImageText && args.input.sourceCount <= 1 ? 0.2 : 0),
+      (!args.input.hasMedia && !args.input.hasUsefulImageText && args.input.sourceCount <= 1 ? 0.2 : 0) +
+      (args.input.freshnessTier === "watch" ? 0.4 : 0),
     0,
     1,
   );
@@ -149,7 +233,7 @@ export function computeTelegramSignalGrade(args: {
     penalty: Math.round(profile.weights.penalty * penaltyFactor),
   };
 
-  const score = clamp(
+  const uncappedScore = clamp(
     breakdown.sourceQuality +
       breakdown.lead +
       breakdown.corroboration +
@@ -159,6 +243,8 @@ export function computeTelegramSignalGrade(args: {
     0,
     100,
   );
+  const freshnessCap = args.input.freshnessTier === "watch" ? profile.thresholds.c + 9 : 100;
+  const score = clamp(uncappedScore, 0, freshnessCap);
 
   const reasons: string[] = [];
   if (leadFactor > 0) reasons.push("first");

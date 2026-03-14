@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  computeTelegramSourceLeaderboardScore,
   normalizeTelegramSourceLeaderboardRows,
   queryTelegramSourceLeaderboard,
   resolveTelegramLeaderboardWindowStart,
@@ -11,15 +12,15 @@ test("resolveTelegramLeaderboardWindowStart returns expected cutoff", () => {
   assert.equal(resolveTelegramLeaderboardWindowStart(nowMs, "24h"), "2026-03-08T12:00:00.000Z");
 });
 
-test("normalizeTelegramSourceLeaderboardRows ranks and clamps rows", () => {
+test("normalizeTelegramSourceLeaderboardRows favors high-signal hit rate and trust over raw volume", () => {
   const rows = normalizeTelegramSourceLeaderboardRows([
     {
       channel: "alpha",
       label: "Alpha",
-      lead_count: 4,
+      lead_count: 3,
       avg_signal_score: 88,
       high_signal_lead_count: 3,
-      corroborated_lead_count: 2,
+      corroborated_lead_count: 3,
       source_history_score: 91,
       trust_tier: "core",
       latency_tier: "instant",
@@ -27,11 +28,11 @@ test("normalizeTelegramSourceLeaderboardRows ranks and clamps rows", () => {
     {
       channel: "beta",
       label: "Beta",
-      lead_count: 1,
-      avg_signal_score: 70,
+      lead_count: 14,
+      avg_signal_score: 54,
       high_signal_lead_count: 1,
-      corroborated_lead_count: 1,
-      source_history_score: 60,
+      corroborated_lead_count: 14,
+      source_history_score: 45,
       trust_tier: "watch",
       latency_tier: "monitor",
     },
@@ -61,6 +62,7 @@ test("queryTelegramSourceLeaderboard queries D1 and normalizes the leaderboard",
                   source_history_score: 85,
                   trust_tier: "verified",
                   latency_tier: "fast",
+                  leaderboard_score: 77,
                 },
               ],
             }),
@@ -79,4 +81,26 @@ test("queryTelegramSourceLeaderboard queries D1 and normalizes the leaderboard",
   assert.equal(result.window, "7d");
   assert.equal(boundCutoff, "2026-03-02T12:00:00.000Z");
   assert.equal(result.entries[0]?.channel, "alpha");
+  assert.equal(result.entries[0]?.leaderboardScore, 77);
+});
+
+test("computeTelegramSourceLeaderboardScore rewards corroborated high-signal lead quality over raw volume", () => {
+  const focused = computeTelegramSourceLeaderboardScore({
+    leadCount: 3,
+    avgSignalScore: 89,
+    highSignalLeadCount: 3,
+    corroboratedLeadCount: 3,
+    sourceHistoryScore: 90,
+    trustTier: "core",
+  });
+  const noisy = computeTelegramSourceLeaderboardScore({
+    leadCount: 12,
+    avgSignalScore: 52,
+    highSignalLeadCount: 1,
+    corroboratedLeadCount: 2,
+    sourceHistoryScore: 45,
+    trustTier: "watch",
+  });
+
+  assert.ok(focused > noisy);
 });

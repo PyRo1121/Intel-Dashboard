@@ -23,7 +23,7 @@ export default function AuthAccessCard(props: AuthAccessCardProps) {
     <main class="intel-app-bg flex items-center px-4 py-8 text-zinc-100" data-testid={surfaceTestId()}>
       <div class="intel-panel relative mx-auto w-full max-w-md p-8">
         <div class="mb-5 intel-badge">
-          <span class="h-2 w-2 rounded-full bg-emerald-400" />
+          <span class="h-2 w-2 rounded-none bg-amber-400" />
           {SITE_NAME} Access
         </div>
 

@@ -65,7 +65,7 @@ export default function Briefings() {
         <div>
           <div class="flex items-center gap-2 mb-2">
             <div class="intel-badge">
-              <Send size={11} class="text-emerald-400" />
+              <Send size={11} class="text-amber-400" />
               Auto-Generated
             </div>
           </div>
@@ -75,12 +75,12 @@ export default function Briefings() {
           </p>
         </div>
         <div class="flex items-center gap-2">
-          <span class={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
+          <span class={`rounded-none border px-2.5 py-1 text-[11px] font-medium ${freshnessPillTone(freshness.feedFreshness().state)}`} title={freshnessTooltip(feedThresholds)}>
             Briefings: {freshness.feedFreshness().label}
             <Show when={freshness.latestFeedAgeMs() !== null}> ({freshness.latestFeedAgeLabel()})</Show>
           </span>
           <Show when={items().length > 0}>
-            <div class="flex items-center gap-1 p-1 surface-card rounded-2xl">
+            <div class="flex items-center gap-1 p-1 surface-card rounded-sm">
               <div class="px-3.5 py-2 text-center">
                 <p class="text-lg font-bold font-mono-data text-white">{items().length}</p>
                 <p class="text-[10px] text-zinc-600 uppercase tracking-wider font-medium">Briefings</p>
@@ -93,7 +93,7 @@ export default function Briefings() {
       <Show when={freshness.freshnessNotice()}>
         {(notice) => (
           <section
-            class={`freshness-transition-banner rounded-2xl border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
+            class={`freshness-transition-banner rounded-sm border px-4 py-3 text-xs ${freshnessBannerTone(notice().state)} ${notice().phase === "exit" ? "freshness-transition-banner--exit" : ""}`}
             role="status"
             aria-live="polite"
           >
@@ -112,7 +112,7 @@ export default function Briefings() {
               {() => (
                 <div class="surface-card p-6">
                   <div class="h-5 w-40 bg-white/[0.04] rounded mb-3 animate-shimmer" />
-                  <div class="h-1.5 w-full bg-white/[0.04] rounded-full mb-4 animate-shimmer" />
+                  <div class="h-1.5 w-full bg-white/[0.04] rounded-none mb-4 animate-shimmer" />
                   <div class="h-4 w-full bg-white/[0.04] rounded mb-2 animate-shimmer" />
                   <div class="h-4 w-5/6 bg-white/[0.04] rounded animate-shimmer" />
                 </div>
@@ -125,8 +125,8 @@ export default function Briefings() {
           when={items().length > 0}
           fallback={
             <div class="surface-card p-14 text-center">
-              <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
-                <FileText size={28} class="text-emerald-400/50" />
+              <div class="w-14 h-14 mx-auto mb-4 rounded-sm bg-amber-500/10 flex items-center justify-center">
+                <FileText size={28} class="text-amber-400/50" />
               </div>
               <h3 class="text-sm font-medium text-zinc-400 mb-1">
                 No briefings yet
@@ -165,13 +165,13 @@ export default function Briefings() {
                             {getSeveritySummaryTotal(briefing.severity_summary)} events
                           </span>
                         </div>
-                        <div class={`flex items-center justify-center w-7 h-7 rounded-lg text-zinc-600 group-hover:text-zinc-400 transition-all duration-300 ${isExpanded() ? "rotate-180" : ""}`}>
+                        <div class={`flex items-center justify-center w-7 h-7 rounded-sm text-zinc-600 group-hover:text-zinc-400 transition-all duration-300 ${isExpanded() ? "rotate-180" : ""}`}>
                           <ChevronDown size={16} />
                         </div>
                       </div>
 
                       {/* Severity bar */}
-                      <div class="flex gap-0.5 h-2 rounded-full overflow-hidden mb-3">
+                      <div class="flex gap-0.5 h-2 rounded-none overflow-hidden mb-3">
                         <Show when={briefing.severity_summary.critical > 0}>
                           <div class="bg-red-500 rounded-l-full" style={`flex: ${briefing.severity_summary.critical}`} />
                         </Show>
@@ -190,25 +190,25 @@ export default function Briefings() {
                       <div class="flex items-center gap-3 text-[11px] mb-4">
                         <Show when={briefing.severity_summary.critical > 0}>
                           <span class="inline-flex items-center gap-1 text-red-400 font-medium">
-                            <span class="w-1.5 h-1.5 rounded-full bg-red-400 shadow-[0_0_4px_rgba(239,68,68,0.5)]" />
+                            <span class="w-1.5 h-1.5 rounded-none bg-red-400 shadow-[0_0_4px_rgba(239,68,68,0.5)]" />
                             {briefing.severity_summary.critical} critical
                           </span>
                         </Show>
                         <Show when={briefing.severity_summary.high > 0}>
                           <span class="inline-flex items-center gap-1 text-amber-400 font-medium">
-                            <span class="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            <span class="w-1.5 h-1.5 rounded-none bg-amber-400" />
                             {briefing.severity_summary.high} high
                           </span>
                         </Show>
                         <Show when={briefing.severity_summary.medium > 0}>
                           <span class="inline-flex items-center gap-1 text-blue-400">
-                            <span class="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                            <span class="w-1.5 h-1.5 rounded-none bg-blue-400" />
                             {briefing.severity_summary.medium} med
                           </span>
                         </Show>
                         <Show when={briefing.severity_summary.low > 0}>
                           <span class="inline-flex items-center gap-1 text-zinc-500">
-                            <span class="w-1.5 h-1.5 rounded-full bg-zinc-500" />
+                            <span class="w-1.5 h-1.5 rounded-none bg-zinc-500" />
                             {briefing.severity_summary.low} low
                           </span>
                         </Show>
@@ -224,7 +224,7 @@ export default function Briefings() {
                       {/* Expand hint */}
                       <Show when={briefing.content.length > 300 && !isExpanded()}>
                         <div class="mt-3 pt-3 border-t border-white/[0.04]">
-                          <span class="text-[11px] text-emerald-400/60 font-medium">Click to expand full briefing</span>
+                          <span class="text-[11px] text-amber-400/60 font-medium">Click to expand full briefing</span>
                         </div>
                       </Show>
 

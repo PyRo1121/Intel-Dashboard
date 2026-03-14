@@ -7,6 +7,13 @@
 import { DurableObject } from "cloudflare:workers";
 import { CHANNELS, CATEGORIES, type ChannelConfig } from "./channels";
 import { parseChannelHtml, type ParsedMessage } from "./html-parser";
+import { normalizeTelegramCollectorBatch } from "./telegram-collector-intake";
+import {
+  parseTelegramCollectorChannelSpecs,
+  type TelegramChannelAuthority,
+  type TelegramChannelAuthorityRow,
+  type TelegramIngestAuthority,
+} from "@intel-dashboard/shared/telegram-collector.ts";
 import {
   translateBatch,
   translateImageBatch,
@@ -27,11 +34,16 @@ import {
 import {
   computeTelegramSignalGrade,
   createDefaultTelegramSignalProfile,
+  createSeededTelegramSignalProfiles,
   isHighSignalTelegramScore,
+  resolveTelegramSignalProfileCategory,
   type TelegramSignalGrade,
   type TelegramSignalProfile,
 } from "./telegram-signal-grade";
 import { resolveTelegramScrapePlan } from "./telegram-scrape-plan";
+import { CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT } from "@intel-dashboard/shared/telegram-signal.ts";
+import { shouldPersistLatestTelegramStateLocally } from "./telegram-state-cache";
+import { mergeLatestChannelStates } from "./telegram-state-merge";
 
 // ============================================================================
 // Types
@@ -47,6 +59,7 @@ type Env = Cloudflare.Env & {
   SCRAPE_FETCH_TIMEOUT_MS?: string;
   SCRAPE_WORKER_CONCURRENCY?: string;
   CHANNEL_BUILD_CONCURRENCY?: string;
+  TELEGRAM_HOT_CHANNELS?: string;
   MAX_MESSAGES_PER_CHANNEL?: string;
   DEBUG_RUNTIME_LOGS?: string;
 };
@@ -76,6 +89,7 @@ interface ChannelState {
   acquisition_method?: ChannelConfig["acquisitionMethod"];
   domain_tags?: string[];
   subscriber_value_score?: number;
+  ingest_authority?: TelegramIngestAuthority;
   message_count: number;
   messages: StoredMessage[];
 }
@@ -116,6 +130,7 @@ interface TelegramCanonicalEventSource {
   acquisition_method?: ChannelConfig["acquisitionMethod"];
   domain_tags?: string[];
   subscriber_value_score?: number;
+  ingest_authority?: TelegramIngestAuthority;
   message_id: string;
   link: string;
   datetime: string;
@@ -134,6 +149,7 @@ interface TelegramCanonicalEvent {
   source_type?: ChannelConfig["sourceType"];
   acquisition_method?: ChannelConfig["acquisitionMethod"];
   subscriber_value_score?: number;
+  ingest_authority?: TelegramIngestAuthority;
   signal_profile_id?: string;
   signal_score?: number;
   signal_grade?: TelegramSignalGrade;
@@ -176,6 +192,7 @@ interface CanonicalSourceRecord {
   acquisitionMethod: ChannelConfig["acquisitionMethod"];
   domainTags: string[];
   subscriberValueScore: number;
+  ingestAuthority: TelegramIngestAuthority;
   messageId: string;
   link: string;
   datetime: string;
@@ -250,7 +267,7 @@ type AnyMediaItem = { type: string; url: string; thumbnail?: string };
 const DEFAULT_SCRAPE_INTERVAL_MS = 10_000;
 const MIN_SCRAPE_INTERVAL_MS = 5_000;
 const MAX_SCRAPE_INTERVAL_MS = 120_000;
-const DEFAULT_ROTATION_WINDOW_SECONDS = 60;
+const DEFAULT_ROTATION_WINDOW_SECONDS = 30;
 const MIN_ROTATION_WINDOW_SECONDS = 10;
 const MAX_ROTATION_WINDOW_SECONDS = 3600;
 const DEFAULT_SCRAPE_WORKER_CONCURRENCY = 48;
@@ -599,6 +616,8 @@ export class TelegramScraperDO extends DurableObject<Env> {
         "CREATE INDEX IF NOT EXISTS idx_telegram_signal_profiles_active ON telegram_signal_profiles(active, category);",
         "CREATE TABLE IF NOT EXISTS telegram_source_history (channel TEXT PRIMARY KEY, score REAL NOT NULL, total_events REAL NOT NULL, lead_reports REAL NOT NULL, follow_on_reports REAL NOT NULL, corroborated_reports REAL NOT NULL, single_source_reports REAL NOT NULL, trust_tier TEXT NOT NULL, latency_tier TEXT NOT NULL, updated_at TEXT NOT NULL);",
         "CREATE INDEX IF NOT EXISTS idx_telegram_source_history_score ON telegram_source_history(score DESC);",
+        "CREATE TABLE IF NOT EXISTS telegram_channel_authority (channel TEXT PRIMARY KEY, desired_authority TEXT NOT NULL, effective_authority TEXT NOT NULL, join_status TEXT NOT NULL, last_collector_message_at TEXT, last_scraper_message_at TEXT, updated_at TEXT NOT NULL);",
+        "CREATE INDEX IF NOT EXISTS idx_telegram_channel_authority_effective ON telegram_channel_authority(effective_authority, join_status);",
       ];
       for (const statement of schemaStatements) {
         await this.env.INTEL_DB.prepare(statement).run();
@@ -639,19 +658,22 @@ export class TelegramScraperDO extends DurableObject<Env> {
           "ALTER TABLE telegram_canonical_events ADD COLUMN signal_reasons_json TEXT;",
         ).run();
       }
-      const defaultProfile = createDefaultTelegramSignalProfile();
-      await this.env.INTEL_DB.prepare(
-        `INSERT OR IGNORE INTO telegram_signal_profiles (profile_id, category, active, weights_json, thresholds_json, updated_at)
-         VALUES (?, ?, 1, ?, ?, ?)`,
-      )
-        .bind(
-          defaultProfile.profileId,
-          "default",
-          JSON.stringify(defaultProfile.weights),
-          JSON.stringify(defaultProfile.thresholds),
-          new Date().toISOString(),
+      const seededProfiles = createSeededTelegramSignalProfiles();
+      for (const seededProfile of seededProfiles) {
+        await this.env.INTEL_DB.prepare(
+          `INSERT OR IGNORE INTO telegram_signal_profiles (profile_id, category, active, weights_json, thresholds_json, updated_at)
+           VALUES (?, ?, 1, ?, ?, ?)`,
         )
-        .run();
+          .bind(
+            seededProfile.profileId,
+            seededProfile.category ?? "default",
+            JSON.stringify(seededProfile.weights),
+            JSON.stringify(seededProfile.thresholds),
+            new Date().toISOString(),
+          )
+          .run();
+      }
+      await this.syncBootstrapChannelAuthority();
       this.d1SchemaReady = true;
     } catch (err) {
       console.error(
@@ -661,21 +683,96 @@ export class TelegramScraperDO extends DurableObject<Env> {
     }
   }
 
-  private selectChannelsForCycle(nowMs: number): {
+  private async syncBootstrapChannelAuthority(): Promise<void> {
+    if (!this.env.INTEL_DB) return;
+    const nowIso = new Date().toISOString();
+    const configured = new Set(parseTelegramCollectorChannelSpecs(this.env.TELEGRAM_HOT_CHANNELS).map((item) => item.username));
+    for (const channel of CHANNELS) {
+      const desiredAuthority: TelegramChannelAuthority = configured.has(channel.username.toLowerCase()) ? "mtproto" : "scraper";
+      const joinStatus = desiredAuthority === "mtproto" ? "pending" : "joined";
+      const initialEffectiveAuthority: TelegramChannelAuthority = desiredAuthority === "mtproto" ? "scraper" : "scraper";
+      await this.env.INTEL_DB.prepare(
+        `INSERT INTO telegram_channel_authority (channel, desired_authority, effective_authority, join_status, updated_at)
+         VALUES (?, ?, COALESCE((SELECT effective_authority FROM telegram_channel_authority WHERE channel = ?), ?),
+                 COALESCE((SELECT join_status FROM telegram_channel_authority WHERE channel = ?), ?), ?)
+         ON CONFLICT(channel) DO UPDATE SET
+           desired_authority = excluded.desired_authority,
+           effective_authority = CASE
+             WHEN excluded.desired_authority = 'scraper' THEN 'scraper'
+             ELSE telegram_channel_authority.effective_authority
+           END,
+           join_status = CASE
+             WHEN excluded.desired_authority = 'scraper' THEN 'joined'
+             ELSE telegram_channel_authority.join_status
+           END,
+           updated_at = excluded.updated_at`
+      ).bind(channel.username.toLowerCase(), desiredAuthority, channel.username.toLowerCase(), initialEffectiveAuthority, channel.username.toLowerCase(), joinStatus, nowIso).run();
+    }
+  }
+
+  private async loadMtprotoAuthorityChannels(): Promise<string[]> {
+    const fallback = parseTelegramCollectorChannelSpecs(this.env.TELEGRAM_HOT_CHANNELS).map((item) => item.username);
+    if (!this.env.INTEL_DB) return fallback;
+    await this.ensureD1Schema();
+    try {
+      const result = await this.env.INTEL_DB.prepare(
+        `SELECT channel FROM telegram_channel_authority WHERE effective_authority = 'mtproto'`
+      ).all<{ channel: string }>();
+      const rows = Array.isArray(result.results) ? result.results : [];
+      const channels = rows.map((row) => (row.channel || '').trim().toLowerCase()).filter(Boolean);
+      return channels.length > 0 ? channels : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private async markChannelAuthority(args: {
+    channel: string;
+    desiredAuthority?: TelegramChannelAuthority;
+    effectiveAuthority?: TelegramChannelAuthority;
+    joinStatus?: string;
+    lastCollectorMessageAt?: string | null;
+    lastScraperMessageAt?: string | null;
+  }): Promise<void> {
+    if (!this.env.INTEL_DB) return;
+    await this.ensureD1Schema();
+    const channel = args.channel.trim().toLowerCase();
+    if (!channel) return;
+    const nowIso = new Date().toISOString();
+    await this.env.INTEL_DB.prepare(
+      `INSERT INTO telegram_channel_authority (channel, desired_authority, effective_authority, join_status, last_collector_message_at, last_scraper_message_at, updated_at)
+       VALUES (?, COALESCE(?, 'scraper'), COALESCE(?, 'scraper'), COALESCE(?, 'joined'), ?, ?, ?)
+       ON CONFLICT(channel) DO UPDATE SET
+         desired_authority = COALESCE(excluded.desired_authority, telegram_channel_authority.desired_authority),
+         effective_authority = COALESCE(excluded.effective_authority, telegram_channel_authority.effective_authority),
+         join_status = COALESCE(excluded.join_status, telegram_channel_authority.join_status),
+         last_collector_message_at = COALESCE(excluded.last_collector_message_at, telegram_channel_authority.last_collector_message_at),
+         last_scraper_message_at = COALESCE(excluded.last_scraper_message_at, telegram_channel_authority.last_scraper_message_at),
+         updated_at = excluded.updated_at`
+    ).bind(channel, args.desiredAuthority ?? null, args.effectiveAuthority ?? null, args.joinStatus ?? null, args.lastCollectorMessageAt ?? null, args.lastScraperMessageAt ?? null, nowIso).run();
+  }
+
+  private async selectChannelsForCycle(nowMs: number): Promise<{
     channels: ChannelConfig[];
     slot: number;
     slots: number;
-  } {
+  }> {
+    const mtprotoChannels = await this.loadMtprotoAuthorityChannels();
     return resolveTelegramScrapePlan({
       channels: CHANNELS,
       nowMs,
       intervalMs: this.getScrapeIntervalMs(),
       rotationWindowSeconds: this.getRotationWindowSeconds(),
       hotChannelsPerCycle: this.getHotChannelsPerCycle(),
+      mtprotoChannels,
     });
   }
 
   private makeEmptyChannelState(config: ChannelConfig): ChannelState {
+    const collectorChannels = parseTelegramCollectorChannelSpecs(this.env.TELEGRAM_HOT_CHANNELS);
+    const ingestAuthority: TelegramIngestAuthority = collectorChannels.some((item) => item.username === config.username.toLowerCase())
+      ? "mtproto"
+      : "scraper";
     return {
       username: config.username,
       label: config.label,
@@ -687,6 +784,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
       acquisition_method: config.acquisitionMethod,
       domain_tags: config.domainTags,
       subscriber_value_score: config.subscriberValueScore,
+      ingest_authority: ingestAuthority,
       message_count: 0,
       messages: [],
     };
@@ -992,7 +1090,9 @@ export class TelegramScraperDO extends DurableObject<Env> {
   }
 
   private resolveSignalProfile(profiles: Map<string, TelegramSignalProfile>, category: string): TelegramSignalProfile {
-    return profiles.get((category || "").trim().toLowerCase()) ?? profiles.get("default") ?? createDefaultTelegramSignalProfile();
+    const normalized = (category || "").trim().toLowerCase();
+    const grouped = resolveTelegramSignalProfileCategory(normalized);
+    return profiles.get(normalized) ?? profiles.get(grouped) ?? profiles.get("default") ?? createDefaultTelegramSignalProfile();
   }
 
   private async persistSourcePerformanceStats(statsByChannel: Map<string, TelegramSourcePerformanceStats>, channelsByName: Map<string, ChannelConfig>): Promise<void> {
@@ -1088,6 +1188,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
             typeof channel.subscriber_value_score === "number" && Number.isFinite(channel.subscriber_value_score)
               ? channel.subscriber_value_score
               : 72,
+          ingestAuthority: channel.ingest_authority ?? "scraper",
           messageId,
           link: message.link,
           datetime: message.datetime,
@@ -1196,7 +1297,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
     const feedback = await this.loadDedupeFeedbackRules();
     const sourcePerformanceStats = this.loadSourcePerformanceStats();
     const signalProfiles = await this.loadSignalProfiles();
-    const channelsByName = new Map(CHANNELS.map((channel) => [channel.username, channel]));
+    const channelsByName = new Map(CHANNELS.map((channel) => [channel.username.toLowerCase(), channel]));
     const clusters: CanonicalCluster[] = [];
     const clusterByKey = new Map<string, number>();
     const canonicalIndex = new Map<string, number[]>();
@@ -1345,6 +1446,32 @@ export class TelegramScraperDO extends DurableObject<Env> {
       }
     }
 
+    const resolveDisplayRepresentative = (args: {
+      sources: typeof clusters[number]["sources"];
+      sourceScores: Map<string, number>;
+      nowMs: number;
+    }) => {
+      const freshnessWeight = (datetimeMs: number) => {
+        if (!Number.isFinite(datetimeMs) || datetimeMs <= 0) return 0;
+        const ageMs = Math.max(0, args.nowMs - datetimeMs);
+        if (ageMs <= 20 * 60 * 1000) return 3;
+        if (ageMs <= 2 * 60 * 60 * 1000) return 2;
+        return 1;
+      };
+      return [...args.sources].sort((left, right) => {
+        const leftFreshness = freshnessWeight(left.datetimeMs);
+        const rightFreshness = freshnessWeight(right.datetimeMs);
+        if (rightFreshness != leftFreshness) return rightFreshness - leftFreshness;
+        const leftScore = args.sourceScores.get(left.channel) ?? left.subscriberValueScore ?? 0;
+        const rightScore = args.sourceScores.get(right.channel) ?? right.subscriberValueScore ?? 0;
+        if (rightScore !== leftScore) return rightScore - leftScore;
+        const leftEvidence = (left.media.length > 0 ? 2 : 0) + (((left.imageTextEn || '').trim().length > 0) ? 1 : 0);
+        const rightEvidence = (right.media.length > 0 ? 2 : 0) + (((right.imageTextEn || '').trim().length > 0) ? 1 : 0);
+        if (rightEvidence !== leftEvidence) return rightEvidence - leftEvidence;
+        return right.datetimeMs - left.datetimeMs;
+      })[0] ?? args.sources[0];
+    };
+
     const events = clusters
       .sort((left, right) => right.latestMs - left.latestMs)
       .slice(0, MAX_CANONICAL_EVENTS)
@@ -1440,6 +1567,11 @@ export class TelegramScraperDO extends DurableObject<Env> {
           sourceStatsByChannel.set(source.channel, nextStats);
           sourceScores.set(source.channel, nextStats.score);
         }
+        const displayRepresentative = resolveDisplayRepresentative({
+          sources: cluster.sources,
+          sourceScores,
+          nowMs,
+        });
         const rankedSourceRepresentatives = [...sourceRepresentatives].sort((left, right) => {
           const leftScore = sourceScores.get(left.channel) ?? 0;
           const rightScore = sourceScores.get(right.channel) ?? 0;
@@ -1468,6 +1600,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
           Math.min(100, Math.round(bestSourceScore * 0.72 + averageSubscriberValue * 0.28 + freshnessBoost + corroborationBoost)),
         );
         const signalProfile = this.resolveSignalProfile(signalProfiles, dominantCategory);
+        const confirmedFirstReporter = sourceCount >= CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT;
         const signalGrade = computeTelegramSignalGrade({
           profile: signalProfile,
           input: {
@@ -1480,14 +1613,14 @@ export class TelegramScraperDO extends DurableObject<Env> {
             verificationState,
             hasMedia: mergedMedia.length > 0,
             hasUsefulImageText: (visualPrimary.imageTextEn || "").trim().length > 0,
-            isFirstReport: sourceCount > 1 && firstReporter.channel === bestSource.channel,
+            isFirstReport: confirmedFirstReporter && firstReporter.channel === bestSource.channel,
           },
         });
-        const displaySourceLabels = rankedSourceRepresentatives
+        const displaySourceLabels = [displayRepresentative, ...rankedSourceRepresentatives.filter((source) => source.signature !== displayRepresentative.signature)]
           .map((source) => source.label)
           .filter((value, index, values) => values.indexOf(value) === index)
           .slice(0, 30);
-        const displaySourceChannels = rankedSourceRepresentatives
+        const displaySourceChannels = [displayRepresentative, ...rankedSourceRepresentatives.filter((source) => source.signature !== displayRepresentative.signature)]
           .map((source) => source.channel)
           .filter((value, index, values) => values.indexOf(value) === index)
           .slice(0, 30);
@@ -1500,9 +1633,10 @@ export class TelegramScraperDO extends DurableObject<Env> {
           domain_tags: [...cluster.domainTags].sort((left, right) => left.localeCompare(right)).slice(0, 24),
           trust_tier: trustTier,
           latency_tier: latencyTier,
-          source_type: bestSource.sourceType,
-          acquisition_method: bestSource.acquisitionMethod,
+          source_type: displayRepresentative.sourceType,
+          acquisition_method: displayRepresentative.acquisitionMethod,
           subscriber_value_score: averageSubscriberValue,
+          ingest_authority: displayRepresentative.ingestAuthority,
           signal_profile_id: signalProfile.profileId,
           signal_score: signalGrade.score,
           signal_grade: signalGrade.grade,
@@ -1510,17 +1644,17 @@ export class TelegramScraperDO extends DurableObject<Env> {
           freshness_tier: freshnessTier,
           verification_state: verificationState,
           rank_score: rankScore,
-          first_reporter_label: firstReporter.label,
-          first_reporter_channel: firstReporter.channel,
-          first_reported_at: firstReporter.datetime || new Date(firstReporter.datetimeMs || cluster.latestMs || Date.now()).toISOString(),
+          first_reporter_label: confirmedFirstReporter ? firstReporter.label : undefined,
+          first_reporter_channel: confirmedFirstReporter ? firstReporter.channel : undefined,
+          first_reported_at: confirmedFirstReporter ? (firstReporter.datetime || new Date(firstReporter.datetimeMs || cluster.latestMs || Date.now()).toISOString()) : undefined,
           source_count: sourceCount,
           duplicate_count: Math.max(0, cluster.aliases.size - 1),
           source_labels: displaySourceLabels,
           source_channels: displaySourceChannels,
-          text_original: cluster.primary.textOriginal,
-          text_en: cluster.primary.textEn,
-          image_text_en: visualPrimary.imageTextEn,
-          language: cluster.primary.language,
+          text_original: displayRepresentative.textOriginal,
+          text_en: displayRepresentative.textEn,
+          image_text_en: ((displayRepresentative.imageTextEn || '').trim().length > 0 ? displayRepresentative.imageTextEn : visualPrimary.imageTextEn),
+          language: displayRepresentative.language,
           media: mergedMedia,
           has_video: mergedMedia.some((item) => item.type === "video"),
           has_photo: mergedMedia.some((item) => item.type === "photo"),
@@ -1535,6 +1669,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
             acquisition_method: source.acquisitionMethod,
             domain_tags: source.domainTags,
             subscriber_value_score: sourceStatsByChannel.get(source.channel)?.score ?? source.subscriberValueScore,
+            ingest_authority: source.ingestAuthority,
             message_id: source.messageId,
             link: source.link,
             datetime: source.datetime,
@@ -1633,6 +1768,82 @@ export class TelegramScraperDO extends DurableObject<Env> {
       return new Response(null, {
         status: 101,
         webSocket: client,
+      });
+    }
+
+    if (url.pathname === "/collector/ingest") {
+      if (request.method !== "POST") {
+        return jsonResponse({ ok: false, error: "method_not_allowed" }, { status: 405 });
+      }
+      if (!this.env.INTEL_DB) {
+        return jsonResponse({ ok: false, error: "collector_storage_unavailable" }, { status: 503 });
+      }
+
+      let payload: unknown;
+      try {
+        payload = await request.json();
+      } catch {
+        return jsonResponse({ ok: false, error: "invalid_json" }, { status: 400 });
+      }
+
+      const batch = normalizeTelegramCollectorBatch(payload);
+      if (!batch) {
+        return jsonResponse({ ok: false, error: "invalid_collector_batch" }, { status: 400 });
+      }
+
+      await this.env.INTEL_DB.prepare(
+        `CREATE TABLE IF NOT EXISTS telegram_collector_batches (
+          batch_id TEXT PRIMARY KEY,
+          source TEXT NOT NULL,
+          account_id TEXT NOT NULL,
+          collected_at TEXT NOT NULL,
+          message_count INTEGER NOT NULL,
+          payload_json TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );`,
+      ).run();
+
+      const batchId = `collector_${Date.now()}_${this.hashText(`${batch.accountId}:${batch.collectedAt}:${batch.messages.length}`)}`;
+      await this.env.INTEL_DB.prepare(
+        `INSERT OR REPLACE INTO telegram_collector_batches (
+          batch_id, source, account_id, collected_at, message_count, payload_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        batchId,
+        batch.source,
+        batch.accountId,
+        batch.collectedAt,
+        batch.messages.length,
+        JSON.stringify(batch),
+        new Date().toISOString(),
+      ).run();
+
+      const asyncApply = request.headers.get("X-Collector-Async") === "1";
+      if (asyncApply) {
+        this.ctx.waitUntil(
+          this.applyCollectorBatch(batch).catch((error) => {
+            console.error(
+              "[TelegramScraper] Deferred collector apply failed:",
+              error instanceof Error ? error.message : error,
+            );
+          }),
+        );
+        return jsonResponse({
+          ok: true,
+          batchId,
+          accepted: batch.messages.length,
+          deferred: true,
+        });
+      }
+
+      const applied = await this.applyCollectorBatch(batch);
+
+      return jsonResponse({
+        ok: true,
+        batchId,
+        accepted: batch.messages.length,
+        appliedAccepted: applied.accepted,
+        stateTimestamp: applied.stateTimestamp,
       });
     }
 
@@ -1802,7 +2013,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
       debugRuntimeLog(this.runtimeEnv, `[TelegramScraper] Phase 1 done: isFirstRun=${isFirstRun}, prevChannels=${prevMap.size}`);
 
       // ---- 2. Fetch all channel HTML with fixed worker fan-out ----
-      const rotation = this.selectChannelsForCycle(Date.now());
+      const rotation = await this.selectChannelsForCycle(Date.now());
       const cycleChannels = rotation.channels;
       this.lastRotationSlot = rotation.slot;
       this.lastRotationSlots = rotation.slots;
@@ -2254,6 +2465,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
                 acquisition_method: config.acquisitionMethod,
                 domain_tags: config.domainTags,
                 subscriber_value_score: config.subscriberValueScore,
+                ingest_authority: this.makeEmptyChannelState(config).ingest_authority,
                 message_count: allMsgs.length,
                 messages: allMsgs,
               } satisfies ChannelState,
@@ -2274,13 +2486,15 @@ export class TelegramScraperDO extends DurableObject<Env> {
 
       // ---- 6. Assemble final state ----
       debugRuntimeLog(this.runtimeEnv, "[TelegramScraper] Phase 6: Assembling final state...");
-      const byUsername = new Map<string, ChannelState>();
-      for (const channelState of unchangedChannels) {
-        byUsername.set(channelState.username, channelState);
-      }
-      for (const channelState of newChannelStates) {
-        byUsername.set(channelState.username, channelState);
-      }
+      const latestState = await this.loadPreviousState();
+      const cycleChannelSet = new Set(cycleChannels.map((config) => config.username));
+      const byUsername = mergeLatestChannelStates<ChannelState>({
+        latestChannels: latestState?.channels,
+        fallbackChannels: prevState?.channels,
+        scopedFallbackChannels: unchangedChannels,
+        scopedUsernames: cycleChannelSet,
+        updatedChannels: newChannelStates,
+      });
       for (const config of CHANNELS) {
         if (!byUsername.has(config.username)) {
           byUsername.set(config.username, this.makeEmptyChannelState(config));
@@ -2415,11 +2629,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
 
       // ---- 8. Write canonical state to DO storage + mirror to KV hot cache ----
       debugRuntimeLog(this.runtimeEnv, "[TelegramScraper] Phase 8: Writing canonical state...");
-      if (stateJson.length <= 900_000) {
-        await this.ctx.storage.put(LATEST_TELEGRAM_STATE_DO_KEY, stateJson);
-      } else {
-        await this.ctx.storage.delete(LATEST_TELEGRAM_STATE_DO_KEY);
-      }
+      await this.writeLatestStateLocalCache(stateJson);
       await this.env.TELEGRAM_STATE.put(LATEST_TELEGRAM_STATE_KV_KEY, stateJson);
       debugRuntimeLog(this.runtimeEnv, "[TelegramScraper] Phase 8 done: state write complete ✅");
 
@@ -2491,6 +2701,18 @@ export class TelegramScraperDO extends DurableObject<Env> {
     const msgId = msg.id.split("/").pop() || "";
     const textHash =
       msg.text.length > 50 ? this.hashText(msg.text) : null;
+    this.recordSeenById(channel, msgId, msg.text, textHash);
+  }
+
+  private recordSeenById(channel: string, messageId: string, text: string, precomputedTextHash?: string | null): void {
+    const msgId = (messageId || "").trim();
+    if (!channel || !msgId) return;
+    const textHash =
+      precomputedTextHash !== undefined
+        ? precomputedTextHash
+        : text.length > 50
+          ? this.hashText(text)
+          : null;
     this.ctx.storage.sql.exec(
       "INSERT OR IGNORE INTO seen_messages (channel, message_id, text_hash, first_seen) VALUES (?, ?, ?, ?)",
       channel,
@@ -2553,6 +2775,209 @@ export class TelegramScraperDO extends DurableObject<Env> {
     const clean = (link || "").split("?")[0].replace(/\/+$/, "");
     const id = clean.split("/").pop() || "";
     return id || link || "unknown";
+  }
+
+  private buildStoredMessageFromCollector(source: {
+    textOriginal: string;
+    textEn?: string;
+    imageTextEn?: string;
+    datetime: string;
+    link: string;
+    views?: string;
+    media?: Array<{ type: "photo" | "video"; url: string }>;
+    hasVideo?: boolean;
+    hasPhoto?: boolean;
+    language?: string;
+  }): StoredMessage {
+    const textOriginal = source.textOriginal || "";
+    const textEn = (source.textEn || "").trim() || textOriginal;
+    const media = Array.isArray(source.media)
+      ? source.media.map((item) => ({
+        type: item.type,
+        url: item.url,
+      }))
+      : [];
+    return {
+      text_original: textOriginal,
+      text_en: textEn,
+      image_text_en: (source.imageTextEn || "").trim() || undefined,
+      stored_at: new Date().toISOString(),
+      datetime: source.datetime,
+      link: source.link,
+      views: source.views || "",
+      media,
+      has_video: Boolean(source.hasVideo ?? media.some((item) => item.type === "video")),
+      has_photo: Boolean(source.hasPhoto ?? media.some((item) => item.type === "photo")),
+      language: (source.language || "").trim() || detectLanguage(textOriginal),
+    };
+  }
+
+  private async applyCollectorBatch(batch: ReturnType<typeof normalizeTelegramCollectorBatch> extends infer T ? T extends null ? never : T : never): Promise<{
+    accepted: number;
+    stateTimestamp: string;
+  }> {
+    const prevState = await this.loadPreviousState();
+    const byUsername = new Map<string, ChannelState>();
+    if (prevState) {
+      for (const channel of prevState.channels) {
+        byUsername.set(channel.username, channel);
+      }
+    }
+
+    const channelsByName = new Map(CHANNELS.map((channel) => [channel.username.toLowerCase(), channel]));
+    let accepted = 0;
+    const messageRecords: PersistMessageRecord[] = [];
+    const touchedChannels = new Set<string>();
+    const maxMessagesPerChannel = this.getMaxMessagesPerChannel();
+
+    for (const item of batch.messages) {
+      const config = channelsByName.get(item.channel.toLowerCase());
+      if (!config) continue;
+
+      const current = byUsername.get(config.username) ?? this.makeEmptyChannelState(config);
+      const stored = this.buildStoredMessageFromCollector({
+        textOriginal: item.textOriginal,
+        textEn: item.textEn,
+        imageTextEn: item.imageTextEn,
+        datetime: item.datetime,
+        link: item.link,
+        views: item.views,
+        media: item.media,
+        hasVideo: item.hasVideo,
+        hasPhoto: item.hasPhoto,
+        language: item.language,
+      });
+      const messageId = item.messageId.trim() || this.extractMessageIdFromLink(item.link);
+      const dedupedMessages = [stored, ...current.messages]
+        .filter((message, index, all) => {
+          const currentId = this.extractMessageIdFromLink(message.link);
+          return all.findIndex((candidate) => this.extractMessageIdFromLink(candidate.link) === currentId) === index;
+        })
+        .sort((left, right) => (right.datetime || "").localeCompare(left.datetime || ""))
+        .slice(0, maxMessagesPerChannel);
+
+      byUsername.set(config.username, {
+        ...current,
+        username: config.username,
+        label: config.label,
+        category: config.category,
+        language: config.language,
+        trust_tier: config.trustTier,
+        latency_tier: config.latencyTier,
+        source_type: config.sourceType,
+        acquisition_method: config.acquisitionMethod,
+        domain_tags: config.domainTags,
+        subscriber_value_score: config.subscriberValueScore,
+        ingest_authority: "mtproto",
+        message_count: dedupedMessages.length,
+        messages: dedupedMessages,
+      });
+
+      this.recordSeenById(config.username, messageId, item.textOriginal);
+      touchedChannels.add(config.username);
+      await this.markChannelAuthority({
+        channel: config.username,
+        desiredAuthority: "mtproto",
+        effectiveAuthority: "mtproto",
+        joinStatus: "joined",
+        lastCollectorMessageAt: item.datetime || batch.collectedAt || new Date().toISOString(),
+      });
+      accepted += 1;
+      messageRecords.push({
+        source: "new",
+        channel: config.username,
+        label: config.label,
+        category: config.category,
+        messageId,
+        link: item.link,
+        datetime: item.datetime,
+        views: item.views || "",
+        textOriginal: item.textOriginal,
+        textEn: stored.text_en,
+        imageTextEn: stored.image_text_en,
+        language: stored.language,
+        hasVideo: stored.has_video,
+        hasPhoto: stored.has_photo,
+        media: stored.media,
+      });
+    }
+
+    const latestState = await this.loadPreviousState();
+    const mergedByUsername = mergeLatestChannelStates<ChannelState>({
+      latestChannels: latestState?.channels,
+      fallbackChannels: prevState?.channels,
+      updatedChannels: Array.from(touchedChannels, (username) => byUsername.get(username)).filter(
+        (channel): channel is ChannelState => Boolean(channel),
+      ),
+    });
+    const allChannels = CHANNELS.map((config) => mergedByUsername.get(config.username) ?? this.makeEmptyChannelState(config));
+    const canonical = await this.buildCanonicalEvents(allChannels);
+    const totalMessages = allChannels.reduce((sum, channel) => sum + channel.message_count, 0);
+    const stateTimestamp = batch.collectedAt || new Date().toISOString();
+    const state: TelegramState = {
+      timestamp: stateTimestamp,
+      source: "mtproto",
+      total_channels: allChannels.length,
+      channels_fetched: touchedChannels.size,
+      cycle_channels: touchedChannels.size,
+      rotation_slot: 0,
+      rotation_slots: 1,
+      total_messages: totalMessages,
+      translated_messages: accepted,
+      failed_translations: 0,
+      blocked_untranslated_messages: 0,
+      translation_engine: "mtproto",
+      categories: CATEGORIES,
+      channels: allChannels,
+      canonical_total_messages: canonical.events.length,
+      canonical_events: canonical.events,
+      dedupe_stats: canonical.stats,
+    };
+    const stateJson = JSON.stringify(state);
+    await this.writeLatestStateLocalCache(stateJson);
+    await this.env.TELEGRAM_STATE.put(LATEST_TELEGRAM_STATE_KV_KEY, stateJson);
+
+    const cycleId = `collector-${Date.now()}-${this.hashText(`${batch.accountId}:${stateTimestamp}:${accepted}`)}`;
+    try {
+      await this.persistCycleToD1({
+        cycleId,
+        createdAt: stateTimestamp,
+        rotationSlot: 0,
+        rotationSlots: 1,
+        cycleChannels: touchedChannels.size,
+        channelsFetched: touchedChannels.size,
+        totalChannels: CHANNELS.length,
+        totalMessages,
+        newMessages: accepted,
+        backfilledMessages: 0,
+        translatedMessages: accepted,
+        failedTranslations: 0,
+        translationEngine: "mtproto",
+        stateKey: null,
+        deltaKey: null,
+        scrapeElapsedMs: 0,
+        messageRecords,
+        canonicalEvents: canonical.events,
+      });
+    } catch (error) {
+      console.error("[TelegramScraper] Failed to persist collector-applied cycle:", error instanceof Error ? error.message : error);
+    }
+
+    this.lastRunMs = Date.now();
+    this.lastCycleTargetChannels = touchedChannels.size;
+    this.lastCycleFetchedChannels = touchedChannels.size;
+    this.lastRotationSlot = 0;
+    this.lastRotationSlots = 1;
+    this.lastCycleStats = `collector | ${accepted} msgs | ${touchedChannels.size} channels`;
+    this.broadcastStateInvalidation({
+      type: "state_updated",
+      timestamp: stateTimestamp,
+      totalChannels: allChannels.length,
+      source: "mtproto",
+      accepted,
+    });
+
+    return { accepted, stateTimestamp };
   }
 
   private shouldAttemptBackfill(channel: string, messageId: string): boolean {
@@ -3214,6 +3639,14 @@ export class TelegramScraperDO extends DurableObject<Env> {
   // KV state
   // ==========================================================================
 
+  private async writeLatestStateLocalCache(raw: string): Promise<void> {
+    if (shouldPersistLatestTelegramStateLocally(raw)) {
+      await this.ctx.storage.put(LATEST_TELEGRAM_STATE_DO_KEY, raw);
+      return;
+    }
+    await this.ctx.storage.delete(LATEST_TELEGRAM_STATE_DO_KEY);
+  }
+
   private async loadPreviousState(): Promise<TelegramState | null> {
     try {
       const localRaw = await this.ctx.storage.get<string>(LATEST_TELEGRAM_STATE_DO_KEY);
@@ -3229,9 +3662,9 @@ export class TelegramScraperDO extends DurableObject<Env> {
       if (!raw) return null;
       const parsed = JSON.parse(raw) as TelegramState;
       // Prime local canonical storage from KV once.
-      if (raw.length <= 900_000) {
+      if (shouldPersistLatestTelegramStateLocally(raw)) {
         try {
-          await this.ctx.storage.put(LATEST_TELEGRAM_STATE_DO_KEY, raw);
+          await this.writeLatestStateLocalCache(raw);
         } catch {
           // Ignore local cache write failures (for example SQLITE_TOOBIG); KV copy is authoritative.
         }

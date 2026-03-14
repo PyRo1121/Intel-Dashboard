@@ -30,7 +30,7 @@ test("shared entitlement helpers normalize tier labels and entitlement roles", (
       entitled: true,
       delayMinutes: 15,
       planLabel: "Owner",
-      planTone: "text-emerald-300",
+      planTone: "text-[var(--color-accent)]",
     },
   );
   assert.deepEqual(
@@ -76,7 +76,7 @@ test("shared entitlement helpers normalize tier labels and entitlement roles", (
   assert.equal(isOwnerRole("subscriber"), false);
   assert.equal(isOwnerRole(undefined), false);
 
-  assert.equal(entitlementTierTone("owner"), "text-emerald-300");
+  assert.equal(entitlementTierTone("owner"), "text-[var(--color-accent)]");
   assert.equal(entitlementTierTone("subscriber"), "text-sky-300");
   assert.equal(entitlementTierTone("trial"), "text-amber-300");
   assert.equal(entitlementTierTone(undefined), "text-zinc-500");

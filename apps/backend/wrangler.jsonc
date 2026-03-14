@@ -18,6 +18,14 @@
       "* * * * *"
     ]
   },
+  "vars": {
+    "FREE_TIER_MODE": "false",
+    "NEWS_RSS_INGEST_ENABLED": "true",
+    "NEWS_RSS_SOURCES_PER_RUN": "36",
+    "NEWS_RSS_ITEMS_PER_SOURCE": "6",
+    "NEWS_RSS_ROTATION_WINDOW_SECONDS": "60",
+    "NEWS_RSS_FETCH_CONCURRENCY": "12"
+  },
   "kv_namespaces": [
     {
       "binding": "USAGE_KV",

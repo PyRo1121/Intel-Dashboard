@@ -12,6 +12,7 @@ import {
   resolveAllowedCorsOrigin,
   signAdminRequest,
   verifySignedAdminRequest,
+  verifySignedAdminRequestWithNonceGuard,
   verifyStripeWebhookSignature,
 } from "../src/security-guards.ts";
 
@@ -297,6 +298,71 @@ describe("signAdminRequest", () => {
       }),
       /secret_not_configured/,
     );
+  });
+});
+
+describe("verifySignedAdminRequestWithNonceGuard", () => {
+  async function buildSignedHeaders(secret: string, path: string): Promise<Headers> {
+    const signed = await signAdminRequest({
+      method: "POST",
+      path,
+      configuredSecret: secret,
+      timestampMs: 1_730_000_000_000,
+      nonce: "collector-nonce-123456",
+    });
+    return new Headers(signed.headers);
+  }
+
+  it("accepts valid signed requests after nonce guard approval", async () => {
+    const seenBodies: string[] = [];
+    const headers = await buildSignedHeaders("collector-secret", "/api/telegram/collector-ingest");
+    const result = await verifySignedAdminRequestWithNonceGuard({
+      method: "POST",
+      path: "/api/telegram/collector-ingest",
+      headers,
+      configuredSecret: "collector-secret",
+      nowMs: 1_730_000_000_000,
+      clientIp: "203.0.113.9",
+      nonceGuardNamespace: {
+        idFromName: () => "main",
+        get: () => ({
+          async fetch(request: Request) {
+            seenBodies.push(await request.text());
+            return new Response(JSON.stringify({ ok: true }), { status: 200 });
+          },
+        }),
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(seenBodies.length, 1);
+    assert.match(seenBodies[0] || "", /collector-nonce-123456/);
+    assert.match(seenBodies[0] || "", /203\.0\.113\.9/);
+  });
+
+  it("rejects replayed nonces when the guard durable object blocks them", async () => {
+    const headers = await buildSignedHeaders("collector-secret", "/api/telegram/collector-ingest");
+    const result = await verifySignedAdminRequestWithNonceGuard({
+      method: "POST",
+      path: "/api/telegram/collector-ingest",
+      headers,
+      configuredSecret: "collector-secret",
+      nowMs: 1_730_000_000_000,
+      nonceGuardNamespace: {
+        idFromName: () => "main",
+        get: () => ({
+          async fetch() {
+            return new Response(JSON.stringify({ error: "nonce_reused" }), { status: 409 });
+          },
+        }),
+      },
+    });
+
+    assert.deepEqual(result, {
+      ok: false,
+      reason: "nonce_reused",
+      status: 409,
+    });
   });
 });
 

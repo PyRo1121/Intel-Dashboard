@@ -1,4 +1,5 @@
 import { OSINT_SOURCE_CATALOG, type OsintSource } from "./osint-sources.js";
+import { splitOsintFeedSources } from "./osint-fast-lane.js";
 import { buildAbsoluteAuthProviderUrl } from "@intel-dashboard/shared/auth-flow.ts";
 import { FREE_FEED_DELAY_MINUTES, PREMIUM_PRICE_USD, TRIAL_DAYS, formatUsdMonthlyCompact, formatUsdMonthlySpaced } from "@intel-dashboard/shared/access-offers.ts";
 import { BACKEND_LANDING_HERO, BACKEND_OPERATOR_CARDS, BACKEND_OPERATOR_PANEL, BACKEND_OPERATOR_PRICING } from "@intel-dashboard/shared/landing-content.ts";
@@ -181,9 +182,10 @@ const MAX_NEWS_RSS_ITEMS_PER_SOURCE = 20;
 const DEFAULT_NEWS_RSS_ROTATION_WINDOW_SECONDS = 60;
 const MIN_NEWS_RSS_ROTATION_WINDOW_SECONDS = 30;
 const MAX_NEWS_RSS_ROTATION_WINDOW_SECONDS = 3_600;
+const DEFAULT_NEWS_RSS_FETCH_CONCURRENCY = 8;
+const MAX_NEWS_RSS_FETCH_CONCURRENCY = 16;
 const DEFAULT_NEWS_RSS_VALIDATOR_TTL_SECONDS = 14 * 24 * 60 * 60;
 const MAX_NEWS_RSS_VALIDATOR_TTL_SECONDS = 30 * 24 * 60 * 60;
-const DEFAULT_NEWS_RSS_FETCH_CONCURRENCY = 4;
 const DEFAULT_FREE_TIER_MODE = false;
 const FREE_TIER_HARD_MAX_NEWS_RSS_SOURCES_PER_RUN = 20;
 const FREE_TIER_HARD_MAX_NEWS_RSS_ITEMS_PER_SOURCE = 12;
@@ -777,6 +779,7 @@ export type WorkerEnv = {
   NEWS_RSS_SOURCES_PER_RUN?: string;
   NEWS_RSS_ITEMS_PER_SOURCE?: string;
   NEWS_RSS_ROTATION_WINDOW_SECONDS?: string;
+  NEWS_RSS_FETCH_CONCURRENCY?: string;
   NEWS_RSS_VALIDATOR_TTL_SECONDS?: string;
   FREE_TIER_MODE?: string;
   AI_BATCH_MAX_JOBS?: string;
@@ -1445,6 +1448,14 @@ function normalizeNewsRssRotationWindowSeconds(rawValue: string | undefined): nu
     MIN_NEWS_RSS_ROTATION_WINDOW_SECONDS,
     MAX_NEWS_RSS_ROTATION_WINDOW_SECONDS,
   );
+}
+
+function normalizeNewsRssFetchConcurrency(rawValue: string | undefined): number {
+  const parsed = parseFiniteNumber(rawValue);
+  if (parsed === undefined) {
+    return DEFAULT_NEWS_RSS_FETCH_CONCURRENCY;
+  }
+  return clamp(Math.floor(parsed), 1, MAX_NEWS_RSS_FETCH_CONCURRENCY);
 }
 
 function normalizeNewsRssValidatorTtlSeconds(rawValue: string | undefined): number {
@@ -3285,21 +3296,20 @@ function selectFeedSourcesForRun(nowMs: number, perRun: number, rotationWindowSe
   const count = Math.min(perRun, feedSources.length);
   const selected: OsintSource[] = [];
 
-  const priority = feedSources.filter((source) => PRIORITY_RSS_SOURCE_IDS.has(source.id));
-  const nonPriority = feedSources.filter((source) => !PRIORITY_RSS_SOURCE_IDS.has(source.id));
-  const priorityCap = Math.min(count, Math.min(8, priority.length));
-  for (let index = 0; index < priorityCap; index += 1) {
-    selected.push(priority[index]);
+  const split = splitOsintFeedSources(feedSources, PRIORITY_RSS_SOURCE_IDS);
+  const fastLaneCap = Math.min(count, split.fastLane.length);
+  for (let index = 0; index < fastLaneCap; index += 1) {
+    selected.push(split.fastLane[index]);
   }
 
-  if (selected.length >= count || nonPriority.length < 1) {
+  if (selected.length >= count || split.rotating.length < 1) {
     return selected.slice(0, count);
   }
 
   const remaining = count - selected.length;
   const rotationWindowMs = Math.max(rotationWindowSeconds, 1) * 1_000;
   const windowIndex = Math.floor(nowMs / rotationWindowMs);
-  selected.push(...selectBalancedNonPrioritySources(nonPriority, remaining, windowIndex));
+  selected.push(...selectBalancedNonPrioritySources(split.rotating, remaining, windowIndex));
   return selected;
 }
 
@@ -3500,6 +3510,7 @@ async function ingestNewsFromSourceCatalog(env: WorkerEnv): Promise<{
   let perRun = normalizeNewsRssSourcesPerRun(env.NEWS_RSS_SOURCES_PER_RUN);
   let perSourceLimit = normalizeNewsRssItemsPerSource(env.NEWS_RSS_ITEMS_PER_SOURCE);
   const rotationWindowSeconds = normalizeNewsRssRotationWindowSeconds(env.NEWS_RSS_ROTATION_WINDOW_SECONDS);
+  const fetchConcurrency = normalizeNewsRssFetchConcurrency(env.NEWS_RSS_FETCH_CONCURRENCY);
   const validatorTtlSeconds = normalizeNewsRssValidatorTtlSeconds(env.NEWS_RSS_VALIDATOR_TTL_SECONDS);
   if (isFreeTierModeEnabled(env)) {
     perRun = Math.min(perRun, FREE_TIER_HARD_MAX_NEWS_RSS_SOURCES_PER_RUN);
@@ -3510,7 +3521,7 @@ async function ingestNewsFromSourceCatalog(env: WorkerEnv): Promise<{
     return { selectedSources: 0, fetchedItems: 0, publishedItems: 0, failedSources: 0, failingSourceIds: [], publishMode: "none", publishOutcome: "skipped" };
   }
 
-  const batches = await mapWithConcurrency(selectedSources, DEFAULT_NEWS_RSS_FETCH_CONCURRENCY, (source) =>
+  const batches = await mapWithConcurrency(selectedSources, fetchConcurrency, (source) =>
     fetchSourceFeedNews({ env, source, perSourceLimit, validatorTtlSeconds }),
   );
   const fetchedItems = batches.flatMap((batch) => batch.items);

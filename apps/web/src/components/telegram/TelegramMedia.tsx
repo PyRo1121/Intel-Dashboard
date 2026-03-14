@@ -16,7 +16,7 @@ export function TelegramVideoPlayer(props: { media: TelegramMedia }) {
   };
 
   return (
-    <div class="relative min-h-[220px] overflow-hidden rounded-xl border border-white/[0.08] bg-black/40">
+    <div class="relative min-h-[220px] overflow-hidden rounded-sm border border-white/[0.08] bg-black/40">
       <Show when={!error()}>
         <video
           src={`${mediaUrl(props.media.url)}${retryKey() ? `#r${retryKey()}` : ""}`}
@@ -24,7 +24,7 @@ export function TelegramVideoPlayer(props: { media: TelegramMedia }) {
           preload="none"
           poster={props.media.thumbnail ? mediaUrl(props.media.thumbnail) : undefined}
           playsinline
-          class="block min-h-[220px] max-h-[420px] w-full rounded-xl bg-black object-contain"
+          class="block min-h-[220px] max-h-[420px] w-full rounded-sm bg-black object-contain"
           onCanPlay={() => setLoading(false)}
           onWaiting={() => setLoading(true)}
           onPlaying={() => setLoading(false)}
@@ -46,7 +46,7 @@ export function TelegramVideoPlayer(props: { media: TelegramMedia }) {
           <button
             type="button"
             onClick={handleRetry}
-            class="cursor-pointer inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-white/[0.06] px-3.5 py-1.5 text-xs font-medium text-white/70 transition hover:bg-white/[0.1] hover:text-white/90"
+            class="cursor-pointer inline-flex items-center gap-1.5 rounded-sm border border-white/[0.12] bg-white/[0.06] px-3.5 py-1.5 text-xs font-medium text-white/70 transition hover:bg-white/[0.1] hover:text-white/90"
           >
             <RefreshCw class="h-3.5 w-3.5" />
             Retry

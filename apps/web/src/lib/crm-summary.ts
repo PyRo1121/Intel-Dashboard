@@ -77,7 +77,7 @@ export function getCrmSummaryWarningTone(state: CrmSummaryDegradedState): string
   if (state?.stale) {
     return "border-amber-500/30 bg-amber-500/10 text-amber-200";
   }
-  return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
+  return "border-amber-500/30 bg-amber-500/10 text-amber-200";
 }
 
 export function getCrmSummaryWarningMessage(state: CrmSummaryDegradedState): string | null {

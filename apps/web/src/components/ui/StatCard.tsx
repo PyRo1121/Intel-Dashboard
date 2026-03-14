@@ -6,16 +6,11 @@ interface StatCardProps {
   label: string;
   value: string | number;
   trend?: { value: number; label: string };
-  accentColor?: "emerald" | "amber" | "red" | "blue" | "purple";
+  accentColor?: "amber" | "red" | "blue";
   delay?: number;
 }
 
 const ACCENT_MAP = {
-  emerald: {
-    iconBg: "bg-emerald-500/10",
-    iconText: "text-emerald-400",
-    glow: "shadow-emerald-500/5",
-  },
   amber: {
     iconBg: "bg-amber-500/10",
     iconText: "text-amber-400",
@@ -31,15 +26,10 @@ const ACCENT_MAP = {
     iconText: "text-blue-400",
     glow: "shadow-blue-500/5",
   },
-  purple: {
-    iconBg: "bg-cyan-500/10",
-    iconText: "text-cyan-400",
-    glow: "shadow-cyan-500/5",
-  },
 };
 
 export default function StatCard(props: StatCardProps) {
-  const accent = () => ACCENT_MAP[props.accentColor ?? "emerald"];
+  const accent = () => ACCENT_MAP[props.accentColor ?? "amber"];
 
   return (
     <div
@@ -47,18 +37,18 @@ export default function StatCard(props: StatCardProps) {
       style={`animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; animation-delay: ${(props.delay ?? 0) * 60}ms`}
     >
       {/* Subtle top accent line */}
-      <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div class="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
       <div class="flex items-start justify-between">
-        <div class={`p-2.5 rounded-xl ${accent().iconBg} ${accent().iconText} transition-all duration-300 group-hover:scale-110`}>
+        <div class={`p-2.5 rounded-sm ${accent().iconBg} ${accent().iconText} transition-all duration-300 group-hover:scale-110`}>
           {props.icon}
         </div>
         <Show when={props.trend}>
           {(t) => (
             <span
-              class={`text-xs font-semibold font-mono-data px-2 py-0.5 rounded-lg ${
+              class={`text-xs font-semibold font-mono-data px-2 py-0.5 rounded-sm ${
                 t().value >= 0
-                  ? "text-emerald-400 bg-emerald-500/10"
+                  ? "text-amber-400 bg-amber-500/10"
                   : "text-red-400 bg-red-500/10"
               }`}
             >

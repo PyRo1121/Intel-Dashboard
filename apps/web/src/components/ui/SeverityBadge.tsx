@@ -24,9 +24,9 @@ export default function SeverityBadge(props: { severity: Severity | "" }) {
 
   return (
     <span
-      class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold uppercase tracking-wider ${style().bg}`}
+      class={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-sm text-[11px] font-semibold uppercase tracking-wider ${style().bg}`}
     >
-      <span class={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${style().dot}`} />
+      <span class={`w-1.5 h-1.5 rounded-none flex-shrink-0 ${style().dot}`} />
       {props.severity || "unknown"}
     </span>
   );

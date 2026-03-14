@@ -1,0 +1,36 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "intel-dashboard-telegram-collector",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-03-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "containers": [
+    {
+      "class_name": "TelegramCollectorContainer",
+      "image": "./Dockerfile",
+      "max_instances": 8,
+      "instance_type": "basic"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TELEGRAM_COLLECTOR",
+        "class_name": "TelegramCollectorContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-telegram-collector",
+      "new_sqlite_classes": ["TelegramCollectorContainer"]
+    }
+  ],
+  "vars": {
+    "COLLECTOR_EDGE_URL": "https://intel.pyro1121.com",
+    "COLLECTOR_EDGE_PATH": "/api/telegram/collector-ingest",
+    "COLLECTOR_FLUSH_INTERVAL_MS": "1500",
+    "COLLECTOR_INSTANCE_GENERATION": "2026-03-10-join-v1",
+    "TELEGRAM_HOT_CHANNELS": "osirskiy|Oleksandr Syrskyi|conflict,AbuAliExpress|Abu Ali Express|conflict,CIG_telegram|Conflict Intelligence Group|conflict,sepahcybery|Sepah Cybery|cyber,Tsaplienko|Tsaplienko|conflict,farsna|Fars News|conflict,Irna_en|IRNA English|conflict,air_alert_ua|Air Alert UA|alerts,AFUStratCom|AFU Strategic Comms|ua_official,GeneralStaffZSU|UA General Staff|ua_official,kpszsu|UA Air Force Command|ua_official,ukraine_context|Ukraine Context|ua_official,DIUkraine|GUR Defense Intelligence|ua_intel,informnapalm|InformNapalm OSINT|ua_intel,Molfar_global|Molfar OSINT|ua_intel,SBUkr|SBU Security Service|ua_intel,azov_media|Azov Brigade|ua_frontline,DeepStateUA|DeepState Map|ua_osint,operativnoZSU|Operatyvnyi ZSU|ua_osint,Atesh_UA|ATESH Partisan Movement|ua_intel,dva_majors|Two Majors|ru_milblog,boris_rozhin|Colonelcassad|ru_milblog,ASTRApress|ASTRA Independent|ru_milblog,milinfolive|MilInfoLive|ru_milblog,anna_news|ANNA News|ru_milblog,ConflictChronicles|Chronicles of Conflict|ru_milblog,grey_zone|Grey Zone / Wagner|ru_milblog,mig41|MIG Russia|ru_milblog,infantmilitario|Militarist|ru_milblog,abbasdjuma|Abbas Djuma|ru_milblog,medvedev_telegram|Medvedev|ru_official,bomber_fighter|Fighterbomber|ru_milblog"
+  }
+}

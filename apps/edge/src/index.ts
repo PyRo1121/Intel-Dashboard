@@ -3,12 +3,13 @@ import {
   applyDefaultSecurityHeaders,
   decodeAndValidateMediaKey,
   isTrustedRequestOrigin,
-  verifySignedAdminRequest,
+  verifySignedAdminRequestWithNonceGuard,
   verifyStripeWebhookSignature,
 } from "./security-guards";
 import { TelegramScraperDO } from "./telegram-scraper-do";
 import { queryTelegramSourceLeaderboard } from "./telegram-source-leaderboard";
 import { queryTelegramSourceHistory } from "./telegram-source-history";
+import { isTelegramCollectorBatch } from "@intel-dashboard/shared/telegram-collector.ts";
 import { buildOsintSourceSlug, normalizeOsintSourceProfile } from "./osint-source-profile";
 import {
   createEmptySubscriberFeedPreferences,
@@ -44,6 +45,7 @@ import { clearCookie, getSetCookieValues, parseCookies } from "./cookies";
 import { buildOwnerCrmAiTelemetryFailureResponse } from "./crm-ai-telemetry-proxy";
 import { postOwnerBackendJson } from "./owner-backend-json";
 import { buildOwnerCrmOverviewPayload, type CrmDirectoryUser } from "./crm-overview";
+import { requiresSessionForApiPath } from "./api-session-routing";
 import { applyCorsHeaders, corsHeaders, corsJson, mergeVary, privateApiHeaders, privateApiJson, privateApiMethodNotAllowed } from "./private-api-headers";
 import { getDashboardAppRoutePrefixes, normalizeSafePostAuthPath } from "./post-auth-path";
 import { createTurnstileGateToken, type TurnstileMode, verifyTurnstileGateToken } from "./turnstile";
@@ -144,6 +146,7 @@ export interface Env extends Cloudflare.Env {
   BACKEND_URL?: string;
   ALLOW_BACKEND_URL_FALLBACK?: string;
   CACHE_BUST_SECRET: string;
+  COLLECTOR_SHARED_SECRET?: string;
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_CHAT_ID: string;
   GITHUB_CLIENT_ID: string;
@@ -2924,45 +2927,18 @@ async function authorizePrivilegedRoute(params: {
     };
   }
 
-  const signed = await verifySignedAdminRequest({
+  const signed = await verifySignedAdminRequestWithNonceGuard({
     method: params.request.method,
     path: params.path,
     headers: params.request.headers,
     configuredSecret: params.env.CACHE_BUST_SECRET,
+    nonceGuardNamespace: params.env.INTEL_CACHE,
+    clientIp: params.request.headers.get("CF-Connecting-IP") ?? "unknown",
   });
   if (!signed.ok) {
     return {
       ok: false,
-      response: corsJson(params.origin, 403, { error: "Forbidden", reason: signed.reason }),
-    };
-  }
-
-  const guardId = params.env.INTEL_CACHE.idFromName("main");
-  const guardStub = params.env.INTEL_CACHE.get(guardId);
-  const guardRes = await guardStub.fetch(new Request("https://do/api/admin/guard", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      scope: params.path,
-      nonce: signed.nonce,
-      timestampMs: signed.timestampMs,
-      clientIp: params.request.headers.get("CF-Connecting-IP") ?? "unknown",
-    }),
-  }));
-
-  if (!guardRes.ok) {
-    const body = await guardRes.text();
-    return {
-      ok: false,
-      response: new Response(body || JSON.stringify({ error: "Forbidden" }), {
-        status: guardRes.status,
-        headers: {
-          "Content-Type": "application/json",
-          ...corsHeaders(params.origin),
-        },
-      }),
+      response: corsJson(params.origin, signed.status, { error: "Forbidden", reason: signed.reason }),
     };
   }
 
@@ -5274,7 +5250,7 @@ export default {
       });
     }
 
-    const requiresSession = path.startsWith("/api/");
+    const requiresSession = requiresSessionForApiPath(path);
     const authSecret = env.AUTH_SECRET?.trim() ?? "";
     if (requiresSession && !authSecret) {
       return misconfiguredApiResponse(origin);
@@ -5735,6 +5711,54 @@ export default {
             "Content-Type": "application/json",
           },
           ...(body === undefined ? {} : { body }),
+        }),
+      );
+      const response = new Response(doRes.body, {
+        status: doRes.status,
+        headers: doRes.headers,
+      });
+      applyCorsHeaders(response.headers, origin);
+      return withSensitiveNoStore(response);
+    }
+
+    if (path === "/api/telegram/collector-ingest") {
+      if (request.method !== "POST") {
+        return privateApiMethodNotAllowed(origin, "POST");
+      }
+      const signed = await verifySignedAdminRequestWithNonceGuard({
+        method: request.method,
+        path,
+        headers: request.headers,
+        configuredSecret: env.COLLECTOR_SHARED_SECRET?.trim() || env.CACHE_BUST_SECRET,
+        nonceGuardNamespace: env.INTEL_CACHE,
+        clientIp: request.headers.get("CF-Connecting-IP") ?? "unknown",
+      });
+      if (!signed.ok) {
+        return corsJson(origin, signed.status, { error: "Forbidden", reason: signed.reason });
+      }
+
+      let payload: unknown;
+      try {
+        payload = await request.json();
+      } catch {
+        return privateApiJson(origin, 400, { error: "Invalid JSON" });
+      }
+      if (!isTelegramCollectorBatch(payload)) {
+        return privateApiJson(origin, 400, { error: "Invalid collector batch" });
+      }
+
+      const scraperId = env.TELEGRAM_SCRAPER.idFromName("main");
+      const scraperStub = env.TELEGRAM_SCRAPER.get(scraperId);
+      const doRes = await scraperStub.fetch(
+        new Request("https://do/collector/ingest", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(request.headers.get("X-Collector-Async") === "1"
+              ? { "X-Collector-Async": "1" }
+              : {}),
+          },
+          body: JSON.stringify(payload),
         }),
       );
       const response = new Response(doRes.body, {

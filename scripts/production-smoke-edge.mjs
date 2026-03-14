@@ -1,13 +1,23 @@
 #!/usr/bin/env node
 
 const baseUrl = (process.env.EDGE_SMOKE_BASE_URL || "https://intel.pyro1121.com").trim().replace(/\/+$/, "");
-const maxAttempts = Number.parseInt(process.env.EDGE_SMOKE_MAX_ATTEMPTS || "8", 10);
-const retryDelayMs = Number.parseInt(process.env.EDGE_SMOKE_RETRY_DELAY_MS || "5000", 10);
+const maxAttempts = normalizePositiveInt(process.env.EDGE_SMOKE_MAX_ATTEMPTS, 8);
+const retryDelayMs = normalizeNonNegativeInt(process.env.EDGE_SMOKE_RETRY_DELAY_MS, 5000);
 
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+function normalizePositiveInt(rawValue, fallback) {
+  const parsed = Number.parseInt(rawValue || "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeNonNegativeInt(rawValue, fallback) {
+  const parsed = Number.parseInt(rawValue || "", 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 function sleep(ms) {

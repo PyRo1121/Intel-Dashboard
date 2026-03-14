@@ -8,8 +8,6 @@ test("evaluateIntelCacheHealth reports ok when required endpoints are present an
     ["/api/intel", { timestamp: 900 }],
     ["/api/briefings", { timestamp: 800 }],
     ["/api/air-sea", { timestamp: 700 }],
-    ["/api/whales", { timestamp: 600 }],
-    ["/api/chat-history?sessions=6&messages=25", { timestamp: 950 }],
   ]);
 
   assert.deepEqual(
@@ -20,16 +18,8 @@ test("evaluateIntelCacheHealth reports ok when required endpoints are present an
         "/api/intel": 500,
         "/api/briefings": 500,
         "/api/air-sea": 500,
-        "/api/whales": 500,
-        "/api/chat-history?sessions=6&messages=25": 500,
       },
-      requiredEndpoints: [
-        "/api/intel",
-        "/api/briefings",
-        "/api/air-sea",
-        "/api/whales",
-        "/api/chat-history?sessions=6&messages=25",
-      ],
+      requiredEndpoints: ["/api/intel", "/api/briefings", "/api/air-sea"],
     }),
     { status: "ok", missingEndpoints: [], staleEndpoints: [] },
   );

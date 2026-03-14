@@ -204,10 +204,6 @@ export class IntelCacheDO extends DurableObject<Env> {
         };
       }
 
-      const defaultChatHistoryEndpoint = buildChatHistoryCacheKeyFromLimits(
-        CHAT_DEFAULT_SESSION_LIMIT,
-        CHAT_DEFAULT_MESSAGE_LIMIT,
-      );
       const health = evaluateIntelCacheHealth({
         cache: this.cache,
         nowMs: Date.now(),
@@ -215,14 +211,8 @@ export class IntelCacheDO extends DurableObject<Env> {
           "/api/intel": ENDPOINT_STALE_WINDOW_MS["/api/intel"],
           "/api/briefings": ENDPOINT_STALE_WINDOW_MS["/api/briefings"],
           "/api/air-sea": ENDPOINT_STALE_WINDOW_MS["/api/air-sea"],
-          "/api/whales": WHALE_STALE_WINDOW_MS,
-          [defaultChatHistoryEndpoint]: CHAT_HISTORY_STALE_WINDOW_MS,
         },
-        requiredEndpoints: [
-          ...ENDPOINTS,
-          "/api/whales",
-          defaultChatHistoryEndpoint,
-        ],
+        requiredEndpoints: ENDPOINTS,
       });
 
       return jsonResponse({

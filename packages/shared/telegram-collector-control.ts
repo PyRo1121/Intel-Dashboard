@@ -178,7 +178,12 @@ export function normalizeCollectorControlUpdate(value: unknown, fallback: Collec
 export function isStoredCollectorControlState(value: unknown, fallback: CollectorControlState): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
-  if (typeof record.accountId !== "string" || !Array.isArray(record.watchedChannels)) {
+  if (
+    typeof record.accountId !== "string" ||
+    !Array.isArray(record.watchedChannels) ||
+    typeof record.configured !== "boolean" ||
+    !Array.isArray(record.missingConfig)
+  ) {
     return false;
   }
   if (

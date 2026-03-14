@@ -82,6 +82,18 @@ test("isStoredCollectorControlState rejects stored state when current config sha
     isStoredCollectorControlState(
       {
         accountId: "primary",
+        watchedChannels: ["abualiexpress"],
+        updatedAt: "2026-03-14T00:00:00.000Z",
+      },
+      fallback,
+    ),
+    false,
+  );
+
+  assert.equal(
+    isStoredCollectorControlState(
+      {
+        accountId: "primary",
         configured: true,
         missingConfig: [],
         watchedChannels: ["abualiexpress"],

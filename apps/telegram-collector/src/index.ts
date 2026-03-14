@@ -31,7 +31,6 @@ export class TelegramCollectorControlDO extends DurableObject<Env> {
     const key = "collector-state";
     const adminNonceTtlSeconds = 10 * 60;
     const adminRateWindowMs = 60_000;
-    const adminRateLimitPerWindow = 8;
     const defaults = buildDefaultCollectorControlState({
       configured: Boolean(this.env.TELEGRAM_API_ID && this.env.TELEGRAM_API_HASH && this.env.TELEGRAM_SESSION_STRING),
       missingConfig: [],
@@ -74,6 +73,7 @@ export class TelegramCollectorControlDO extends DurableObject<Env> {
       const nonce = typeof payload.nonce === "string" ? payload.nonce.trim() : "";
       const timestampMs = typeof payload.timestampMs === "number" ? payload.timestampMs : Number.NaN;
       const clientIp = typeof payload.clientIp === "string" ? payload.clientIp.trim() : "unknown";
+      const adminRateLimitPerWindow = scope === "/control/state-update" ? 600 : 8;
 
       if (!scope || !nonce || !Number.isFinite(timestampMs)) {
         return json({ ok: false, reason: "invalid_payload" }, 400);

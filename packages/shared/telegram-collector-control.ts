@@ -139,9 +139,12 @@ export function normalizeCollectorControlUpdate(value: unknown, fallback: Collec
     droppedMessages: numberOr("droppedMessages", fallback.droppedMessages),
     unmatchedMessages: numberOr("unmatchedMessages", fallback.unmatchedMessages),
     bufferSize: numberOr("bufferSize", fallback.bufferSize),
-    lastUnmatchedEvent: record.lastUnmatchedEvent && typeof record.lastUnmatchedEvent === "object"
-      ? record.lastUnmatchedEvent as Record<string, unknown>
-      : fallback.lastUnmatchedEvent,
+    lastUnmatchedEvent:
+      record.lastUnmatchedEvent === null
+        ? null
+        : record.lastUnmatchedEvent && typeof record.lastUnmatchedEvent === "object"
+          ? record.lastUnmatchedEvent as Record<string, unknown>
+          : fallback.lastUnmatchedEvent,
     lastError: nullableStringOr("lastError", fallback.lastError),
     connectAttempts: numberOr("connectAttempts", fallback.connectAttempts),
     lastConnectAttemptAt: nullableStringOr("lastConnectAttemptAt", fallback.lastConnectAttemptAt),

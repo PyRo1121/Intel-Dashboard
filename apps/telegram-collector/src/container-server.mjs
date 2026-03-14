@@ -77,6 +77,11 @@ function buildControlStatePayload() {
     connectAttempts: state.connectAttempts,
     lastConnectAttemptAt: state.lastConnectAttemptAt,
     lastConnectSuccessAt: state.lastConnectSuccessAt,
+    controlSyncAttempts: state.controlSyncAttempts,
+    lastControlSyncAt: state.lastControlSyncAt,
+    lastControlSyncError: state.lastControlSyncError,
+    joinBlockedUntil: state.joinBlockedUntil,
+    joinWaitSeconds: state.joinWaitSeconds,
     updatedAt: new Date().toISOString(),
   };
 }

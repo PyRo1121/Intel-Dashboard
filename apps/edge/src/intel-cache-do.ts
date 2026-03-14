@@ -96,8 +96,6 @@ export class IntelCacheDO extends DurableObject<Env> {
     this.runtimeEnv = env;
 
     this.ctx.blockConcurrencyWhile(async () => {
-      const stored = await this.ctx.storage.list({ prefix: `cache:${CHAT_HISTORY_PATH}` });
-      const persistedChatEndpoints = collectPersistedChatHistoryEndpoints(stored.keys());
       const defaultChatHistoryEndpoint = buildChatHistoryCacheKeyFromLimits(
         CHAT_DEFAULT_SESSION_LIMIT,
         CHAT_DEFAULT_MESSAGE_LIMIT,
@@ -108,7 +106,6 @@ export class IntelCacheDO extends DurableObject<Env> {
         ...ENDPOINTS,
         "/api/whales",
         defaultChatHistoryEndpoint,
-        ...persistedChatEndpoints.filter((endpoint) => endpoint !== defaultChatHistoryEndpoint),
       ];
       const results = await Promise.allSettled(
         allEndpoints.map((ep) => this.loadChunked(ep)),
@@ -463,7 +460,14 @@ export class IntelCacheDO extends DurableObject<Env> {
 
   private async handleChatHistory(url: URL): Promise<Response> {
     const cacheKey = this.buildChatHistoryCacheKey(url);
-    const cached = this.cache.get(cacheKey);
+    let cached = this.cache.get(cacheKey);
+    if (!cached) {
+      const persisted = await this.loadChunked(cacheKey);
+      if (persisted) {
+        this.cache.set(cacheKey, persisted);
+        cached = persisted;
+      }
+    }
     if (cached) {
       const ageMs = Date.now() - cached.timestamp;
       if (ageMs < CHAT_HISTORY_REFRESH_MS) {

@@ -7,6 +7,7 @@ Current scope:
 - exposes `/health` and `/status`
 - exposes `/push-batch` on the Worker to forward normalized collector batches into the existing edge intake route:
   - `/api/telegram/collector-ingest`
+- forwards text/caption payloads only; MTProto media assets remain scraper-backed until the collector has an upload path
 
 Required configuration before live forwarding:
 - `COLLECTOR_EDGE_URL`

@@ -18,9 +18,7 @@ test("mergeLatestChannelStates preserves latest untouched channels while overlay
     { username: "bravo", value: "stale-bravo" },
     { username: "charlie", value: "stale-charlie" },
   ] satisfies ChannelState[];
-  const updated = [
-    { username: "alpha", value: "fresh-alpha" },
-  ] satisfies ChannelState[];
+  const updated = [{ username: "alpha", value: "fresh-alpha" }] satisfies ChannelState[];
 
   const merged = mergeLatestChannelStates({
     latestChannels: latest,
@@ -39,9 +37,7 @@ test("mergeLatestChannelStates falls back to previous state when no latest snaps
     { username: "alpha", value: "prev-alpha" },
     { username: "bravo", value: "prev-bravo" },
   ] satisfies ChannelState[];
-  const updated = [
-    { username: "bravo", value: "collector-bravo" },
-  ] satisfies ChannelState[];
+  const updated = [{ username: "bravo", value: "collector-bravo" }] satisfies ChannelState[];
 
   const merged = mergeLatestChannelStates({
     fallbackChannels: previous,

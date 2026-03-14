@@ -43,6 +43,71 @@ test("normalizeAuthSessionPayload rejects malformed or unauthenticated payloads"
   assert.equal(normalizeAuthSessionPayload({ authenticated: true, user: { login: "", name: "X", id: "1" } }), null);
   assert.equal(normalizeAuthSessionPayload({ authenticated: true, user: { login: "x", name: "", id: "1" } }), null);
   assert.equal(normalizeAuthSessionPayload({ authenticated: true, user: { login: "x", name: "X", id: null } }), null);
+  assert.equal(normalizeAuthSessionPayload({ authenticated: true, user: { login: "x", name: "X", id: "   " } }), null);
+  assert.equal(normalizeAuthSessionPayload({ authenticated: true, user: { login: "x", name: "X", id: Number.NaN } }), null);
+  assert.equal(normalizeAuthSessionPayload({ authenticated: true, user: { login: "x", name: "X", id: 1.5 } }), null);
+  assert.equal(normalizeAuthSessionPayload({ authenticated: true, user: { login: "x", name: "X", id: Number.MAX_SAFE_INTEGER + 1 } }), null);
+});
+
+test("normalizeAuthSessionPayload preserves shared entitlement limits payloads", () => {
+  const result = normalizeAuthSessionPayload({
+    authenticated: true,
+    user: {
+      login: "PyRo1121",
+      name: "PyRo1121",
+      avatar_url: "",
+      id: "owner-1",
+    },
+    entitlement: {
+      role: "owner",
+      entitled: true,
+      limits: {
+        intelMaxItems: 25,
+        telegramTotalMessagesMax: 200,
+      },
+    },
+  });
+
+  assert.deepEqual(result?.entitlement?.limits, {
+    intelMaxItems: 25,
+    telegramTotalMessagesMax: 200,
+  });
+});
+
+test("normalizeAuthSessionPayload normalizes nested entitlement fields", () => {
+  const result = normalizeAuthSessionPayload({
+    authenticated: true,
+    user: {
+      login: "PyRo1121",
+      name: "PyRo1121",
+      avatar_url: "",
+      id: "owner-1",
+    },
+    entitlement: {
+      tier: " owner ",
+      role: " owner ",
+      entitled: true,
+      delayMinutes: "15",
+      limits: {
+        intelMaxItems: "25",
+        briefingsMaxItems: null,
+        telegramChannelMessagesMax: " 50 ",
+        airSeaMaxItems: "not-a-number",
+      },
+    },
+  });
+
+  assert.deepEqual(result?.entitlement, {
+    tier: "owner",
+    role: "owner",
+    entitled: true,
+    delayMinutes: 15,
+    limits: {
+      intelMaxItems: 25,
+      briefingsMaxItems: null,
+      telegramChannelMessagesMax: 50,
+    },
+  });
 });
 
 test("buildAuthSessionRequestInit sets no-store, credentials, and timeout signal", async () => {

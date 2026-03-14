@@ -29,7 +29,6 @@ import {
   normalizeSubscriberAlertState,
   sortSubscriberAlerts,
 } from "./subscriber-alerts";
-import { buildSubscriberAlertsResponse } from "./subscriber-alerts-response";
 import { createEdgeAuth } from "./auth";
 import { misconfiguredApiResponse, unauthorizedApiResponse } from "./auth-api-response";
 import { buildDeterministicAvatarDataUrl } from "./avatar-fallback";
@@ -95,6 +94,8 @@ import {
 } from "@intel-dashboard/shared/route-meta.ts";
 import { buildRobotsTxt, buildSitemapXml } from "@intel-dashboard/shared/seo-assets.ts";
 import { SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN, siteUrl } from "@intel-dashboard/shared/site-config.ts";
+import { buildSubscriberAlertsResponse } from "./subscriber-alerts-response";
+import type { AuthSessionResponse } from "@intel-dashboard/shared/auth-session.ts";
 
 export { IntelCacheDO, TelegramScraperDO };
 
@@ -5310,8 +5311,9 @@ export default {
         }
       }
       if (!user) {
+        const responseBody: AuthSessionResponse = { authenticated: false };
         return new Response(
-          JSON.stringify({ authenticated: false }),
+          JSON.stringify(responseBody),
           {
             status: 401,
             headers: authMeHeaders,
@@ -5333,8 +5335,7 @@ export default {
       if (!effectiveAvatarUrl && xProfileSyncDiagnostics?.required) {
         effectiveAvatarUrl = buildUnavatarXAvatarFallback(user.login);
       }
-      return new Response(
-        JSON.stringify({
+      const responseBody: AuthSessionResponse = {
           authenticated: true,
           user: {
             login: user.login,
@@ -5357,7 +5358,9 @@ export default {
             },
           },
           ...(clientXProfileDiagnostics ? { x_profile_sync: clientXProfileDiagnostics } : {}),
-        }),
+        };
+      return new Response(
+        JSON.stringify(responseBody),
         {
           status: 200,
           headers: authMeHeaders,
@@ -6072,18 +6075,18 @@ export default {
       }
 
       const preferences = await loadSubscriberFeedPreferences(env, gate.userId);
-      let materializationError: unknown;
+      let materializationFailed = false;
       try {
         await materializeSubscriberAlerts(env, gate.userId, preferences);
       } catch (error) {
-        materializationError = error;
+        materializationFailed = true;
         console.error("[subscriber-alerts] materialization failed", error instanceof Error ? error.message : error);
       }
       const state = normalizeSubscriberAlertState(url.searchParams.get("state"));
       const limitRaw = normalizeNumber(url.searchParams.get("limit"));
       const limit = limitRaw === null ? 50 : Math.min(Math.max(1, Math.floor(limitRaw)), 200);
       const response = await loadSubscriberAlerts(env, gate.userId, state, limit);
-      return privateApiJson(origin, 200, buildSubscriberAlertsResponse(response, materializationError));
+      return privateApiJson(origin, 200, buildSubscriberAlertsResponse(response, materializationFailed));
     }
 
     if (path === "/api/subscriber/alert-preferences") {

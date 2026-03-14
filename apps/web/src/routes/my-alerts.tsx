@@ -45,24 +45,24 @@ export default function MyAlertsPage() {
     () => (entitled() ? "enabled" : null),
     async () => {
       const result = await fetchSubscriberAlertPreferences();
-      if (!result.ok) {
-        setAlertPreferencesError(result.error || "Unable to load alert controls.");
+      if (!result) {
+        setAlertPreferencesError("Unable to load alert controls.");
         return null;
       }
       setAlertPreferencesError("");
-      return result.data;
+      return result;
     },
   );
   const [alerts, { refetch }] = createResource(
     () => (entitled() ? state() : null),
     async (nextState) => {
       const result = await fetchSubscriberAlerts(nextState);
-      if (!result.ok) {
-        setAlertsError(result.error || "Unable to load alerts.");
+      if (!result) {
+        setAlertsError("Unable to load alerts.");
         return null;
       }
       setAlertsError("");
-      return result.data;
+      return result;
     },
   );
 
@@ -92,11 +92,11 @@ export default function MyAlertsPage() {
     setBusyId(alertId);
     setAlertsError("");
     try {
-      const result = await markSubscriberAlertsRead([alertId]);
-      if (result.ok) {
+      const ok = await markSubscriberAlertsRead([alertId]);
+      if (ok) {
         await refetch();
       } else {
-        setAlertsError(result.error || "Unable to mark alert as read.");
+        setAlertsError("Unable to mark alert as read.");
       }
     } finally {
       setBusyId("");
@@ -107,11 +107,11 @@ export default function MyAlertsPage() {
     setBusyAll(true);
     setAlertsError("");
     try {
-      const result = await markAllSubscriberAlertsRead();
-      if (result.ok) {
+      const ok = await markAllSubscriberAlertsRead();
+      if (ok) {
         await refetch();
       } else {
-        setAlertsError(result.error || "Unable to mark alerts as read.");
+        setAlertsError("Unable to mark alerts as read.");
       }
     } finally {
       setBusyAll(false);
@@ -140,11 +140,11 @@ export default function MyAlertsPage() {
     };
     try {
       const saved = await saveSubscriberAlertPreferences(payload);
-      if (!saved.ok) {
-        setControlsSaved(saved.error || "Save failed");
+      if (!saved) {
+        setControlsSaved("Save failed");
         return;
       }
-      applyControlsToForm(saved.data);
+      applyControlsToForm(saved);
       setControlsSaved("Controls saved");
       await refetchAlertPreferences();
       await refetch();

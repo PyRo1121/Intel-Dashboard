@@ -27,6 +27,7 @@
     }
   ],
   "vars": {
+    "COLLECTOR_SELF_URL": "https://intel-dashboard-telegram-collector.latham.workers.dev",
     "COLLECTOR_EDGE_URL": "https://intel.pyro1121.com",
     "COLLECTOR_EDGE_PATH": "/api/telegram/collector-ingest",
     "COLLECTOR_FLUSH_INTERVAL_MS": "1500",

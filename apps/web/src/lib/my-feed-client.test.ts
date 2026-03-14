@@ -33,7 +33,7 @@ test("my feed client helpers normalize success and failure payloads", async () =
         return new Response(
           JSON.stringify({
             favoriteChannels: [" Alpha ", "alpha"],
-            favoriteSources: " Desk ",
+            favoriteSources: " Desk, Wire ",
             watchRegions: [null, "Global"],
             watchTags: [" cyber "],
             watchCategories: [" Analysis "],
@@ -47,9 +47,9 @@ test("my feed client helpers normalize success and failure payloads", async () =
       return new Response(
         JSON.stringify({
           favoriteChannels: [" alpha ", 42],
-          favoriteSources: " desk ",
-          watchRegions: " global ",
-          watchTags: [" cyber "],
+          favoriteSources: " desk, wire ",
+          watchRegions: " global, europe ",
+          watchTags: [" cyber, risk "],
           watchCategories: [" analysis "],
         }),
         {
@@ -65,9 +65,9 @@ test("my feed client helpers normalize success and failure payloads", async () =
     const prefs = await fetchSubscriberFeedPreferences();
     assert.deepEqual(prefs, {
       favoriteChannels: ["alpha"],
-      favoriteSources: ["desk"],
-      watchRegions: ["global"],
-      watchTags: ["cyber"],
+      favoriteSources: ["desk", "wire"],
+      watchRegions: ["global", "europe"],
+      watchTags: ["cyber", "risk"],
       watchCategories: ["analysis"],
     });
 
@@ -80,7 +80,7 @@ test("my feed client helpers normalize success and failure payloads", async () =
     });
     assert.deepEqual(saved, {
       favoriteChannels: ["alpha"],
-      favoriteSources: ["desk"],
+      favoriteSources: ["desk", "wire"],
       watchRegions: ["global"],
       watchTags: ["cyber"],
       watchCategories: ["analysis"],

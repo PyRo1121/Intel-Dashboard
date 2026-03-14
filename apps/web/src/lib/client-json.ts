@@ -9,7 +9,9 @@ function buildTimeoutSignal(signal: AbortSignal | null | undefined): AbortSignal
 
   const controller = new AbortController();
   const abort = (reason?: unknown) => {
-    if (!controller.signal.aborted) controller.abort(reason);
+    if (!controller.signal.aborted) {
+      controller.abort(reason);
+    }
   };
   const onTimeoutAbort = () => abort(timeoutSignal.reason);
   const onSignalAbort = () => abort(signal.reason);

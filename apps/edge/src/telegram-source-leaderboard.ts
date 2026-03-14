@@ -103,16 +103,17 @@ export function normalizeTelegramSourceLeaderboardRows(rows: unknown[]): Telegra
       const sourceHistoryScore = normalizeScore(record.source_history_score);
       const trustTier = normalizeTier(record.trust_tier, ["core", "verified", "watch"] as const, "watch");
       const latencyTier = normalizeTier(record.latency_tier, ["instant", "fast", "monitor"] as const, "monitor");
-      const leaderboardScore = typeof record.leaderboard_score === "number" && Number.isFinite(record.leaderboard_score)
-        ? clamp(Math.round(record.leaderboard_score), 0, 999)
-        : computeTelegramSourceLeaderboardScore({
-          leadCount,
-          avgSignalScore,
-          highSignalLeadCount,
-          corroboratedLeadCount,
-          sourceHistoryScore,
-          trustTier,
-        });
+      const leaderboardScore =
+        typeof record.leaderboard_score === "number" && Number.isFinite(record.leaderboard_score)
+          ? clamp(Math.round(record.leaderboard_score), 0, 999)
+          : computeTelegramSourceLeaderboardScore({
+            leadCount,
+            avgSignalScore,
+            highSignalLeadCount,
+            corroboratedLeadCount,
+            sourceHistoryScore,
+            trustTier,
+          });
       return {
         channel,
         label,

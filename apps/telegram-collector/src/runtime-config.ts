@@ -9,6 +9,7 @@ export type TelegramCollectorRuntimeConfig = {
   apiHash: string;
   sessionString: string;
   accountId: string;
+  selfUrl: string;
   edgeUrl: string;
   edgePath: string;
   sharedSecret: string;
@@ -27,6 +28,17 @@ function normalizeBoundedInt(value: unknown, fallback: number, min: number, max:
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, parsed));
+}
+
+function normalizeOptionalUrl(value: unknown): string {
+  const raw = trim(value);
+  if (!raw) return "";
+  try {
+    new URL(raw);
+    return raw;
+  } catch {
+    return "";
+  }
 }
 
 export function parseCollectorChannelSpecs(raw: string | undefined | null): TelegramCollectorChannelSpec[] {
@@ -60,6 +72,7 @@ export function readTelegramCollectorRuntimeConfig(env: NodeJS.ProcessEnv): Tele
     apiHash: trim(env.TELEGRAM_API_HASH),
     sessionString: trim(env.TELEGRAM_SESSION_STRING),
     accountId: trim(env.TELEGRAM_ACCOUNT_ID) || "primary",
+    selfUrl: normalizeOptionalUrl(env.COLLECTOR_SELF_URL),
     edgeUrl: trim(env.COLLECTOR_EDGE_URL),
     edgePath: trim(env.COLLECTOR_EDGE_PATH) || "/api/telegram/collector-ingest",
     sharedSecret: trim(env.COLLECTOR_SHARED_SECRET),

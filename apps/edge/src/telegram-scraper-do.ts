@@ -40,8 +40,9 @@ import {
   type TelegramSignalGrade,
   type TelegramSignalProfile,
 } from "./telegram-signal-grade";
-import { resolveTelegramScrapePlan } from "./telegram-scrape-plan";
+import { resolveTelegramScrapePlan, summarizeSlowFetches } from "./telegram-scrape-plan";
 import { CONFIRMED_FIRST_REPORT_MIN_SOURCE_COUNT } from "@intel-dashboard/shared/telegram-signal.ts";
+import { shouldSelfHealTelegramState } from "./telegram-state-health";
 import { shouldPersistLatestTelegramStateLocally } from "./telegram-state-cache";
 import { mergeLatestChannelStates } from "./telegram-state-merge";
 
@@ -60,6 +61,9 @@ type Env = Cloudflare.Env & {
   SCRAPE_WORKER_CONCURRENCY?: string;
   CHANNEL_BUILD_CONCURRENCY?: string;
   TELEGRAM_HOT_CHANNELS?: string;
+  SCRAPE_MUST_HIT_CHANNELS_PER_CYCLE?: string;
+  SCRAPE_FAST_ROTATE_BAND_SIZE?: string;
+  SCRAPE_SLOW_ROTATION_MULTIPLIER?: string;
   MAX_MESSAGES_PER_CHANNEL?: string;
   DEBUG_RUNTIME_LOGS?: string;
 };
@@ -289,6 +293,7 @@ const MEDIA_BACKFILL_BASE_RETRY_MS = 2 * 60 * 1000;
 const MEDIA_BACKFILL_MAX_RETRY_MS = 24 * 60 * 60 * 1000;
 const MAX_MEDIA_BACKFILL_JOBS_PER_CYCLE = 80;
 const MAX_CANONICAL_EVENTS = 2500;
+const TELEGRAM_STATE_STALE_MULTIPLIER = 3;
 const DEDUPE_TIME_WINDOW_MS = 2 * 60 * 60 * 1000;
 const DEDUPE_MEDIA_WINDOW_MS = 6 * 60 * 60 * 1000;
 const TEXT_TRANSLATION_CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -522,15 +527,31 @@ export class TelegramScraperDO extends DurableObject<Env> {
           "ALTER TABLE telegram_source_performance ADD COLUMN total_events REAL NOT NULL DEFAULT 0",
         );
       }
+    });
 
+    this.ctx.waitUntil(this.postConstructInit());
+  }
+
+  private async postConstructInit(): Promise<void> {
+    try {
       await this.ensureD1Schema();
-
-      // Ensure alarm is set
+    } catch (error) {
+      console.error(
+        "[TelegramScraper] postConstruct ensureD1Schema failed:",
+        error instanceof Error ? error.message : error,
+      );
+    }
+    try {
       const alarm = await this.ctx.storage.getAlarm();
       if (!alarm) {
         await this.ctx.storage.setAlarm(Date.now() + 5_000);
       }
-    });
+    } catch (error) {
+      console.error(
+        "[TelegramScraper] postConstruct alarm init failed:",
+        error instanceof Error ? error.message : error,
+      );
+    }
   }
 
   private getScrapeIntervalMs(): number {
@@ -593,6 +614,34 @@ export class TelegramScraperDO extends DurableObject<Env> {
       DEFAULT_HOT_CHANNELS_PER_CYCLE,
       MIN_HOT_CHANNELS_PER_CYCLE,
       MAX_HOT_CHANNELS_PER_CYCLE,
+    );
+  }
+
+
+  private getMustHitChannelsPerCycle(): number {
+    return normalizeBoundedInt(
+      this.env.SCRAPE_MUST_HIT_CHANNELS_PER_CYCLE,
+      this.getHotChannelsPerCycle(),
+      0,
+      this.getHotChannelsPerCycle(),
+    );
+  }
+
+  private getFastRotateBandSize(): number {
+    return normalizeBoundedInt(
+      this.env.SCRAPE_FAST_ROTATE_BAND_SIZE,
+      64,
+      0,
+      256,
+    );
+  }
+
+  private getSlowRotationMultiplier(): number {
+    return normalizeBoundedInt(
+      this.env.SCRAPE_SLOW_ROTATION_MULTIPLIER,
+      4,
+      1,
+      24,
     );
   }
 
@@ -719,8 +768,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
         `SELECT channel FROM telegram_channel_authority WHERE effective_authority = 'mtproto'`
       ).all<{ channel: string }>();
       const rows = Array.isArray(result.results) ? result.results : [];
-      const channels = rows.map((row) => (row.channel || '').trim().toLowerCase()).filter(Boolean);
-      return channels.length > 0 ? channels : fallback;
+      return rows.map((row) => (row.channel || "").trim().toLowerCase()).filter(Boolean);
     } catch {
       return fallback;
     }
@@ -756,6 +804,9 @@ export class TelegramScraperDO extends DurableObject<Env> {
     channels: ChannelConfig[];
     slot: number;
     slots: number;
+    mustHitCount: number;
+    fastRotateCount: number;
+    slowRotateCount: number;
   }> {
     const mtprotoChannels = await this.loadMtprotoAuthorityChannels();
     return resolveTelegramScrapePlan({
@@ -764,6 +815,9 @@ export class TelegramScraperDO extends DurableObject<Env> {
       intervalMs: this.getScrapeIntervalMs(),
       rotationWindowSeconds: this.getRotationWindowSeconds(),
       hotChannelsPerCycle: this.getHotChannelsPerCycle(),
+      mustHitChannelsPerCycle: this.getMustHitChannelsPerCycle(),
+      fastRotateBandSize: this.getFastRotateBandSize(),
+      slowRotationMultiplier: this.getSlowRotationMultiplier(),
       mtprotoChannels,
     });
   }
@@ -1705,9 +1759,34 @@ export class TelegramScraperDO extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    const ensureSelfHeal = async (mode: "background" | "inline" = "background") => {
+      const currentAlarm = await this.ctx.storage.getAlarm();
+      const state = await this.loadPreviousState();
+      const shouldHeal = shouldSelfHealTelegramState({
+        timestamp: state?.timestamp,
+        nowMs: Date.now(),
+        maxAgeMs: this.getScrapeIntervalMs() * TELEGRAM_STATE_STALE_MULTIPLIER,
+        isRunning: this.isRunning,
+        alarmAt: currentAlarm,
+      });
+      let nextAlarm = currentAlarm;
+      if (!currentAlarm || currentAlarm < Date.now()) {
+        await this.ctx.storage.setAlarm(Date.now() + this.getScrapeIntervalMs());
+        nextAlarm = await this.ctx.storage.getAlarm();
+      }
+      if (shouldHeal) {
+        if (mode === "inline") {
+          await this.runScrape();
+        } else {
+          this.ctx.waitUntil(this.runScrape());
+        }
+      }
+      const nextState = shouldHeal && mode === "inline" ? await this.loadPreviousState() : state;
+      return { alarm: nextAlarm, state: nextState };
+    };
 
     if (url.pathname === "/health") {
-      const alarm = await this.ctx.storage.getAlarm();
+      const { alarm } = await ensureSelfHeal();
       const row = this.ctx.storage.sql
         .exec("SELECT COUNT(*) as cnt FROM seen_messages")
         .one() as { cnt: number } | null;
@@ -1740,7 +1819,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
     }
 
     if (url.pathname === "/state") {
-      const state = await this.loadPreviousState();
+      const { state } = await ensureSelfHeal("inline");
       if (!state) {
         return jsonResponse({ error: "state_unavailable" }, { status: 503 });
       }
@@ -2026,12 +2105,14 @@ export class TelegramScraperDO extends DurableObject<Env> {
         cycleChannels,
         this.getScrapeWorkerConcurrency(),
         async (ch) => {
+          const startedAt = Date.now();
           const html = await this.fetchChannelHtml(ch.username);
-          return { username: ch.username, html };
+          return { username: ch.username, html, durationMs: Date.now() - startedAt };
         },
       );
 
       let fetchedCount = 0;
+      const slowFetchSummary = summarizeSlowFetches(fetched.map((row) => ({ username: row.username, durationMs: row.durationMs })));
       for (const row of fetched) {
         if (!row.html) continue;
         htmlMap.set(row.username, row.html);
@@ -2638,7 +2719,7 @@ export class TelegramScraperDO extends DurableObject<Env> {
 
       this.lastRunMs = Date.now();
       const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-      this.lastCycleStats = `${elapsed}s | slot ${rotation.slot + 1}/${rotation.slots} | ${fetchedCount}/${cycleChannels.length} fetched | ${allChannels.length} tracked | ${channelsWithNew.length} with new | ${totalNewMessages} new msgs | ${totalTranslated} translated | ${totalFailed} failed | ${totalBlockedUntranslated} blocked | ${imageTranslated} image-ocr | ${mediaUploaded} media | media_backfill ${mediaBackfill.recovered}/${mediaBackfill.attempted}`;
+      this.lastCycleStats = `${elapsed}s | slot ${rotation.slot + 1}/${rotation.slots} | must ${rotation.mustHitCount} | fast ${rotation.fastRotateCount} | slow ${rotation.slowRotateCount} | ${fetchedCount}/${cycleChannels.length} fetched | ${allChannels.length} tracked | ${channelsWithNew.length} with new | ${totalNewMessages} new msgs | ${totalTranslated} translated | ${totalFailed} failed | ${totalBlockedUntranslated} blocked | ${imageTranslated} image-ocr | ${mediaUploaded} media | media_backfill ${mediaBackfill.recovered}/${mediaBackfill.attempted}${slowFetchSummary ? ` | slow_fetch ${slowFetchSummary}` : ''}`;
       debugRuntimeLog(this.runtimeEnv, `[TelegramScraper] ✅ Cycle complete: ${this.lastCycleStats}`);
       return hadNewMessages;
     } catch (outerErr) {

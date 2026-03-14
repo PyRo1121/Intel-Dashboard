@@ -16,6 +16,10 @@ class MemoryStorage {
   async delete(key: string): Promise<void> {
     this.store.delete(key);
   }
+
+  keys(): string[] {
+    return [...this.store.keys()].sort();
+  }
 }
 
 test("enforceIntelAdminGuard rejects replayed nonces", async () => {
@@ -81,6 +85,11 @@ test("enforceIntelAdminGuard rate limits within the same window", async () => {
       retryAfterMs: 58_000,
     },
   );
+
+  assert.deepEqual(storage.keys(), [
+    "admin:nonce-log:/api/cache-bust",
+    "admin:rl:/api/cache-bust:127.0.0.1",
+  ]);
 });
 
 test("enforceWebhookDedupe rejects duplicate webhook events inside the ttl", async () => {
@@ -106,5 +115,29 @@ test("enforceWebhookDedupe rejects duplicate webhook events inside the ttl", asy
       eventTtlMs: 10_000,
     }),
     { ok: false, duplicate: true, status: 409 },
+  );
+});
+
+test("enforceWebhookDedupe keeps provider storage bounded by rotating ttl buckets", async () => {
+  const storage = new MemoryStorage();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const ttlMs = 7 * dayMs;
+
+  for (let day = 0; day < 9; day += 1) {
+    assert.deepEqual(
+      await enforceWebhookDedupe({
+        storage,
+        provider: "stripe",
+        eventId: `evt_${day}`,
+        nowMs: day * dayMs,
+        eventTtlMs: ttlMs,
+      }),
+      { ok: true, duplicate: false },
+    );
+  }
+
+  assert.equal(
+    storage.keys().filter((key) => key.startsWith("webhook:stripe:bucket:")).length,
+    7,
   );
 });

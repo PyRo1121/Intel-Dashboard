@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { resolveBackendEndpointUrl, usesBackendServiceBinding } from "./backend-origin";
 import { jsonResponse } from "./json-response";
 import { debugRuntimeLog } from "./runtime-log";
+import { chunkEntries, MAX_DO_STORAGE_BATCH_ENTRIES } from "./storage-batches";
 import { normalizeNumber, normalizeString } from "./value-normalization";
 import { buildWhalesUnavailableResponse } from "./whales-unavailable-response";
 
@@ -671,7 +672,9 @@ export class IntelCacheDO extends DurableObject<Env> {
     for (let i = 0; i < numChunks; i++) {
       puts[`${key}:${i}`] = raw.slice(i * STORAGE_CHUNK_SIZE, (i + 1) * STORAGE_CHUNK_SIZE);
     }
-    await this.ctx.storage.put(puts);
+    for (const batch of chunkEntries(Object.entries(puts), MAX_DO_STORAGE_BATCH_ENTRIES)) {
+      await this.ctx.storage.put(Object.fromEntries(batch));
+    }
     await this.ctx.storage.delete(key);
   }
 
@@ -689,7 +692,13 @@ export class IntelCacheDO extends DurableObject<Env> {
     if (numChunks && numChunks > 0) {
       const keysToLoad: string[] = [];
       for (let i = 0; i < numChunks; i++) keysToLoad.push(`${key}:${i}`);
-      const chunksMap = await this.ctx.storage.get<string>(keysToLoad);
+      const chunksMap = new Map<string, string>();
+      for (const batch of chunkEntries(keysToLoad, MAX_DO_STORAGE_BATCH_ENTRIES)) {
+        const result = await this.ctx.storage.get<string>(batch);
+        for (const [chunkKey, chunkValue] of result.entries()) {
+          chunksMap.set(chunkKey, chunkValue);
+        }
+      }
       const parts: string[] = [];
       for (let i = 0; i < numChunks; i++) {
         const chunk = chunksMap.get(`${key}:${i}`);

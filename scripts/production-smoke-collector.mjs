@@ -53,7 +53,10 @@ async function assertEventually(label, fn) {
       }
     }
   }
-  throw new Error(`${label} failed after ${maxAttempts} attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
+  throw new Error(
+    `${label} failed after ${maxAttempts} attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+    { cause: lastError instanceof Error ? lastError : undefined },
+  );
 }
 
 for (const path of ["/status", "/status/live"]) {
